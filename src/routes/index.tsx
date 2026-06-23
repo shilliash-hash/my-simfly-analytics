@@ -67,7 +67,7 @@ function Overview() {
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
-        description="Real-time intelligence on your SimFly.io operations — PAX-first."
+        description="Real-time intelligence on your SimFly operations"
         actions={
           <div className="flex items-center gap-3">
             <PilotSwitcher current={viewedUser} />
