@@ -671,7 +671,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     const pilotLevel = Math.max(0, ...licenses.map((l) => l.level));
     const availablePax = availablePaxRaw ? Number(availablePaxRaw) || 0 : 0;
-    const lifetimePax = Math.round(stats?.rewards.totalPAXReceived ?? stats?.rewards.pax ?? 0);
+    const lifetimePax = Math.round(stats?.rewards?.totalPAXReceived ?? stats?.rewards?.pax ?? 0);
 
     const now = Date.now();
     const wk = now - 7 * 86_400_000;
@@ -694,7 +694,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       displayName: profile.username,
 
       level: pilotLevel || 1,
-      xp: Math.round(stats?.rewards.xp ?? 0),
+      xp: Math.round(stats?.rewards?.xp ?? 0),
       paxTokens: Math.round(availablePax),
       avatarHue: 190,
       avatarUrl,
