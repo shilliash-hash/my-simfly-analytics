@@ -729,71 +729,69 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // though the visiting pilot keeps 60% of the gross. Page through every
     // owned airport, then fold into the daily timeseries + activity feed.
     const VISITOR_PAGES = 10;
-    const visitorPerAirport = await withTimeout(
-      Promise.all(
-        airports.map(async (ap) => {
-          const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
-          );
-          const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-          const items: VisitorFlightWithHub[] = [];
-          for (const r of pages) {
-            if (!r) continue;
-            for (const f of r.flights ?? []) {
-              const n = normaliseHistFlight(f, ap.icao, username);
-              if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
-            }
+    const visitorPerAirportPromise = Promise.all(
+      airports.map(async (ap) => {
+        const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
+          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+        );
+        const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+        const items: VisitorFlightWithHub[] = [];
+        for (const r of pages) {
+          if (!r) continue;
+          for (const f of r.flights ?? []) {
+            const n = normaliseHistFlight(f, ap.icao, username);
+            if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
           }
-          return items;
-        }),
-      ),
-      [] as VisitorFlightWithHub[][],
-      VISITOR_ENRICHMENT_TIMEOUT_MS,
+        }
+        return items;
+      }),
     );
     // Aircraft rental history: other pilots flying MY aircraft between
     // airports I may not own. SimFly exposes
     //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
     // and reports my cut as airplane.totalEarnedPax on each entry.
     const AIRCRAFT_PAGES = 6;
-    const aircraftPerPlane = await withTimeout(
-      Promise.all(
-        airplanes.map(async (ap) => {
-          const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
-          );
-          const pages = await Promise.all(
-            urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
-          );
-          const items: VisitorFlightWithHub[] = [];
-          for (const r of pages) {
-            if (!r) continue;
-            for (const f of r.flights ?? []) {
-              const visitor = f.pilot?.username ?? "";
-              if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
-              const paxAircraft =
-                f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
-              if (!paxAircraft) continue;
-              const origin = f.origin?.icao ?? "";
-              const destination = f.destination?.icao ?? "";
-              items.push({
-                id: f.flightID,
-                ts: f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "",
-                visitor,
-                isOwner: false,
-                role: "takeoff",
-                otherIcao: destination,
-                paxVisitor: f.pax ?? 0,
-                paxAirport: 0,
-                paxAircraft,
-                aircraft: f.airplane?.name ?? ap.name,
-                airportIcao: origin || ap.currentIcao || ap.icao,
-              });
-            }
+    const aircraftPerPlanePromise = Promise.all(
+      airplanes.map(async (ap) => {
+        const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
+          `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+        );
+        const pages = await Promise.all(
+          urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
+        );
+        const items: VisitorFlightWithHub[] = [];
+        for (const r of pages) {
+          if (!r) continue;
+          for (const f of r.flights ?? []) {
+            const visitor = f.pilot?.username ?? "";
+            if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
+            const paxAircraft =
+              f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
+            if (!paxAircraft) continue;
+            const origin = f.origin?.icao ?? "";
+            const destination = f.destination?.icao ?? "";
+            items.push({
+              id: f.flightID,
+              ts: f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "",
+              visitor,
+              isOwner: false,
+              role: "takeoff",
+              otherIcao: destination,
+              paxVisitor: f.pax ?? 0,
+              paxAirport: 0,
+              paxAircraft,
+              aircraft: f.airplane?.name ?? ap.name,
+              airportIcao: origin || ap.currentIcao || ap.icao,
+            });
           }
-          return items;
-        }),
-      ),
-      [] as VisitorFlightWithHub[][],
+        }
+        return items;
+      }),
+    );
+
+    const [visitorPerAirport, aircraftPerPlane] = await withTimeout(
+      Promise.all([visitorPerAirportPromise, aircraftPerPlanePromise]),
+      [[], []] as [VisitorFlightWithHub[][], VisitorFlightWithHub[][]],
       VISITOR_ENRICHMENT_TIMEOUT_MS,
     );
 
