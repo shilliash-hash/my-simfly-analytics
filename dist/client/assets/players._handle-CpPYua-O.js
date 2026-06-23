@@ -1,1 +1,0 @@
-import{j as o,L as t}from"./index-BrQcW9wj.js";import{A as n,P as e}from"./app-shell-DSVUBp4o.js";const a=()=>o.jsxs(n,{children:[o.jsx(e,{title:"Player not found"}),o.jsx(t,{to:"/community",className:"text-runway hover:underline",children:"← Back to community"})]});export{a as notFoundComponent};
