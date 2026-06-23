@@ -180,7 +180,7 @@ type RawProfile = {
 };
 
 type RawStats = {
-  rewards: { xp: number; pax: number; totalPAXReceived: number };
+  rewards?: { xp?: number; pax?: number; totalPAXReceived?: number };
   stats: {
     totalFlights: number;
     totalFlightTime: string;
