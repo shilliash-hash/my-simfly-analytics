@@ -694,7 +694,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       displayName: profile.username,
 
       level: pilotLevel || 1,
-      xp: Math.round(stats?.rewards.xp ?? 0),
+      xp: Math.round(stats?.rewards?.xp ?? 0),
       paxTokens: Math.round(availablePax),
       avatarHue: 190,
       avatarUrl,
