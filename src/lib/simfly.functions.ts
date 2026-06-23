@@ -23,6 +23,11 @@ import type {
   VisitorHistoryPayload,
   XpByAsset,
 } from "./types";
+import {
+  mergeVisitorFlights,
+  visitorPaxByDay,
+  type VisitorFlightWithHub,
+} from "./visitor-merge";
 
 /**
  * SimFly.io public API wrapper. Every endpoint we hit is unauthenticated.
