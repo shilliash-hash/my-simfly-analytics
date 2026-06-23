@@ -1,0 +1,140 @@
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * SimFly Airport Intelligence Hub — Flight Deck design system.
+ * Deep slate/indigo base with cyan runway lights and amber instrument accents.
+ */
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* SimFly brand */
+  --color-runway: var(--runway);
+  --color-runway-soft: var(--runway-soft);
+  --color-instrument: var(--instrument);
+  --color-instrument-soft: var(--instrument-soft);
+  --color-deck: var(--deck);
+  --color-deck-elevated: var(--deck-elevated);
+  --color-tier-bronze: var(--tier-bronze);
+  --color-tier-silver: var(--tier-silver);
+  --color-tier-gold: var(--tier-gold);
+  --color-tier-platinum: var(--tier-platinum);
+
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+:root {
+  --radius: 0.625rem;
+
+  /* Flight Deck palette */
+  --deck: #0A0F1C;
+  --deck-elevated: #111829;
+  --deck-panel: #1A2236;
+  --runway: #22D3EE;        /* cyan runway lights */
+  --runway-soft: #0E7490;
+  --instrument: #F59E0B;    /* amber instruments */
+  --instrument-soft: #78350F;
+  --tier-bronze: #B45309;
+  --tier-silver: #94A3B8;
+  --tier-gold: #FBBF24;
+  --tier-platinum: #67E8F9;
+
+  /* Semantic — dark by default */
+  --background: #0A0F1C;
+  --foreground: #E2E8F0;
+  --card: #111829;
+  --card-foreground: #E2E8F0;
+  --popover: #1A2236;
+  --popover-foreground: #E2E8F0;
+  --primary: #22D3EE;
+  --primary-foreground: #0A0F1C;
+  --secondary: #1A2236;
+  --secondary-foreground: #E2E8F0;
+  --muted: #1A2236;
+  --muted-foreground: #94A3B8;
+  --accent: #F59E0B;
+  --accent-foreground: #0A0F1C;
+  --destructive: #EF4444;
+  --destructive-foreground: #E2E8F0;
+  --border: rgba(226, 232, 240, 0.08);
+  --input: rgba(226, 232, 240, 0.12);
+  --ring: #22D3EE;
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1, h2, h3, h4, h5 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+  ::selection {
+    background: var(--runway);
+    color: var(--deck);
+  }
+}
+
+@layer utilities {
+  .flight-deck-grad {
+    background-image:
+      radial-gradient(60% 80% at 15% 0%, rgba(34, 211, 238, 0.12), transparent 60%),
+      radial-gradient(50% 60% at 90% 10%, rgba(245, 158, 11, 0.08), transparent 70%),
+      linear-gradient(180deg, #0A0F1C 0%, #060912 100%);
+  }
+  .panel {
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border);
+  }
+  .runway-glow {
+    box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.2), 0 8px 32px -8px rgba(34, 211, 238, 0.25);
+  }
+  .mono { font-family: var(--font-mono); }
+  .text-balance { text-wrap: balance; }
+  .scanline {
+    background-image: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.4), transparent);
+  }
+}

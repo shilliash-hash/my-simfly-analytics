@@ -1,0 +1,1 @@
+import{j as t,L as o}from"./index-BrQcW9wj.js";import{A as r,P as n}from"./app-shell-DSVUBp4o.js";const i=()=>t.jsxs(r,{children:[t.jsx(n,{title:"Aircraft not found",description:"That aircraft isn't in your fleet."}),t.jsx(o,{to:"/aircraft",className:"text-runway hover:underline",children:"← Back to aircraft"})]});export{i as notFoundComponent};

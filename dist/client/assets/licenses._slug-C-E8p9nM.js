@@ -1,0 +1,1 @@
+import{j as e,L as n}from"./index-BrQcW9wj.js";import{A as o,P as s}from"./app-shell-DSVUBp4o.js";const r=()=>e.jsxs(o,{children:[e.jsx(s,{title:"License not found",description:"That license isn't in your collection."}),e.jsx(n,{to:"/licenses",className:"text-runway hover:underline",children:"← Back to licenses"})]});export{r as notFoundComponent};
