@@ -720,7 +720,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
         );
         const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+        const items: VisitorFlightWithHub[] = [];
         for (const r of pages) {
           if (!r) continue;
           for (const f of r.flights ?? []) {
