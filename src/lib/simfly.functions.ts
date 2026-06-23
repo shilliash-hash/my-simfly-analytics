@@ -671,7 +671,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     const pilotLevel = Math.max(0, ...licenses.map((l) => l.level));
     const availablePax = availablePaxRaw ? Number(availablePaxRaw) || 0 : 0;
-    const lifetimePax = Math.round(stats?.rewards.totalPAXReceived ?? stats?.rewards.pax ?? 0);
+    const lifetimePax = Math.round(stats?.rewards?.totalPAXReceived ?? stats?.rewards?.pax ?? 0);
 
     const now = Date.now();
     const wk = now - 7 * 86_400_000;
