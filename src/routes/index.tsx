@@ -158,8 +158,8 @@ function Overview() {
                 <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
                 <Tooltip
                   contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number, name) =>
-                    [formatNumber(v) + " PAX", name === "paxVisitors" ? "Visitor PAX" : "Your PAX"]
+                  formatter={((v: number, name: string) =>
+                    [formatNumber(v) + " PAX", name === "paxVisitors" ? "Visitor PAX" : "Your PAX"]) as any
                   }
                 />
                 <Area type="monotone" dataKey="pax" name="paxKept" stroke="var(--runway)" strokeWidth={2} fill="url(#gradPax)" />
