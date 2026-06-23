@@ -1,1 +1,0 @@
-import{j as o,L as t}from"./index-BrQcW9wj.js";import{A as r,P as n}from"./app-shell-DSVUBp4o.js";const s=()=>o.jsxs(r,{children:[o.jsx(n,{title:"Airport not found",description:"That airport isn't in your SimFly network."}),o.jsx(t,{to:"/airports",className:"text-runway hover:underline",children:"← Back to airports"})]});export{s as notFoundComponent};
