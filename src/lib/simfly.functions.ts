@@ -23,6 +23,11 @@ import type {
   VisitorHistoryPayload,
   XpByAsset,
 } from "./types";
+import {
+  mergeVisitorFlights,
+  visitorPaxByDay,
+  type VisitorFlightWithHub,
+} from "./visitor-merge";
 
 /**
  * SimFly.io public API wrapper. Every endpoint we hit is unauthenticated.
@@ -715,7 +720,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
         );
         const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+        const items: VisitorFlightWithHub[] = [];
         for (const r of pages) {
           if (!r) continue;
           for (const f of r.flights ?? []) {
@@ -726,27 +731,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         return items;
       }),
     );
-    const visitorFlights = visitorPerAirport.flat();
-    // De-dupe across hubs (a flight can appear at both origin and destination).
-    const byVisitorFlight = new Map<string, (typeof visitorFlights)[number]>();
-    for (const v of visitorFlights) {
-      const prev = byVisitorFlight.get(v.id);
-      if (!prev) byVisitorFlight.set(v.id, v);
-      else
-        byVisitorFlight.set(v.id, {
-          ...prev,
-          paxAirport: prev.paxAirport + v.paxAirport,
-          // paxAircraft is per-flight, not per-hub — take max so we don't double-count.
-          paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
-        });
-    }
-
     // Aircraft rental history: other pilots flying MY aircraft between
     // airports I may not own. SimFly exposes
     //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
     // and reports my cut as airplane.totalEarnedPax on each entry.
     const AIRCRAFT_PAGES = 6;
-    const visitorPerAircraft = await Promise.all(
+    const aircraftPerPlane = await Promise.all(
       airplanes.map(async (ap) => {
         const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
           `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
@@ -754,7 +744,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         const pages = await Promise.all(
           urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
         );
-        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+        const items: VisitorFlightWithHub[] = [];
         for (const r of pages) {
           if (!r) continue;
           for (const f of r.flights ?? []) {
@@ -783,33 +773,18 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         return items;
       }),
     );
-    for (const v of visitorPerAircraft.flat()) {
-      const prev = byVisitorFlight.get(v.id);
-      if (!prev) {
-        byVisitorFlight.set(v.id, v);
-      } else {
-        // Flight already captured via airport history — just ensure the
-        // aircraft-owner cut is recorded (take max to avoid double-count).
-        byVisitorFlight.set(v.id, {
-          ...prev,
-          paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
-        });
-      }
-    }
 
-    const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
+    const uniqueVisitorFlights = mergeVisitorFlights(
+      visitorPerAirport.flat(),
+      aircraftPerPlane.flat(),
+    );
 
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
-    const visitorByDay = new Map<string, number>();
-    for (const v of uniqueVisitorFlights) {
-      const day = (v.ts || "").slice(0, 10);
-      if (!day) continue;
-      const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
-      visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
-    }
+    const visitorByDay = visitorPaxByDay(uniqueVisitorFlights);
     for (const pt of earningsTimeseries) {
       pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
     }
+
 
     const xpByAsset: XpByAsset[] = [
       ...airports.slice(0, 6).map((a) => ({ label: a.icao, xp: a.totalEarnedXp, kind: "hub" as const })),
