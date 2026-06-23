@@ -740,6 +740,63 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
         });
     }
+
+    // Aircraft rental history: other pilots flying MY aircraft between
+    // airports I may not own. SimFly exposes
+    //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
+    // and reports my cut as airplane.totalEarnedPax on each entry.
+    const AIRCRAFT_PAGES = 6;
+    const visitorPerAircraft = await Promise.all(
+      airplanes.map(async (ap) => {
+        const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
+          `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+        );
+        const pages = await Promise.all(
+          urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
+        );
+        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+        for (const r of pages) {
+          if (!r) continue;
+          for (const f of r.flights ?? []) {
+            const visitor = f.pilot?.username ?? "";
+            if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
+            const paxAircraft =
+              f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
+            if (!paxAircraft) continue;
+            const origin = f.origin?.icao ?? "";
+            const destination = f.destination?.icao ?? "";
+            items.push({
+              id: f.flightID,
+              ts: f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "",
+              visitor,
+              isOwner: false,
+              role: "takeoff",
+              otherIcao: destination,
+              paxVisitor: f.pax ?? 0,
+              paxAirport: 0,
+              paxAircraft,
+              aircraft: f.airplane?.name ?? ap.name,
+              airportIcao: origin || ap.currentIcao || ap.icao,
+            });
+          }
+        }
+        return items;
+      }),
+    );
+    for (const v of visitorPerAircraft.flat()) {
+      const prev = byVisitorFlight.get(v.id);
+      if (!prev) {
+        byVisitorFlight.set(v.id, v);
+      } else {
+        // Flight already captured via airport history — just ensure the
+        // aircraft-owner cut is recorded (take max to avoid double-count).
+        byVisitorFlight.set(v.id, {
+          ...prev,
+          paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
+        });
+      }
+    }
+
     const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
 
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
