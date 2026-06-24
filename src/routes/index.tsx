@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getAircraftRentalEarnings } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
