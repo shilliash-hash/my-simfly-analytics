@@ -91,11 +91,11 @@ function Stats() {
               <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
               <Tooltip
                 contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number, name) => {
+                formatter={((v: number, name: string) => {
                   const label =
                     name === "paxVisitors" ? "Visitor PAX" : name === "paxTotal" ? "Total PAX" : "Your PAX";
                   return [formatNumber(v) + " PAX", label];
-                }}
+                }) as any}
               />
               <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(255,255,255,0.12)" radius={[3, 3, 0, 0]} />
               <Area type="monotone" dataKey="pax" name="pax" stroke="var(--runway)" strokeWidth={2} fill="url(#gPax)" />
@@ -115,7 +115,7 @@ function Stats() {
               <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
               <Tooltip
                 contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number) => formatNumber(v) + " PAX"}
+                formatter={((v: number) => formatNumber(v) + " PAX") as any}
               />
               <Bar dataKey="pax" radius={[4, 4, 0, 0]}>
                 {data.paxByAsset.map((d, i) => (
