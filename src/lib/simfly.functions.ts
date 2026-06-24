@@ -731,52 +731,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         return items;
       }),
     );
-    // Aircraft rental history: other pilots flying MY aircraft between
-    // airports I may not own. SimFly exposes
-    //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
-    // and reports my cut as airplane.totalEarnedPax on each entry.
-    const AIRCRAFT_PAGES = 2;
-    const aircraftPerPlane = await Promise.all(
-      airplanes.map(async (ap) => {
-        const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
-        );
-        const pages = await Promise.all(
-          urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
-        );
-        const items: VisitorFlightWithHub[] = [];
-        for (const r of pages) {
-          if (!r) continue;
-          for (const f of r.flights ?? []) {
-            const visitor = f.pilot?.username ?? "";
-            if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
-            const paxAircraft =
-              f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
-            if (!paxAircraft) continue;
-            const origin = f.origin?.icao ?? "";
-            const destination = f.destination?.icao ?? "";
-            items.push({
-              id: f.flightID,
-              ts: f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "",
-              visitor,
-              isOwner: false,
-              role: "takeoff",
-              otherIcao: destination,
-              paxVisitor: f.pax ?? 0,
-              paxAirport: 0,
-              paxAircraft,
-              aircraft: f.airplane?.name ?? ap.name,
-              airportIcao: origin || ap.currentIcao || ap.icao,
-            });
-          }
-        }
-        return items;
-      }),
-    );
-
+    // Aircraft rental history scan is heavy (N planes × pages) — skipped in
+    // the main SSR payload to keep TTFB fast. Surfaced via a separate server
+    // fn (see getAircraftRentalVisitors) when the Income / Activity views
+    // need it.
     const uniqueVisitorFlights = mergeVisitorFlights(
       visitorPerAirport.flat(),
-      aircraftPerPlane.flat(),
     );
 
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
