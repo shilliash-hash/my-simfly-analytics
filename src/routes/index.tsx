@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getAircraftRentalEarnings } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
@@ -60,6 +60,23 @@ function Overview() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
+
+  const rentalFn = useServerFn(getAircraftRentalEarnings);
+  const { data: rental, isLoading: rentalLoading } = useQuery({
+    queryKey: ["simfly", "aircraftRental", keyTag],
+    queryFn: () => rentalFn(viewedUser ? { data: { username: viewedUser } } : undefined),
+    staleTime: 5 * 60_000,
+  });
+
+  const earningsChartData = useMemo(() => {
+    const rentalByDay = new Map((rental?.paxByDay ?? []).map((r) => [r.date, r.paxAircraft]));
+    return data.earningsTimeseries.map((d) => {
+      const baseVisitors = d.paxVisitors ?? 0;
+      const rentalPax = rentalByDay.get(d.date) ?? 0;
+      return { ...d, paxVisitors: Math.round((baseVisitors + rentalPax) * 100) / 100 };
+    });
+  }, [data.earningsTimeseries, rental]);
+
 
 
   return (
@@ -140,9 +157,9 @@ function Overview() {
               All stats →
             </Link>
           </div>
-          <div className="h-64 w-full">
+          <div className="relative h-64 w-full">
             <ResponsiveContainer>
-              <AreaChart data={data.earningsTimeseries} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
+              <AreaChart data={earningsChartData} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gradPax" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="var(--runway)" stopOpacity={0.5} />
@@ -166,7 +183,14 @@ function Overview() {
                 <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gradVisitors)" />
               </AreaChart>
             </ResponsiveContainer>
+            {rentalLoading ? (
+              <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-2 rounded-md border border-border/40 bg-popover/80 px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur">
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--instrument)" }} />
+                Loading rental revenue
+              </div>
+            ) : null}
           </div>
+
         </div>
 
         <div className="panel rounded-xl p-5">
