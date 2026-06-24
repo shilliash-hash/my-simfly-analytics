@@ -61,6 +61,23 @@ function Overview() {
     staleTime: 30_000,
   });
 
+  const rentalFn = useServerFn(getAircraftRentalEarnings);
+  const { data: rental, isLoading: rentalLoading } = useQuery({
+    queryKey: ["simfly", "aircraftRental", keyTag],
+    queryFn: () => rentalFn(viewedUser ? { data: { username: viewedUser } } : undefined),
+    staleTime: 5 * 60_000,
+  });
+
+  const earningsChartData = useMemo(() => {
+    const rentalByDay = new Map((rental?.paxByDay ?? []).map((r) => [r.date, r.paxAircraft]));
+    return data.earningsTimeseries.map((d) => {
+      const baseVisitors = d.paxVisitors ?? 0;
+      const rentalPax = rentalByDay.get(d.date) ?? 0;
+      return { ...d, paxVisitors: Math.round((baseVisitors + rentalPax) * 100) / 100 };
+    });
+  }, [data.earningsTimeseries, rental]);
+
+
 
   return (
     <AppShell>
