@@ -735,7 +735,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // airports I may not own. SimFly exposes
     //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
     // and reports my cut as airplane.totalEarnedPax on each entry.
-    const AIRCRAFT_PAGES = 6;
+    const AIRCRAFT_PAGES = 2;
     const aircraftPerPlane = await Promise.all(
       airplanes.map(async (ap) => {
         const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
