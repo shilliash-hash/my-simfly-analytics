@@ -713,7 +713,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // (origin.earnedPax / destination.earnedPax) is real PAX paid to me even
     // though the visiting pilot keeps 60% of the gross. Page through every
     // owned airport, then fold into the daily timeseries + activity feed.
-    const VISITOR_PAGES = 10;
+    const VISITOR_PAGES = 3;
     const visitorPerAirport = await Promise.all(
       airports.map(async (ap) => {
         const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
