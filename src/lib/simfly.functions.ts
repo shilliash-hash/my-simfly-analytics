@@ -1252,3 +1252,98 @@ export const getVisitorHistory = createServerFn({ method: "GET" })
       fetchedAt: new Date().toISOString(),
     };
   });
+
+/**
+ * Aircraft-owner rental revenue, returned as a daily PAX timeseries (last 30
+ * days) plus a per-flight breakdown. Kept out of the main getSimflyPayload
+ * SSR call because scanning N airplanes × M pages of rental history is slow
+ * upstream; pages render first and the Income chart updates when this
+ * resolves.
+ */
+export const getAircraftRentalEarnings = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string; nonce?: string; pages?: number }) => d ?? {})
+  .handler(async ({ data }): Promise<{
+    paxByDay: { date: string; paxAircraft: number }[];
+    totalPax: number;
+    flightCount: number;
+    fetchedAt: string;
+  }> => {
+    const { username, nonce } = await resolveIdentity(data);
+    const pages = Math.min(Math.max(data?.pages ?? 3, 1), 10);
+
+    const assets = await fetchJSON<RawAssetsAll>(
+      `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${nonce}`,
+    );
+    const airplanes = (assets?.items ?? []).filter(
+      (it): it is RawAssetAirplane => it.type === "Airplane",
+    );
+
+    const perPlane = await Promise.all(
+      airplanes.map(async (ap) => {
+        const urls = Array.from({ length: pages }, (_, i) =>
+          `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+        );
+        const responses = await Promise.all(
+          urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
+        );
+        const items: { id: string; ts: string; pax: number }[] = [];
+        const seen = new Set<string>();
+        for (const r of responses) {
+          if (!r) continue;
+          for (const f of r.flights ?? []) {
+            const visitor = f.pilot?.username ?? "";
+            if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
+            const pax = f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
+            if (!pax) continue;
+            if (seen.has(f.flightID)) continue;
+            seen.add(f.flightID);
+            const ts = f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "";
+            items.push({ id: f.flightID, ts, pax });
+          }
+        }
+        return items;
+      }),
+    );
+
+    // Dedupe by flightID across planes (a flight only belongs to one plane,
+    // but be defensive) and bucket by UTC date.
+    const byFlight = new Map<string, { ts: string; pax: number }>();
+    for (const items of perPlane) {
+      for (const it of items) {
+        const prev = byFlight.get(it.id);
+        if (!prev || it.pax > prev.pax) byFlight.set(it.id, { ts: it.ts, pax: it.pax });
+      }
+    }
+
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    const buckets = new Map<string, number>();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setUTCDate(d.getUTCDate() - i);
+      buckets.set(d.toISOString().slice(0, 10), 0);
+    }
+    let totalPax = 0;
+    for (const { ts, pax } of byFlight.values()) {
+      const t = new Date(ts).getTime();
+      if (!Number.isFinite(t)) continue;
+      const day = new Date(t);
+      day.setUTCHours(0, 0, 0, 0);
+      const key = day.toISOString().slice(0, 10);
+      if (!buckets.has(key)) continue;
+      buckets.set(key, (buckets.get(key) ?? 0) + pax);
+      totalPax += pax;
+    }
+
+    const paxByDay = Array.from(buckets.entries()).map(([date, paxAircraft]) => ({
+      date,
+      paxAircraft: Math.round(paxAircraft * 100) / 100,
+    }));
+
+    return {
+      paxByDay,
+      totalPax: Math.round(totalPax * 100) / 100,
+      flightCount: byFlight.size,
+      fetchedAt: new Date().toISOString(),
+    };
+  });
