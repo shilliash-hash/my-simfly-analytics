@@ -85,13 +85,10 @@ function Stats() {
             <span className="hidden sm:inline opacity-70">Combined daily token income (A + B).</span>
           </div>
         </div>
-        <div className="h-72 w-full">
+        <div className="relative h-72 w-full">
           <ResponsiveContainer>
             <ComposedChart
-              data={data.earningsTimeseries.map((d) => ({
-                ...d,
-                paxTotal: (d.pax ?? 0) + (d.paxVisitors ?? 0),
-              }))}
+              data={earningsChartData}
               margin={{ left: -10, right: 6, top: 6, bottom: 0 }}
             >
               <defs>
@@ -120,7 +117,14 @@ function Stats() {
               <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gVisitors)" />
             </ComposedChart>
           </ResponsiveContainer>
+          {rentalLoading ? (
+            <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-2 rounded-md border border-border/40 bg-popover/80 px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground backdrop-blur">
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--instrument)" }} />
+              Loading rental revenue
+            </div>
+          ) : null}
         </div>
+
       </div>
 
       <div className="panel mb-6 rounded-xl p-5">
