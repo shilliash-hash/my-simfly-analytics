@@ -978,14 +978,23 @@ export const getAirportGeo = createServerFn({ method: "GET" })
 
 // Per-asset detail JSON (raw passthrough).
 export const getSimflyAssetDetail = createServerFn({ method: "GET" })
-  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => d)
+  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => {
+    if (d.kind !== "airport" && d.kind !== "airplane") {
+      throw new Error("Invalid asset kind");
+    }
+    if (typeof d.key !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(d.key)) {
+      throw new Error("Invalid asset key");
+    }
+    return d;
+  })
   .handler(async ({ data }): Promise<{ kind: string; key: string; json: string }> => {
-    const url = `${SIMFLY_BASE}/user/assets/details/${data.kind}/${encodeURIComponent(data.key)}`;
+    const url = `${SIMFLY_BASE}/user/assets/details/${encodeURIComponent(data.kind)}/${encodeURIComponent(data.key)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`SimFly asset ${data.kind}/${data.key} not found`);
     const text = await res.text();
     return { kind: data.kind, key: data.key, json: text };
   });
+
 
 // LIVE visitors currently flying through one of my airports.
 export const getAirportVisitors = createServerFn({ method: "GET" })
