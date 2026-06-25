@@ -23,11 +23,6 @@ import type {
   VisitorHistoryPayload,
   XpByAsset,
 } from "./types";
-import {
-  mergeVisitorFlights,
-  visitorPaxByDay,
-  type VisitorFlightWithHub,
-} from "./visitor-merge";
 
 /**
  * SimFly.io public API wrapper. Every endpoint we hit is unauthenticated.
@@ -671,7 +666,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     const pilotLevel = Math.max(0, ...licenses.map((l) => l.level));
     const availablePax = availablePaxRaw ? Number(availablePaxRaw) || 0 : 0;
-    const lifetimePax = Math.round(stats?.rewards?.totalPAXReceived ?? stats?.rewards?.pax ?? 0);
+    const lifetimePax = Math.round(stats?.rewards.totalPAXReceived ?? stats?.rewards.pax ?? 0);
 
     const now = Date.now();
     const wk = now - 7 * 86_400_000;
@@ -694,7 +689,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       displayName: profile.username,
 
       level: pilotLevel || 1,
-      xp: Math.round(stats?.rewards?.xp ?? 0),
+      xp: Math.round(stats?.rewards.xp ?? 0),
       paxTokens: Math.round(availablePax),
       avatarHue: 190,
       avatarUrl,
@@ -720,7 +715,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
         );
         const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-        const items: VisitorFlightWithHub[] = [];
+        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
         for (const r of pages) {
           if (!r) continue;
           for (const f of r.flights ?? []) {
@@ -731,60 +726,33 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         return items;
       }),
     );
-    // Aircraft rental history: other pilots flying MY aircraft between
-    // airports I may not own. SimFly exposes
-    //   /api/user/assets/airplane/{aircraftId}/flights?page=N  (5/page)
-    // and reports my cut as airplane.totalEarnedPax on each entry.
-    const AIRCRAFT_PAGES = 6;
-    const aircraftPerPlane = await Promise.all(
-      airplanes.map(async (ap) => {
-        const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(ap.aircraftId)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
-        );
-        const pages = await Promise.all(
-          urls.map((u) => fetchJSON<{ flights?: RawAirportHistFlight[] }>(u)),
-        );
-        const items: VisitorFlightWithHub[] = [];
-        for (const r of pages) {
-          if (!r) continue;
-          for (const f of r.flights ?? []) {
-            const visitor = f.pilot?.username ?? "";
-            if (!visitor || visitor.toLowerCase() === username.toLowerCase()) continue;
-            const paxAircraft =
-              f.airplane?.totalEarnedPax ?? f.airplane?.earnedPax ?? 0;
-            if (!paxAircraft) continue;
-            const origin = f.origin?.icao ?? "";
-            const destination = f.destination?.icao ?? "";
-            items.push({
-              id: f.flightID,
-              ts: f.departureTime ?? f.takeoffTime ?? f.landingTime ?? "",
-              visitor,
-              isOwner: false,
-              role: "takeoff",
-              otherIcao: destination,
-              paxVisitor: f.pax ?? 0,
-              paxAirport: 0,
-              paxAircraft,
-              aircraft: f.airplane?.name ?? ap.name,
-              airportIcao: origin || ap.currentIcao || ap.icao,
-            });
-          }
-        }
-        return items;
-      }),
-    );
-
-    const uniqueVisitorFlights = mergeVisitorFlights(
-      visitorPerAirport.flat(),
-      aircraftPerPlane.flat(),
-    );
+    const visitorFlights = visitorPerAirport.flat();
+    // De-dupe across hubs (a flight can appear at both origin and destination).
+    const byVisitorFlight = new Map<string, (typeof visitorFlights)[number]>();
+    for (const v of visitorFlights) {
+      const prev = byVisitorFlight.get(v.id);
+      if (!prev) byVisitorFlight.set(v.id, v);
+      else
+        byVisitorFlight.set(v.id, {
+          ...prev,
+          paxAirport: prev.paxAirport + v.paxAirport,
+          // paxAircraft is per-flight, not per-hub — take max so we don't double-count.
+          paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
+        });
+    }
+    const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
 
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
-    const visitorByDay = visitorPaxByDay(uniqueVisitorFlights);
+    const visitorByDay = new Map<string, number>();
+    for (const v of uniqueVisitorFlights) {
+      const day = (v.ts || "").slice(0, 10);
+      if (!day) continue;
+      const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
+      visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
+    }
     for (const pt of earningsTimeseries) {
       pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
     }
-
 
     const xpByAsset: XpByAsset[] = [
       ...airports.slice(0, 6).map((a) => ({ label: a.icao, xp: a.totalEarnedXp, kind: "hub" as const })),
@@ -978,23 +946,14 @@ export const getAirportGeo = createServerFn({ method: "GET" })
 
 // Per-asset detail JSON (raw passthrough).
 export const getSimflyAssetDetail = createServerFn({ method: "GET" })
-  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => {
-    if (d.kind !== "airport" && d.kind !== "airplane") {
-      throw new Error("Invalid asset kind");
-    }
-    if (typeof d.key !== "string" || !/^[A-Za-z0-9._-]{1,64}$/.test(d.key)) {
-      throw new Error("Invalid asset key");
-    }
-    return d;
-  })
+  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => d)
   .handler(async ({ data }): Promise<{ kind: string; key: string; json: string }> => {
-    const url = `${SIMFLY_BASE}/user/assets/details/${encodeURIComponent(data.kind)}/${encodeURIComponent(data.key)}`;
+    const url = `${SIMFLY_BASE}/user/assets/details/${data.kind}/${encodeURIComponent(data.key)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
     if (!res.ok) throw new Error(`SimFly asset ${data.kind}/${data.key} not found`);
     const text = await res.text();
     return { kind: data.kind, key: data.key, json: text };
   });
-
 
 // LIVE visitors currently flying through one of my airports.
 export const getAirportVisitors = createServerFn({ method: "GET" })

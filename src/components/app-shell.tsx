@@ -89,7 +89,8 @@ function Sidebar() {
           <span className="mono uppercase tracking-widest text-[10px]">Buy me a coffee</span>
         </a>
         <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          This dashboard is build and maintained on free time. If it helps your operations, consider chipping in via link above. Every tip covers hosting and funds new features + keeps the lights on.
+          Enjoying SimFly Hub? Send a tip via{" "}
+          <span className="mono text-foreground">paypal.me/shilliash</span> — donations keep this dashboard free.
         </p>
       </div>
     </aside>

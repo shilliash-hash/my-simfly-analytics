@@ -1,5 +1,4 @@
 {
-  "homepage": "https://shilliash-hash.github.io/my-simfly-analytics",
   "name": "tanstack_start_ts",
   "private": true,
   "sideEffects": false,
@@ -10,9 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write .",
-    "predeploy": "npm run build",
-    "deploy": "gh-pages -d dist"
+    "format": "prettier --write ."
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",
@@ -61,9 +58,8 @@
     "react-day-picker": "^9.14.0",
     "react-dom": "^19.2.0",
     "react-hook-form": "^7.71.2",
-    "react-is": "^19.2.7",
     "react-resizable-panels": "^4.6.5",
-    "recharts": "^3.8.1",
+    "recharts": "^2.15.4",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.1",
@@ -74,7 +70,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.32.0",
-    "@lovable.dev/vite-tanstack-config": "2.5.3",
+    "@lovable.dev/vite-tanstack-config": "2.3.2",
     "@types/leaflet": "^1.9.21",
     "@types/node": "^22.16.5",
     "@types/react": "^19.2.0",
@@ -85,12 +81,10 @@
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
-    "gh-pages": "^6.3.0",
     "globals": "^15.15.0",
     "prettier": "^3.7.3",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.56.1",
-    "vite": "^7.3.1",
-    "vitest": "^4.1.9"
+    "vite": "^7.3.1"
   }
 }
