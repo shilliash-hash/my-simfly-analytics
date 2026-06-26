@@ -297,6 +297,7 @@ function CellDetailsDialog({
                   <tr className="text-[10px] uppercase tracking-wider text-foreground/60">
                     <th className="text-left px-3 py-2">When</th>
                     <th className="text-left px-3 py-2">Route</th>
+                    <th className="text-right px-3 py-2">Distance</th>
                     <th className="text-left px-3 py-2">Aircraft</th>
                     <th className="text-left px-3 py-2">Pilot</th>
                     <th className="text-right px-3 py-2">Base</th>
