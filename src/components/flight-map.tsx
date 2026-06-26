@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
 import type { AirportExt, FlightLog } from "@/lib/types";
@@ -12,6 +12,11 @@ export function FlightMap({ hubs, flights }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const hubIcaos = useMemo(
     () => new Set(hubs.map((h) => h.icao.toUpperCase())),
@@ -167,7 +172,7 @@ export function FlightMap({ hubs, flights }: Props) {
         className="h-[360px] w-full bg-[#0A0F1C]"
         aria-label="Map of flown routes"
       />
-      {geoQuery.isLoading && (
+      {mounted && geoQuery.isLoading && (
         <div className="mono border-t border-border px-4 py-2 text-[10px] uppercase tracking-widest text-muted-foreground">
           Loading airport coordinates…
         </div>

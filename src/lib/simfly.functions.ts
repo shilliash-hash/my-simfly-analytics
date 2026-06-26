@@ -42,6 +42,9 @@ const SIMFLY_BASE = "https://simfly.io/api";
 const DEFAULT_USERNAME = "shill";
 const DEFAULT_NONCE = "1697880083";
 const FETCH_TIMEOUT_MS = 12_000;
+const AIRCRAFT_BACKFILL_DAYS = 100;
+const AIRCRAFT_BACKFILL_PAGE_LIMIT = 180;
+const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
 
 function defaultUsername() {
   return process.env.SIMFLY_USERNAME || DEFAULT_USERNAME;
@@ -167,11 +170,25 @@ async function fetchJSONPages<T>(urls: string[], concurrency = 4): Promise<(T | 
     Array.from({ length: Math.min(concurrency, urls.length) }, async () => {
       while (next < urls.length) {
         const idx = next++;
-        out[idx] = await fetchJSON<T>(urls[idx]);
+        out[idx] = (await fetchJSON<T>(urls[idx])) ?? (await fetchJSON<T>(urls[idx]));
       }
     }),
   );
   return out;
+}
+
+function uuidV7TimestampMs(id?: string): number | null {
+  const prefix = id?.replace(/-/g, "").slice(0, 12);
+  if (!prefix || prefix.length !== 12) return null;
+  const ms = Number.parseInt(prefix, 16);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function histFlightTimeMs(raw: RawAirportHistFlight): number | null {
+  const ts = raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "";
+  const parsed = ts ? new Date(ts).getTime() : NaN;
+  if (Number.isFinite(parsed)) return parsed;
+  return uuidV7TimestampMs(raw.flightID);
 }
 
 // ----- Raw response shapes -----
@@ -640,6 +657,91 @@ function flightsToLog(flights: RawFlightLite[]): FlightLog[] {
   }));
 }
 
+type AircraftVisitorHistoryItem = AirportFlightHistoryItem & {
+  airportIcao: string;
+  _origin?: string;
+  _destination?: string;
+};
+
+function normaliseAircraftVisitorFlight(
+  raw: RawAirportHistFlight,
+  plane: AircraftExt,
+  me: string,
+): AircraftVisitorHistoryItem | null {
+  if (!raw.flightID) return null;
+  const pilot = raw.pilot?.username ?? "";
+  if (!pilot || pilot.toLowerCase() === me.toLowerCase()) return null;
+
+  const planeOwner = raw.airplane?.owner?.username ?? "";
+  const isOwnedPlane = planeOwner.toLowerCase() === me.toLowerCase() || raw.airplane?.aircraftId === plane.aircraftId;
+  if (!isOwnedPlane) return null;
+
+  const origin = raw.origin?.icao ?? "";
+  const destination = raw.destination?.icao ?? "";
+  return {
+    id: raw.flightID,
+    ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? new Date(uuidV7TimestampMs(raw.flightID) ?? Date.now()).toISOString(),
+    visitor: pilot,
+    isOwner: false,
+    role: "takeoff",
+    otherIcao: destination,
+    paxVisitor: raw.pax ?? 0,
+    paxAirport: 0,
+    paxAircraft: raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0,
+    aircraft: raw.airplane?.name ?? plane.name,
+    airportIcao: origin || destination,
+    _origin: origin,
+    _destination: destination,
+  };
+}
+
+async function fetchAircraftOwnedVisitorBackfill(
+  airplanes: AircraftExt[],
+  username: string,
+): Promise<AircraftVisitorHistoryItem[]> {
+  const cutoffMs = Date.now() - AIRCRAFT_BACKFILL_DAYS * 86_400_000;
+  const all: AircraftVisitorHistoryItem[] = [];
+
+  const scanPlane = async (plane: AircraftExt) => {
+    if (!plane.aircraftId) return [] as AircraftVisitorHistoryItem[];
+    const out: AircraftVisitorHistoryItem[] = [];
+    for (let page = 1; page <= AIRCRAFT_BACKFILL_PAGE_LIMIT; page += AIRCRAFT_BACKFILL_BATCH_SIZE) {
+      const pageNumbers = Array.from(
+        { length: Math.min(AIRCRAFT_BACKFILL_BATCH_SIZE, AIRCRAFT_BACKFILL_PAGE_LIMIT - page + 1) },
+        (_, i) => page + i,
+      );
+      const pages = await fetchJSONPages<RawAirportHistPage>(
+        pageNumbers.map((n) => `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(plane.aircraftId)}/flights?page=${n}`),
+        3,
+      );
+
+      let sawAnyFlight = false;
+      let sawInBackfillWindow = false;
+      for (const r of pages) {
+        if (!r?.flights?.length) continue;
+        sawAnyFlight = true;
+        for (const raw of r.flights) {
+          const ms = histFlightTimeMs(raw);
+          if (ms === null || ms >= cutoffMs) sawInBackfillWindow = true;
+          if (ms !== null && ms < cutoffMs) continue;
+          const item = normaliseAircraftVisitorFlight(raw, plane, username);
+          if (item) out.push(item);
+        }
+      }
+
+      if (!sawAnyFlight || !sawInBackfillWindow) break;
+    }
+    return out;
+  };
+
+  for (let i = 0; i < airplanes.length; i += 2) {
+    const batch = await Promise.all(airplanes.slice(i, i + 2).map(scanPlane));
+    all.push(...batch.flat());
+  }
+
+  return all;
+}
+
 // ----- Server functions -----
 
 export const getSimflyPayload = createServerFn({ method: "GET" })
@@ -727,13 +829,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     const earningsTimeseries = flightsToTimeseries(flights);
 
-    // Visitor history: other pilots flying through my hubs. The airport leg
-    // (origin.earnedPax / destination.earnedPax) is real PAX paid to me even
-    // though the visiting pilot keeps 60% of the gross. Page through every
-    // owned airport, then fold into the daily timeseries + activity feed.
+    // Visitor history: other pilots flying through my assets. The airport leg
+    // (origin.earnedPax / destination.earnedPax) and aircraft rental leg are
+    // real PAX paid to me even when I am not the pilot.
     const VISITOR_PAGES = 25;
-    const AIRCRAFT_PAGES = 25;
-    const meLc = username.toLowerCase();
 
     const [visitorPerAirport, aircraftPerPlane] = await Promise.all([
       Promise.all(
@@ -753,53 +852,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           return items;
         }),
       ),
-      // Aircraft history: any flight on one of my airplanes — even between
-      // airports I don't own — pays me the aircraft owner cut.
-      (async () => {
-        const items: (AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string })[] = [];
-        const requests = airplanes.flatMap((pl) =>
-          pl.aircraftId
-            ? Array.from({ length: AIRCRAFT_PAGES }, (_, i) => ({
-                plane: pl,
-                url: `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
-              }))
-            : [],
-        );
-        const pages = await fetchJSONPages<RawAirportHistPage>(requests.map((r) => r.url), 6);
-        for (let idx = 0; idx < pages.length; idx++) {
-          const r = pages[idx];
-          const pl = requests[idx].plane;
-          if (!r) continue;
-          for (const raw of r.flights ?? []) {
-              if (!raw.flightID) continue;
-              const pilot = raw.pilot?.username ?? "";
-              if (!pilot || pilot.toLowerCase() === meLc) continue; // my own flights already in logbook
-              const planeOwner = raw.airplane?.owner?.username ?? "";
-              const isOwnedPlane = planeOwner.toLowerCase() === meLc || raw.airplane?.aircraftId === pl.aircraftId;
-              if (!isOwnedPlane) continue;
-              const paxAircraft = raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0;
-              const origin = raw.origin?.icao ?? "";
-              const destination = raw.destination?.icao ?? "";
-              items.push({
-                id: raw.flightID,
-                ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "",
-                visitor: pilot,
-                isOwner: false,
-                role: "takeoff",
-                otherIcao: destination,
-                paxVisitor: raw.pax ?? 0,
-                paxAirport: 0,
-                paxAircraft,
-                aircraft: raw.airplane?.name ?? pl.name,
-                airportIcao: origin || destination,
-                // capture both endpoints for activity rendering
-                _origin: origin,
-                _destination: destination,
-              });
-            }
-          }
-        return items;
-      })(),
+      // 3+ month aircraft backfill: any external flight on one of my airplanes
+      // must be recovered even when neither airport is mine.
+      fetchAircraftOwnedVisitorBackfill(airplanes, username),
     ]);
 
     const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane];
@@ -835,6 +890,13 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
       visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
     }
+    const existingDays = new Set(earningsTimeseries.map((pt) => pt.date));
+    for (const [date] of visitorByDay) {
+      if (!existingDays.has(date)) {
+        earningsTimeseries.push({ date, pax: 0, paxKept: 0, paxDonated: 0, paxVisitors: 0, xp: 0 });
+      }
+    }
+    earningsTimeseries.sort((a, b) => a.date.localeCompare(b.date));
     for (const pt of earningsTimeseries) {
       pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
     }
