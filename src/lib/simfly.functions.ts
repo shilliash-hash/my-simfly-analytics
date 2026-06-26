@@ -90,7 +90,7 @@ async function resolveNonce(username: string): Promise<number | null> {
   const me = defaultUsername();
   const myNonce = defaultNonce();
   const assets = await fetchJSON<RawAssetsAll>(
-    `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(me)}&nonce=${myNonce}`,
+    `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(me)}&nonce=${encodeURIComponent(myNonce)}`,
   );
   const anchor = (assets?.items ?? []).find(
     (it): it is RawAssetAirport => it.type === "Airport",
@@ -98,7 +98,7 @@ async function resolveNonce(username: string): Promise<number | null> {
   if (anchor) {
     for (let page = 1; page <= 6 && !nonceCache.has(key); page += 1) {
       const r = await fetchJSON<{ flights?: RawVisitorPilotShape[] }>(
-        `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(anchor.icao)}/flights?username=${encodeURIComponent(me)}&nonce=${myNonce}&page=${page}`,
+        `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(anchor.icao)}/flights?username=${encodeURIComponent(me)}&nonce=${encodeURIComponent(myNonce)}&page=${page}`,
       );
       if (!r?.flights?.length) break;
       for (const f of r.flights) {
@@ -115,9 +115,17 @@ async function resolveNonce(username: string): Promise<number | null> {
   return null;
 }
 
+function sanitiseNonce(raw: string | undefined | null): string {
+  if (!raw) return "";
+  // SimFly nonces are numeric ids — reject anything else to prevent
+  // query-string injection when interpolated into upstream URLs.
+  return /^\d+$/.test(raw) ? raw : "";
+}
+
 async function resolveIdentity(input?: { username?: string; nonce?: string }) {
   const username = (input?.username || defaultUsername()).trim();
-  if (input?.nonce) return { username, nonce: input.nonce };
+  const supplied = sanitiseNonce(input?.nonce);
+  if (supplied) return { username, nonce: supplied };
   if (username.toLowerCase() === defaultUsername().toLowerCase()) {
     return { username, nonce: defaultNonce() };
   }
@@ -129,9 +137,10 @@ async function resolveIdentity(input?: { username?: string; nonce?: string }) {
 function identity(input?: { username?: string; nonce?: string }) {
   const username = input?.username || defaultUsername();
   const cached = nonceCache.get(username.toLowerCase());
+  const supplied = sanitiseNonce(input?.nonce);
   return {
     username,
-    nonce: input?.nonce || (cached ? String(cached) : defaultNonce()),
+    nonce: supplied || (cached ? String(cached) : defaultNonce()),
   };
 }
 
@@ -822,10 +831,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
   .handler(async ({ data }): Promise<SimflyPayload> => {
     const { username, nonce } = await resolveIdentity(data);
-    const qs = `username=${encodeURIComponent(username)}&nonce=${nonce}`;
+    const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
 
     const [profile, stats, assets, availablePaxRaw, p1, p2, p3, p4, p5, p6] = await Promise.all([
-      fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${nonce}&username=${encodeURIComponent(username)}`),
+      fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`),
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
       fetchText(`${SIMFLY_BASE}/user/pax?${qs}`),
@@ -912,7 +921,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       Promise.all(
         airports.map(async (ap) => {
           const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
           );
           const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
           const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
@@ -1102,7 +1111,7 @@ export const getRevenueConsistencyCheck = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string; nonce?: string; pages?: number }) => d ?? {})
   .handler(async ({ data }): Promise<RevenueConsistencyReport> => {
     const { username, nonce } = await resolveIdentity(data);
-    const qs = `username=${encodeURIComponent(username)}&nonce=${nonce}`;
+    const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
     const meLc = username.toLowerCase();
     const PAGES = Math.min(Math.max(data.pages ?? 25, 1), 40);
 
@@ -1125,7 +1134,7 @@ export const getRevenueConsistencyCheck = createServerFn({ method: "GET" })
 
     const airportScans = airportIcaos.map(async (icao) => {
       const urls = Array.from({ length: PAGES }, (_, i) =>
-        `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+        `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
       );
       const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
       for (const r of pages) {
@@ -1264,27 +1273,34 @@ export const checkSimflySession = createServerFn({ method: "GET" }).handler(
   async (): Promise<SimflySessionStatus> => {
     const checkedAt = new Date().toISOString();
     const { username, nonce } = identity();
+    // Never include the configured username or nonce in user-facing messages —
+    // this endpoint is unauthenticated, so any leak is publicly accessible.
+    if (!username || !nonce) {
+      return {
+        status: "missing",
+        message: "SimFly credentials are not configured on the server.",
+        checkedAt,
+      };
+    }
     try {
       const res = await fetch(
-        `${SIMFLY_BASE}/user/v2/?nonce=${nonce}&username=${encodeURIComponent(username)}`,
+        `${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`,
         { headers: { Accept: "application/json" } },
       );
       if (res.ok) {
         return {
           status: "ok",
           httpStatus: res.status,
-          message: `Live SimFly data for @${username}`,
+          message: "Live SimFly data is available.",
           checkedAt,
-          username,
         };
       }
       if (res.status === 404) {
         return {
           status: "missing",
           httpStatus: 404,
-          message: `SimFly user @${username} (nonce ${nonce}) not found. Set SIMFLY_USERNAME / SIMFLY_NONCE.`,
+          message: "Configured SimFly account was not found upstream.",
           checkedAt,
-          username,
         };
       }
       return {
@@ -1292,14 +1308,12 @@ export const checkSimflySession = createServerFn({ method: "GET" }).handler(
         httpStatus: res.status,
         message: `SimFly returned HTTP ${res.status}.`,
         checkedAt,
-        username,
       };
-    } catch (err) {
+    } catch {
       return {
         status: "error",
-        message: `Could not reach SimFly: ${err instanceof Error ? err.message : "unknown"}.`,
+        message: "Could not reach SimFly.",
         checkedAt,
-        username,
       };
     }
   },
@@ -1369,7 +1383,15 @@ export const getAirportGeo = createServerFn({ method: "GET" })
 
 // Per-asset detail JSON (raw passthrough).
 export const getSimflyAssetDetail = createServerFn({ method: "GET" })
-  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => d)
+  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => {
+    if (d?.kind !== "airport" && d?.kind !== "airplane") {
+      throw new Error("Invalid kind — must be 'airport' or 'airplane'");
+    }
+    if (typeof d.key !== "string" || !d.key.trim()) {
+      throw new Error("Missing asset key");
+    }
+    return { kind: d.kind, key: d.key };
+  })
   .handler(async ({ data }): Promise<{ kind: string; key: string; json: string }> => {
     const url = `${SIMFLY_BASE}/user/assets/details/${data.kind}/${encodeURIComponent(data.key)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -1565,7 +1587,7 @@ export const getAirportFlightHistory = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity({ username: data.username });
     const pages = Math.min(Math.max(data.pages ?? 5, 1), 25);
     const urls = Array.from({ length: pages }, (_, i) =>
-      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
     );
     const responses = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
     const items: AirportFlightHistoryItem[] = [];
@@ -1591,7 +1613,7 @@ export const getVisitorHistory = createServerFn({ method: "GET" })
 
     // Discover my airports.
     const assets = await fetchJSON<RawAssetsAll>(
-      `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${nonce}`,
+      `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
     );
     const icaos = (assets?.items ?? [])
       .filter((it): it is RawAssetAirport => it.type === "Airport")
@@ -1601,7 +1623,7 @@ export const getVisitorHistory = createServerFn({ method: "GET" })
     const perAirport = await Promise.all(
       icaos.map(async (icao) => {
         const urls = Array.from({ length: pagesPerAirport }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
         );
         const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
         const items: AirportFlightHistoryItem[] = [];
@@ -1729,7 +1751,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity({ username: data.username });
     const pages = Math.min(Math.max(data.pages ?? 50, 1), 120);
     const urls = Array.from({ length: pages }, (_, i) =>
-      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
     );
     const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
 
