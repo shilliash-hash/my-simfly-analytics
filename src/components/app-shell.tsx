@@ -97,7 +97,7 @@ function Sidebar() {
         <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
           Like what you see? ☕ Help keep SimFly Hub cruising by buying me a coffee with above link
           <br />
-          Or file a flight plan few times every week to one of my airports—every landing is appreciated just as much. 🛬
+          <strong>Or file a flight plan few times every week to one of my airports — every landing is</strong> appreciated just as much. ❤️
         </p>
       </div>
     </aside>
