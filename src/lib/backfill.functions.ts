@@ -257,10 +257,11 @@ export const tickBackfill = createServerFn({ method: "POST" })
       if (disc.firstPage?.flights?.length) {
         await supabaseAdmin
           .from("simfly_flights")
-          .upsert(
-            disc.firstPage.flights.map((f) => flightToRow(username, f)),
-            { onConflict: "username,flight_id", ignoreDuplicates: true },
-          );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .upsert(disc.firstPage.flights.map((f) => flightToRow(username, f)) as any, {
+            onConflict: "username,flight_id",
+            ignoreDuplicates: true,
+          });
       }
 
       row = {
