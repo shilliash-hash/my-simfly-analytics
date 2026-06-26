@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as StatsRouteImport } from './routes/stats'
 import { Route as RankingsRouteImport } from './routes/rankings'
 import { Route as LicensesRouteImport } from './routes/licenses'
+import { Route as ConsistencyRouteImport } from './routes/consistency'
 import { Route as CompareRouteImport } from './routes/compare'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as AirportsRouteImport } from './routes/airports'
@@ -36,6 +37,11 @@ const RankingsRoute = RankingsRouteImport.update({
 const LicensesRoute = LicensesRouteImport.update({
   id: '/licenses',
   path: '/licenses',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsistencyRoute = ConsistencyRouteImport.update({
+  id: '/consistency',
+  path: '/consistency',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CompareRoute = CompareRouteImport.update({
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
   '/compare': typeof CompareRoute
+  '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
   '/compare': typeof CompareRoute
+  '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
   '/compare': typeof CompareRoute
+  '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
@@ -144,6 +153,7 @@ export interface FileRouteTypes {
     | '/airports'
     | '/community'
     | '/compare'
+    | '/consistency'
     | '/licenses'
     | '/rankings'
     | '/stats'
@@ -159,6 +169,7 @@ export interface FileRouteTypes {
     | '/airports'
     | '/community'
     | '/compare'
+    | '/consistency'
     | '/licenses'
     | '/rankings'
     | '/stats'
@@ -174,6 +185,7 @@ export interface FileRouteTypes {
     | '/airports'
     | '/community'
     | '/compare'
+    | '/consistency'
     | '/licenses'
     | '/rankings'
     | '/stats'
@@ -190,6 +202,7 @@ export interface RootRouteChildren {
   AirportsRoute: typeof AirportsRouteWithChildren
   CommunityRoute: typeof CommunityRoute
   CompareRoute: typeof CompareRoute
+  ConsistencyRoute: typeof ConsistencyRoute
   LicensesRoute: typeof LicensesRouteWithChildren
   RankingsRoute: typeof RankingsRoute
   StatsRoute: typeof StatsRoute
@@ -217,6 +230,13 @@ declare module '@tanstack/react-router' {
       path: '/licenses'
       fullPath: '/licenses'
       preLoaderRoute: typeof LicensesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/consistency': {
+      id: '/consistency'
+      path: '/consistency'
+      fullPath: '/consistency'
+      preLoaderRoute: typeof ConsistencyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/compare': {
@@ -335,6 +355,7 @@ const rootRouteChildren: RootRouteChildren = {
   AirportsRoute: AirportsRouteWithChildren,
   CommunityRoute: CommunityRoute,
   CompareRoute: CompareRoute,
+  ConsistencyRoute: ConsistencyRoute,
   LicensesRoute: LicensesRouteWithChildren,
   RankingsRoute: RankingsRoute,
   StatsRoute: StatsRoute,
