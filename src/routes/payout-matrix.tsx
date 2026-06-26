@@ -316,6 +316,9 @@ function CellDetailsDialog({
                           ? `${icao} → ${s.otherIcao}`
                           : `${s.otherIcao} → ${icao}`}
                       </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/70 whitespace-nowrap">
+                        {typeof s.distanceNm === "number" ? `${Math.round(s.distanceNm)} NM` : "—"}
+                      </td>
                       <td className="px-3 py-1.5">
                         {s.aircraftName}
                         {s.tailNumber ? (
