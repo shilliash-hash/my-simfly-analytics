@@ -7,6 +7,13 @@ import type { AirportPayoutMatrix, PayoutMatrixCell } from "@/lib/simfly.functio
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/payout-matrix")({
   component: PayoutMatrixPage,
