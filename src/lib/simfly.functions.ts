@@ -901,6 +901,202 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     };
   });
 
+// ---------------------------------------------------------------------------
+// Revenue attribution consistency check
+//
+// Re-scans owned-airport and owned-aircraft flight histories and compares,
+// per flight, the PAX we credit to you (paxAirport + paxAircraft) against
+// the PAX SimFly actually paid out for the slots you own (origin/destination
+// earnedPax when you own the airport + airplane.earnedPax when you own the
+// plane). Any row where attributed != expected is a discrepancy.
+// ---------------------------------------------------------------------------
+
+export type RevenueConsistencyRow = {
+  flightID: string;
+  ts: string;
+  pilot: string;
+  origin: string;
+  destination: string;
+  aircraft: string;
+  ownsOrigin: boolean;
+  ownsDestination: boolean;
+  ownsAircraft: boolean;
+  expectedAirport: number;
+  expectedAircraft: number;
+  attributedAirport: number;
+  attributedAircraft: number;
+  expectedTotal: number;
+  attributedTotal: number;
+  diff: number;
+  sources: ("airport" | "aircraft")[];
+};
+
+export type RevenueConsistencyReport = {
+  username: string;
+  checkedAt: string;
+  scannedAirports: number;
+  scannedAircraft: number;
+  flightsExamined: number;
+  matches: number;
+  mismatches: number;
+  totalExpected: number;
+  totalAttributed: number;
+  rows: RevenueConsistencyRow[];
+};
+
+export const getRevenueConsistencyCheck = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string; nonce?: string; pages?: number }) => d ?? {})
+  .handler(async ({ data }): Promise<RevenueConsistencyReport> => {
+    const { username, nonce } = await resolveIdentity(data);
+    const qs = `username=${encodeURIComponent(username)}&nonce=${nonce}`;
+    const meLc = username.toLowerCase();
+    const PAGES = Math.min(Math.max(data.pages ?? 25, 1), 40);
+
+    const assets = await fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`);
+    const airportIcaos: string[] = [];
+    const airplaneIds: string[] = [];
+    for (const it of assets?.items ?? []) {
+      if (it.type === "Airport" && it.icao) airportIcaos.push(it.icao);
+      else if (it.type === "Airplane" && it.aircraftId) airplaneIds.push(it.aircraftId);
+    }
+    const ownsAirport = new Set(airportIcaos.map((i) => i.toUpperCase()));
+
+    type Acc = {
+      raw: RawAirportHistFlight;
+      sources: Set<"airport" | "aircraft">;
+      attributedAirport: number;  // sum we'd credit through airport feed
+      attributedAircraft: number; // we'd credit through aircraft feed
+    };
+    const map = new Map<string, Acc>();
+
+    const airportScans = airportIcaos.map(async (icao) => {
+      const urls = Array.from({ length: PAGES }, (_, i) =>
+        `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+      );
+      const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+      for (const r of pages) {
+        if (!r) continue;
+        for (const raw of r.flights ?? []) {
+          if (!raw.flightID) continue;
+          const pilot = raw.pilot?.username ?? "";
+          if (pilot.toLowerCase() === meLc) continue;
+          const role: "takeoff" | "landing" = raw.origin?.icao === icao ? "takeoff" : "landing";
+          const slot = role === "takeoff" ? raw.origin : raw.destination;
+          const credit = slot?.totalEarnedPax ?? slot?.earnedPax ?? 0;
+          const entry = map.get(raw.flightID) ?? {
+            raw,
+            sources: new Set(),
+            attributedAirport: 0,
+            attributedAircraft: 0,
+          };
+          entry.sources.add("airport");
+          entry.attributedAirport += credit;
+          map.set(raw.flightID, entry);
+        }
+      }
+    });
+
+    const aircraftScans = airplaneIds.map(async (id) => {
+      const urls = Array.from({ length: PAGES }, (_, i) =>
+        `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(id)}/flights?page=${i + 1}`,
+      );
+      const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+      for (const r of pages) {
+        if (!r) continue;
+        for (const raw of r.flights ?? []) {
+          if (!raw.flightID) continue;
+          const pilot = raw.pilot?.username ?? "";
+          if (pilot.toLowerCase() === meLc) continue;
+          if ((raw.airplane?.owner?.username ?? "").toLowerCase() !== meLc) continue;
+          const credit = raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0;
+          const entry = map.get(raw.flightID) ?? {
+            raw,
+            sources: new Set(),
+            attributedAirport: 0,
+            attributedAircraft: 0,
+          };
+          entry.sources.add("aircraft");
+          // Take max — same flight may surface twice across pages; per-flight value is stable.
+          entry.attributedAircraft = Math.max(entry.attributedAircraft, credit);
+          map.set(raw.flightID, entry);
+        }
+      }
+    });
+
+    await Promise.all([...airportScans, ...aircraftScans]);
+
+    const rows: RevenueConsistencyRow[] = [];
+    let totalExpected = 0;
+    let totalAttributed = 0;
+    let mismatches = 0;
+
+    for (const [flightID, acc] of map) {
+      const raw = acc.raw;
+      const originIcao = (raw.origin?.icao ?? "").toUpperCase();
+      const destIcao = (raw.destination?.icao ?? "").toUpperCase();
+      const ownsOrigin = !!originIcao && ownsAirport.has(originIcao);
+      const ownsDest = !!destIcao && ownsAirport.has(destIcao);
+      const ownsAircraft = (raw.airplane?.owner?.username ?? "").toLowerCase() === meLc;
+
+      const expectedAirport =
+        (ownsOrigin ? raw.origin?.totalEarnedPax ?? raw.origin?.earnedPax ?? 0 : 0) +
+        (ownsDest ? raw.destination?.totalEarnedPax ?? raw.destination?.earnedPax ?? 0 : 0);
+      const expectedAircraft = ownsAircraft
+        ? raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0
+        : 0;
+
+      const round = (n: number) => Math.round(n * 1000) / 1000;
+      const ea = round(expectedAirport);
+      const eac = round(expectedAircraft);
+      const aa = round(acc.attributedAirport);
+      const aac = round(acc.attributedAircraft);
+      const expectedTotal = round(ea + eac);
+      const attributedTotal = round(aa + aac);
+      const diff = round(attributedTotal - expectedTotal);
+
+      totalExpected += expectedTotal;
+      totalAttributed += attributedTotal;
+      if (Math.abs(diff) > 0.01) mismatches++;
+
+      rows.push({
+        flightID,
+        ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "",
+        pilot: raw.pilot?.username ?? "",
+        origin: originIcao,
+        destination: destIcao,
+        aircraft: raw.airplane?.name ?? "",
+        ownsOrigin,
+        ownsDestination: ownsDest,
+        ownsAircraft,
+        expectedAirport: ea,
+        expectedAircraft: eac,
+        attributedAirport: aa,
+        attributedAircraft: aac,
+        expectedTotal,
+        attributedTotal,
+        diff,
+        sources: Array.from(acc.sources),
+      });
+    }
+
+    rows.sort((a, b) => Math.abs(b.diff) - Math.abs(a.diff) || (b.ts > a.ts ? 1 : -1));
+
+    return {
+      username,
+      checkedAt: new Date().toISOString(),
+      scannedAirports: airportIcaos.length,
+      scannedAircraft: airplaneIds.length,
+      flightsExamined: rows.length,
+      matches: rows.length - mismatches,
+      mismatches,
+      totalExpected: Math.round(totalExpected * 100) / 100,
+      totalAttributed: Math.round(totalAttributed * 100) / 100,
+      rows,
+    };
+  });
+
+
+
 // Lightweight session/health check.
 export type SimflySessionStatus = {
   status: "ok" | "missing" | "unauthorized" | "error";
