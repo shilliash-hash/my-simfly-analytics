@@ -301,7 +301,7 @@ function CellDetailsDialog({
         }
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-[95vw] w-[95vw] sm:max-w-5xl">
         {cell && (
           <>
             <DialogHeader>
