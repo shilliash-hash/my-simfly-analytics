@@ -95,8 +95,9 @@ function Sidebar() {
           <span className="mono uppercase tracking-widest text-[10px]">Buy me a coffee</span>
         </a>
         <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Enjoying SimFly Hub? Send a tip via{" "}
-          <span className="mono text-foreground">paypal.me/shilliash</span> — donations keep this dashboard free.
+          Like what you see? ☕ Help keep SimFly Hub cruising by buying me a coffee with above link
+          <br />
+          Or file a flight plan few times every week to one of my airports—every landing is appreciated just as much. 🛬
         </p>
       </div>
     </aside>
