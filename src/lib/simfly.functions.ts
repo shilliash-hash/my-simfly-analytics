@@ -1741,13 +1741,18 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
         const side = isOrigin ? f.origin : f.destination;
         if (!side) { excluded++; continue; }
 
-        // Exclude any flight where this airport's leg received a bonus
-        // (weekly 3× and other temporary multipliers leave bonusPax > 0
-        // and inflate totalEarnedPax above earnedPax).
+        // Include EVERY completed flight. The Weekly Cycle First Movement
+        // (3×) bonus is a separate transaction stored in `bonusPax`; the
+        // standard "Airport Profit Split" payout lives in `earnedPax`. Use
+        // `earnedPax` as the base payout and simply ignore the bonus
+        // transaction — flights are NOT excluded just because they got a
+        // bonus. Defensive fallback: if a payload only exposes
+        // `totalEarnedPax` + `bonusPax`, derive base by subtraction.
         const bonus = side.bonusPax ?? 0;
-        const earned = side.earnedPax ?? 0;
-        const total = side.totalEarnedPax ?? earned;
-        if (bonus > 0 || total > earned + 0.005) { excluded++; continue; }
+        let earned = side.earnedPax ?? 0;
+        if (earned <= 0 && (side.totalEarnedPax ?? 0) > 0) {
+          earned = Math.max(0, (side.totalEarnedPax ?? 0) - bonus);
+        }
         if (earned <= 0) { excluded++; continue; }
 
         const tier = f.airplane?.category;
