@@ -1383,7 +1383,15 @@ export const getAirportGeo = createServerFn({ method: "GET" })
 
 // Per-asset detail JSON (raw passthrough).
 export const getSimflyAssetDetail = createServerFn({ method: "GET" })
-  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => d)
+  .inputValidator((d: { kind: "airport" | "airplane"; key: string }) => {
+    if (d?.kind !== "airport" && d?.kind !== "airplane") {
+      throw new Error("Invalid kind — must be 'airport' or 'airplane'");
+    }
+    if (typeof d.key !== "string" || !d.key.trim()) {
+      throw new Error("Missing asset key");
+    }
+    return { kind: d.kind, key: d.key };
+  })
   .handler(async ({ data }): Promise<{ kind: string; key: string; json: string }> => {
     const url = `${SIMFLY_BASE}/user/assets/details/${data.kind}/${encodeURIComponent(data.key)}`;
     const res = await fetch(url, { headers: { Accept: "application/json" } });
