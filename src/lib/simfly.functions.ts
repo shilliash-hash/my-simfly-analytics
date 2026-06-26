@@ -833,33 +833,42 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
 
-    const [profile, stats, assets, availablePaxRaw, p1, p2, p3, p4, p5, p6] = await Promise.all([
+    const [profile, stats, assets, availablePaxRaw, p1] = await Promise.all([
       fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`),
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
       fetchText(`${SIMFLY_BASE}/user/pax?${qs}`),
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=2`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=3`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=4`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=5`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=6`),
     ]);
 
     if (!profile) {
       return { ...MOCK_PAYLOAD, _source: "mock", _stale: true };
     }
 
+    // Full logbook backfill — follow pagination until the last available page,
+    // not just the most recent few days. Cap is intentionally generous
+    // (1000 pages ≈ 8000 flights) to protect against a runaway response.
+    const FLIGHTS_PAGE_CAP = 1000;
+    const totalFlightPages = Math.min(
+      FLIGHTS_PAGE_CAP,
+      Math.max(1, Number(p1?.totalPages) || 1),
+    );
+    const remainingFlightUrls =
+      totalFlightPages > 1
+        ? Array.from(
+            { length: totalFlightPages - 1 },
+            (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&page=${i + 2}`,
+          )
+        : [];
+    const remainingFlightPages = remainingFlightUrls.length
+      ? await fetchJSONPages<RawFlightsPage>(remainingFlightUrls, 6)
+      : [];
+
     const flights: RawFlightLite[] = Array.from(
       new Map(
-        [
-          ...(p1?.flights ?? []),
-          ...(p2?.flights ?? []),
-          ...(p3?.flights ?? []),
-          ...(p4?.flights ?? []),
-          ...(p5?.flights ?? []),
-          ...(p6?.flights ?? []),
-        ].map((flight) => [flight.id, flight]),
+        [p1, ...remainingFlightPages]
+          .flatMap((pg) => pg?.flights ?? [])
+          .map((flight) => [flight.id, flight]),
       ).values(),
     );
 
