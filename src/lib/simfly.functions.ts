@@ -657,6 +657,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           ...(p1?.flights ?? []),
           ...(p2?.flights ?? []),
           ...(p3?.flights ?? []),
+          ...(p4?.flights ?? []),
+          ...(p5?.flights ?? []),
+          ...(p6?.flights ?? []),
         ].map((flight) => [flight.id, flight]),
       ).values(),
     );
