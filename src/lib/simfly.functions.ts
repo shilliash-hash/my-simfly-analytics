@@ -845,30 +845,62 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       return { ...MOCK_PAYLOAD, _source: "mock", _stale: true };
     }
 
-    // Full logbook backfill — follow pagination until the last available page,
-    // not just the most recent few days. Cap is intentionally generous
-    // (1000 pages ≈ 8000 flights) to protect against a runaway response.
-    const FLIGHTS_PAGE_CAP = 1000;
-    const totalFlightPages = Math.min(
-      FLIGHTS_PAGE_CAP,
-      Math.max(1, Number(p1?.totalPages) || 1),
+    // Historical flights come from the persisted backfill cache so the page
+    // returns instantly and graphs include the full history even mid-import.
+    // Page 1 of the live logbook is always merged on top so brand-new flights
+    // appear immediately, and is upserted into the cache for the next visit.
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { rowToRawFlight } = await import("./backfill.functions");
+
+    const { data: cachedRows } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("*")
+      .eq("username", username)
+      .order("mission_start_ts", { ascending: false })
+      .limit(50000);
+
+    const cachedFlights: RawFlightLite[] = ((cachedRows ?? []) as Record<string, unknown>[]).map(
+      rowToRawFlight,
     );
-    const remainingFlightUrls =
-      totalFlightPages > 1
-        ? Array.from(
-            { length: totalFlightPages - 1 },
-            (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&page=${i + 2}`,
-          )
-        : [];
-    const remainingFlightPages = remainingFlightUrls.length
-      ? await fetchJSONPages<RawFlightsPage>(remainingFlightUrls, 6)
-      : [];
+
+    // Upsert page-1 freshness into the cache (non-blocking on errors).
+    if (p1?.flights?.length) {
+      const fresh = p1.flights.map((f) => ({
+        username,
+        flight_id: f.id,
+        mission_start_ts: f.mission_start_ts || null,
+        aircraft: f.aircraft ?? null,
+        aircraft_icao: f.aircraft_icao ?? null,
+        aircraft_id: f.aircraftId ?? null,
+        aircraft_tail_number: f.aircraft_tailNumber ?? null,
+        departure_icao: f.departure_icao ?? null,
+        destination_icao: f.destination_icao ?? null,
+        landing_rate: f.landing_rate ?? null,
+        total_distance: f.total_distance ?? null,
+        flight_time: f.flight_time ?? null,
+        total_reward: f.total_reward ?? null,
+        pax: f.pax ?? null,
+        xp: f.xp ?? null,
+        licence: f.licence ?? null,
+        licence_rank: f.licence_rank ?? null,
+        licence_rank_name: f.licence_rankName ?? null,
+        origin_name: f.origin?.name ?? null,
+        destination_name: f.destination?.name ?? null,
+        raw: JSON.parse(JSON.stringify(f)),
+      }));
+      try {
+        await supabaseAdmin
+          .from("simfly_flights")
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true });
+      } catch (err) {
+        console.warn("[simfly] page-1 upsert failed", err);
+      }
+    }
 
     const flights: RawFlightLite[] = Array.from(
       new Map(
-        [p1, ...remainingFlightPages]
-          .flatMap((pg) => pg?.flights ?? [])
-          .map((flight) => [flight.id, flight]),
+        [...cachedFlights, ...(p1?.flights ?? [])].map((flight) => [flight.id, flight]),
       ).values(),
     );
 

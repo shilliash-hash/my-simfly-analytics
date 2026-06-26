@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import { BackfillProgress } from "@/components/backfill-progress";
+import { BackfillIndicator } from "@/components/backfill-progress";
 
 function NotFoundComponent() {
   return (
@@ -128,9 +128,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense fallback={<BackfillProgress />}>
+      <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Outlet />
       </Suspense>
+      <BackfillIndicator />
     </QueryClientProvider>
   );
 }
