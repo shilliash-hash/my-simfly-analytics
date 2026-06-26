@@ -128,7 +128,7 @@ function emptyRow(username: string): BackfillStatusRow {
   };
 }
 
-function flightToRow(username: string, f: RawFlightLite) {
+function flightToRow(username: string, f: RawFlightLite): Record<string, unknown> {
   return {
     username,
     flight_id: f.id,
@@ -150,7 +150,7 @@ function flightToRow(username: string, f: RawFlightLite) {
     licence_rank_name: f.licence_rankName ?? null,
     origin_name: f.origin?.name ?? null,
     destination_name: f.destination?.name ?? null,
-    raw: f as unknown as Record<string, unknown>,
+    raw: JSON.parse(JSON.stringify(f)),
   };
 }
 
