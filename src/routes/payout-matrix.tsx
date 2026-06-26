@@ -147,7 +147,7 @@ function MatrixTable({
           <p className="text-xs text-foreground/60 mt-1">
             {matrix.flightsUsed.toLocaleString()} flights used
             {" · "}
-            {matrix.flightsExcluded.toLocaleString()} excluded (bonus / incomplete)
+            {matrix.flightsExcluded.toLocaleString()} skipped (incomplete / missing tier)
             {" · "}
             {matrix.flightsSampled.toLocaleString()} sampled across {matrix.pagesFetched} pages
             {isFetching ? " · refreshing…" : ""}
