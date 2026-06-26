@@ -1500,9 +1500,10 @@ type RawAirportHistFlight = {
   pax?: number;
   xp?: number;
   pilot?: { username?: string };
-  airplane?: { name?: string; aircraftId?: string; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number };
-  origin?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
-  destination?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
+  airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
+  origin?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
+  destination?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
+
 };
 
 type RawAirportHistFlightWithLicence = RawAirportHistFlight & {
@@ -1680,6 +1681,105 @@ export const getVisitorHistory = createServerFn({ method: "GET" })
         totalTakeoffs: a.totalTakeoffs,
       })),
       pagesPerAirport,
+      fetchedAt: new Date().toISOString(),
+    };
+  });
+
+// ===== Airport flat PAX payout matrix =====
+// Estimates the base per-flight PAX payout an airport pays out per aircraft
+// Tier (category) × Level by sampling the airport's public flight log and
+// excluding any flight that received a bonus multiplier (weekly 3× etc.).
+
+export type PayoutMatrixCell = {
+  tier: number;
+  level: number;
+  avgPax: number;
+  flights: number;
+};
+
+export type AirportPayoutMatrix = {
+  icao: string;
+  pagesFetched: number;
+  flightsSampled: number;
+  flightsUsed: number;
+  flightsExcluded: number;
+  tiers: number[];
+  levels: number[];
+  cells: PayoutMatrixCell[];
+  fetchedAt: string;
+};
+
+export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
+  .inputValidator((d: { icao: string; pages?: number; username?: string }) => d)
+  .handler(async ({ data }): Promise<AirportPayoutMatrix> => {
+    const { username, nonce } = await resolveIdentity({ username: data.username });
+    const pages = Math.min(Math.max(data.pages ?? 50, 1), 120);
+    const urls = Array.from({ length: pages }, (_, i) =>
+      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+    );
+    const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
+
+    type Bucket = { sum: number; n: number };
+    const buckets = new Map<string, Bucket>();
+    const tierSet = new Set<number>();
+    const levelSet = new Set<number>();
+    let sampled = 0;
+    let used = 0;
+    let excluded = 0;
+    let consecutiveEmpty = 0;
+
+    for (const r of responses) {
+      if (!r?.flights?.length) {
+        consecutiveEmpty++;
+        if (consecutiveEmpty >= 3) break;
+        continue;
+      }
+      consecutiveEmpty = 0;
+      for (const f of r.flights) {
+        sampled++;
+        const isOrigin = f.origin?.icao === data.icao;
+        const side = isOrigin ? f.origin : f.destination;
+        if (!side) { excluded++; continue; }
+
+        // Exclude any flight where this airport's leg received a bonus
+        // (weekly 3× and other temporary multipliers leave bonusPax > 0
+        // and inflate totalEarnedPax above earnedPax).
+        const bonus = side.bonusPax ?? 0;
+        const earned = side.earnedPax ?? 0;
+        const total = side.totalEarnedPax ?? earned;
+        if (bonus > 0 || total > earned + 0.005) { excluded++; continue; }
+        if (earned <= 0) { excluded++; continue; }
+
+        const tier = f.airplane?.category;
+        const level = f.airplane?.level;
+        if (!tier || !level) { excluded++; continue; }
+
+        tierSet.add(tier);
+        levelSet.add(level);
+        const key = `${tier}:${level}`;
+        const b = buckets.get(key) ?? { sum: 0, n: 0 };
+        b.sum += earned;
+        b.n += 1;
+        buckets.set(key, b);
+        used++;
+      }
+    }
+
+    const cells: PayoutMatrixCell[] = [];
+    for (const [key, b] of buckets) {
+      const [tier, level] = key.split(":").map(Number);
+      cells.push({ tier, level, avgPax: b.sum / b.n, flights: b.n });
+    }
+
+    return {
+      icao: data.icao,
+      pagesFetched: pages,
+      flightsSampled: sampled,
+      flightsUsed: used,
+      flightsExcluded: excluded,
+      tiers: [...tierSet].sort((a, b) => a - b),
+      levels: [...levelSet].sort((a, b) => a - b),
+      cells,
       fetchedAt: new Date().toISOString(),
     };
   });

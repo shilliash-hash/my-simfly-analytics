@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as StatsRouteImport } from './routes/stats'
 import { Route as RankingsRouteImport } from './routes/rankings'
+import { Route as PayoutMatrixRouteImport } from './routes/payout-matrix'
 import { Route as LicensesRouteImport } from './routes/licenses'
 import { Route as ConsistencyRouteImport } from './routes/consistency'
 import { Route as CompareRouteImport } from './routes/compare'
@@ -32,6 +33,11 @@ const StatsRoute = StatsRouteImport.update({
 const RankingsRoute = RankingsRouteImport.update({
   id: '/rankings',
   path: '/rankings',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PayoutMatrixRoute = PayoutMatrixRouteImport.update({
+  id: '/payout-matrix',
+  path: '/payout-matrix',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LicensesRoute = LicensesRouteImport.update({
@@ -104,6 +110,7 @@ export interface FileRoutesByFullPath {
   '/compare': typeof CompareRoute
   '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
+  '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
   '/aircraft/$id': typeof AircraftIdRoute
@@ -120,6 +127,7 @@ export interface FileRoutesByTo {
   '/compare': typeof CompareRoute
   '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
+  '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
   '/aircraft/$id': typeof AircraftIdRoute
@@ -137,6 +145,7 @@ export interface FileRoutesById {
   '/compare': typeof CompareRoute
   '/consistency': typeof ConsistencyRoute
   '/licenses': typeof LicensesRouteWithChildren
+  '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
   '/aircraft/$id': typeof AircraftIdRoute
@@ -155,6 +164,7 @@ export interface FileRouteTypes {
     | '/compare'
     | '/consistency'
     | '/licenses'
+    | '/payout-matrix'
     | '/rankings'
     | '/stats'
     | '/aircraft/$id'
@@ -171,6 +181,7 @@ export interface FileRouteTypes {
     | '/compare'
     | '/consistency'
     | '/licenses'
+    | '/payout-matrix'
     | '/rankings'
     | '/stats'
     | '/aircraft/$id'
@@ -187,6 +198,7 @@ export interface FileRouteTypes {
     | '/compare'
     | '/consistency'
     | '/licenses'
+    | '/payout-matrix'
     | '/rankings'
     | '/stats'
     | '/aircraft/$id'
@@ -204,6 +216,7 @@ export interface RootRouteChildren {
   CompareRoute: typeof CompareRoute
   ConsistencyRoute: typeof ConsistencyRoute
   LicensesRoute: typeof LicensesRouteWithChildren
+  PayoutMatrixRoute: typeof PayoutMatrixRoute
   RankingsRoute: typeof RankingsRoute
   StatsRoute: typeof StatsRoute
   PlayersHandleRoute: typeof PlayersHandleRoute
@@ -223,6 +236,13 @@ declare module '@tanstack/react-router' {
       path: '/rankings'
       fullPath: '/rankings'
       preLoaderRoute: typeof RankingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/payout-matrix': {
+      id: '/payout-matrix'
+      path: '/payout-matrix'
+      fullPath: '/payout-matrix'
+      preLoaderRoute: typeof PayoutMatrixRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/licenses': {
@@ -357,6 +377,7 @@ const rootRouteChildren: RootRouteChildren = {
   CompareRoute: CompareRoute,
   ConsistencyRoute: ConsistencyRoute,
   LicensesRoute: LicensesRouteWithChildren,
+  PayoutMatrixRoute: PayoutMatrixRoute,
   RankingsRoute: RankingsRoute,
   StatsRoute: StatsRoute,
   PlayersHandleRoute: PlayersHandleRoute,
