@@ -574,11 +574,9 @@ async function fetchSplitsForFlights(
 
 function flightsToTimeseries(flights: RawFlightLite[]): EarningsPoint[] {
   // For pilot-piloted flights, top-level `pax` is the net PAX paid to the
-  // pilot after every split (base earnings + extraPax bonuses received from
-  // airport / aircraft / licence owners). There is no "donation" on the
-  // pilot side — those flow inbound. Real outbound donations belong to the
-  // visitor-history view (other players flying through hubs I own).
+  // pilot after every split. Visitor PAX is folded in later.
   const map = new Map<string, EarningsPoint>();
+  let earliest: number | null = null;
   for (const f of flights) {
     const day = (f.mission_start_ts || "").slice(0, 10);
     if (!day) continue;
@@ -588,13 +586,18 @@ function flightsToTimeseries(flights: RawFlightLite[]): EarningsPoint[] {
     cur.paxKept = (cur.paxKept ?? 0) + kept;
     cur.xp += f.xp || 0;
     map.set(day, cur);
+    const ts = new Date(day + "T00:00:00Z").getTime();
+    if (Number.isFinite(ts) && (earliest === null || ts < earliest)) earliest = ts;
   }
   const today = new Date();
+  // Always emit at least the trailing 30 days; extend back to the earliest
+  // recorded flight so the UI can paginate through full history.
+  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const minStart = todayMs - 29 * 86_400_000;
+  const startMs = earliest !== null ? Math.min(earliest, minStart) : minStart;
   const out: EarningsPoint[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(d.getUTCDate() - i);
-    const key = d.toISOString().slice(0, 10);
+  for (let t = startMs; t <= todayMs; t += 86_400_000) {
+    const key = new Date(t).toISOString().slice(0, 10);
     const pt = map.get(key) ?? { date: key, pax: 0, paxKept: 0, paxDonated: 0, xp: 0 };
     pt.paxKept = Math.round((pt.paxKept ?? 0) * 100) / 100;
     pt.paxDonated = 0;
