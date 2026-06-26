@@ -1014,7 +1014,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // f.pax (the flight report bundles license income), so we must NOT
     // emit a separate license entry with its own delta or it would
     // double-count the same PAX in the activity feed.
-    const flightActivity: ActivityEntry[] = flights.slice(0, 200).map((f) => ({
+    const flightActivity: ActivityEntry[] = flights.map((f) => ({
       id: f.id,
       kind: f.licence ? ("license" as const) : ("route" as const),
       actorHandle: me.handle,
