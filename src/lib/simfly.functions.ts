@@ -695,51 +695,125 @@ function normaliseAircraftVisitorFlight(
   };
 }
 
+export type AircraftBackfillPlaneSummary = {
+  aircraftId: string;
+  name: string;
+  pagesScanned: number;
+  pagesFailed: number;
+  flightsFound: number;
+  stoppedReason: "cutoff" | "empty" | "page-limit" | "error" | "skipped";
+  error?: string;
+};
+
 async function fetchAircraftOwnedVisitorBackfill(
   airplanes: AircraftExt[],
   username: string,
-): Promise<AircraftVisitorHistoryItem[]> {
+): Promise<{ items: AircraftVisitorHistoryItem[]; summary: AircraftBackfillPlaneSummary[] }> {
   const cutoffMs = Date.now() - AIRCRAFT_BACKFILL_DAYS * 86_400_000;
   const all: AircraftVisitorHistoryItem[] = [];
+  const summary: AircraftBackfillPlaneSummary[] = [];
 
-  const scanPlane = async (plane: AircraftExt) => {
-    if (!plane.aircraftId) return [] as AircraftVisitorHistoryItem[];
-    const out: AircraftVisitorHistoryItem[] = [];
-    for (let page = 1; page <= AIRCRAFT_BACKFILL_PAGE_LIMIT; page += AIRCRAFT_BACKFILL_BATCH_SIZE) {
-      const pageNumbers = Array.from(
-        { length: Math.min(AIRCRAFT_BACKFILL_BATCH_SIZE, AIRCRAFT_BACKFILL_PAGE_LIMIT - page + 1) },
-        (_, i) => page + i,
-      );
-      const pages = await fetchJSONPages<RawAirportHistPage>(
-        pageNumbers.map((n) => `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(plane.aircraftId)}/flights?page=${n}`),
-        3,
-      );
-
-      let sawAnyFlight = false;
-      let sawInBackfillWindow = false;
-      for (const r of pages) {
-        if (!r?.flights?.length) continue;
-        sawAnyFlight = true;
-        for (const raw of r.flights) {
-          const ms = histFlightTimeMs(raw);
-          if (ms === null || ms >= cutoffMs) sawInBackfillWindow = true;
-          if (ms !== null && ms < cutoffMs) continue;
-          const item = normaliseAircraftVisitorFlight(raw, plane, username);
-          if (item) out.push(item);
-        }
-      }
-
-      if (!sawAnyFlight || !sawInBackfillWindow) break;
+  const scanPlane = async (plane: AircraftExt): Promise<AircraftVisitorHistoryItem[]> => {
+    const s: AircraftBackfillPlaneSummary = {
+      aircraftId: plane.aircraftId ?? "",
+      name: plane.name ?? plane.aircraftId ?? "unknown",
+      pagesScanned: 0,
+      pagesFailed: 0,
+      flightsFound: 0,
+      stoppedReason: "page-limit",
+    };
+    if (!plane.aircraftId) {
+      summary.push({ ...s, stoppedReason: "skipped", error: "missing aircraftId" });
+      return [];
     }
+    const out: AircraftVisitorHistoryItem[] = [];
+
+    try {
+      for (let page = 1; page <= AIRCRAFT_BACKFILL_PAGE_LIMIT; page += AIRCRAFT_BACKFILL_BATCH_SIZE) {
+        const pageNumbers = Array.from(
+          { length: Math.min(AIRCRAFT_BACKFILL_BATCH_SIZE, AIRCRAFT_BACKFILL_PAGE_LIMIT - page + 1) },
+          (_, i) => page + i,
+        );
+
+        let pages: (RawAirportHistPage | null)[] = [];
+        try {
+          pages = await fetchJSONPages<RawAirportHistPage>(
+            pageNumbers.map((n) => `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(plane.aircraftId)}/flights?page=${n}`),
+            3,
+          );
+        } catch (err) {
+          s.pagesFailed += pageNumbers.length;
+          s.stoppedReason = "error";
+          s.error = err instanceof Error ? err.message : String(err);
+          break;
+        }
+
+        s.pagesScanned += pages.length;
+        s.pagesFailed += pages.filter((p) => p === null).length;
+
+        let sawAnyFlight = false;
+        let sawInBackfillWindow = false;
+        for (const r of pages) {
+          if (!r?.flights?.length) continue;
+          sawAnyFlight = true;
+          for (const raw of r.flights) {
+            const ms = histFlightTimeMs(raw);
+            if (ms === null || ms >= cutoffMs) sawInBackfillWindow = true;
+            if (ms !== null && ms < cutoffMs) continue;
+            try {
+              const item = normaliseAircraftVisitorFlight(raw, plane, username);
+              if (item) out.push(item);
+            } catch {
+              // skip malformed flight, keep partial results
+            }
+          }
+        }
+
+        if (!sawAnyFlight) { s.stoppedReason = "empty"; break; }
+        if (!sawInBackfillWindow) { s.stoppedReason = "cutoff"; break; }
+      }
+    } catch (err) {
+      s.stoppedReason = "error";
+      s.error = err instanceof Error ? err.message : String(err);
+    }
+
+    s.flightsFound = out.length;
+    summary.push(s);
     return out;
   };
 
   for (let i = 0; i < airplanes.length; i += 2) {
-    const batch = await Promise.all(airplanes.slice(i, i + 2).map(scanPlane));
-    all.push(...batch.flat());
+    const batch = airplanes.slice(i, i + 2);
+    const results = await Promise.allSettled(batch.map(scanPlane));
+    results.forEach((r, j) => {
+      if (r.status === "fulfilled") {
+        all.push(...r.value);
+      } else {
+        const plane = batch[j];
+        summary.push({
+          aircraftId: plane.aircraftId ?? "",
+          name: plane.name ?? plane.aircraftId ?? "unknown",
+          pagesScanned: 0,
+          pagesFailed: 0,
+          flightsFound: 0,
+          stoppedReason: "error",
+          error: r.reason instanceof Error ? r.reason.message : String(r.reason),
+        });
+      }
+    });
   }
 
-  return all;
+  const failed = summary.filter((s) => s.stoppedReason === "error").length;
+  console.info(
+    `[aircraft-backfill] planes=${airplanes.length} ok=${summary.length - failed} failed=${failed} flights=${all.length}`,
+  );
+  if (failed > 0) {
+    for (const s of summary.filter((x) => x.stoppedReason === "error")) {
+      console.warn(`[aircraft-backfill] ${s.name} (${s.aircraftId}) failed: ${s.error}`);
+    }
+  }
+
+  return { items: all, summary };
 }
 
 // ----- Server functions -----
@@ -857,7 +931,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       fetchAircraftOwnedVisitorBackfill(airplanes, username),
     ]);
 
-    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane];
+    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.items];
     // De-dupe across hubs + aircraft feeds (a flight can appear in multiple sources).
     type VisitorFlightRec = AirportFlightHistoryItem & {
       airportIcao: string;
