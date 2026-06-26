@@ -574,11 +574,9 @@ async function fetchSplitsForFlights(
 
 function flightsToTimeseries(flights: RawFlightLite[]): EarningsPoint[] {
   // For pilot-piloted flights, top-level `pax` is the net PAX paid to the
-  // pilot after every split (base earnings + extraPax bonuses received from
-  // airport / aircraft / licence owners). There is no "donation" on the
-  // pilot side — those flow inbound. Real outbound donations belong to the
-  // visitor-history view (other players flying through hubs I own).
+  // pilot after every split. Visitor PAX is folded in later.
   const map = new Map<string, EarningsPoint>();
+  let earliest: number | null = null;
   for (const f of flights) {
     const day = (f.mission_start_ts || "").slice(0, 10);
     if (!day) continue;
@@ -588,13 +586,18 @@ function flightsToTimeseries(flights: RawFlightLite[]): EarningsPoint[] {
     cur.paxKept = (cur.paxKept ?? 0) + kept;
     cur.xp += f.xp || 0;
     map.set(day, cur);
+    const ts = new Date(day + "T00:00:00Z").getTime();
+    if (Number.isFinite(ts) && (earliest === null || ts < earliest)) earliest = ts;
   }
   const today = new Date();
+  // Always emit at least the trailing 30 days; extend back to the earliest
+  // recorded flight so the UI can paginate through full history.
+  const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
+  const minStart = todayMs - 29 * 86_400_000;
+  const startMs = earliest !== null ? Math.min(earliest, minStart) : minStart;
   const out: EarningsPoint[] = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setUTCDate(d.getUTCDate() - i);
-    const key = d.toISOString().slice(0, 10);
+  for (let t = startMs; t <= todayMs; t += 86_400_000) {
+    const key = new Date(t).toISOString().slice(0, 10);
     const pt = map.get(key) ?? { date: key, pax: 0, paxKept: 0, paxDonated: 0, xp: 0 };
     pt.paxKept = Math.round((pt.paxKept ?? 0) * 100) / 100;
     pt.paxDonated = 0;
@@ -631,7 +634,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${nonce}`;
 
-    const [profile, stats, assets, availablePaxRaw, p1, p2, p3] = await Promise.all([
+    const [profile, stats, assets, availablePaxRaw, p1, p2, p3, p4, p5, p6] = await Promise.all([
       fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${nonce}&username=${encodeURIComponent(username)}`),
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
@@ -639,6 +642,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=2`),
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=3`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=4`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=5`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=6`),
     ]);
 
     if (!profile) {
@@ -651,6 +657,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           ...(p1?.flights ?? []),
           ...(p2?.flights ?? []),
           ...(p3?.flights ?? []),
+          ...(p4?.flights ?? []),
+          ...(p5?.flights ?? []),
+          ...(p6?.flights ?? []),
         ].map((flight) => [flight.id, flight]),
       ).values(),
     );
@@ -708,37 +717,94 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // (origin.earnedPax / destination.earnedPax) is real PAX paid to me even
     // though the visiting pilot keeps 60% of the gross. Page through every
     // owned airport, then fold into the daily timeseries + activity feed.
-    const VISITOR_PAGES = 10;
-    const visitorPerAirport = await Promise.all(
-      airports.map(async (ap) => {
-        const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
-        );
-        const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-        const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
-        for (const r of pages) {
-          if (!r) continue;
-          for (const f of r.flights ?? []) {
-            const n = normaliseHistFlight(f, ap.icao, username);
-            if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+    const VISITOR_PAGES = 25;
+    const AIRCRAFT_PAGES = 25;
+    const meLc = username.toLowerCase();
+
+    const [visitorPerAirport, aircraftPerPlane] = await Promise.all([
+      Promise.all(
+        airports.map(async (ap) => {
+          const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
+            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
+          );
+          const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+          const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+          for (const r of pages) {
+            if (!r) continue;
+            for (const f of r.flights ?? []) {
+              const n = normaliseHistFlight(f, ap.icao, username);
+              if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+            }
           }
-        }
-        return items;
-      }),
-    );
-    const visitorFlights = visitorPerAirport.flat();
-    // De-dupe across hubs (a flight can appear at both origin and destination).
-    const byVisitorFlight = new Map<string, (typeof visitorFlights)[number]>();
-    for (const v of visitorFlights) {
+          return items;
+        }),
+      ),
+      // Aircraft history: any flight on one of my airplanes — even between
+      // airports I don't own — pays me the aircraft owner cut.
+      Promise.all(
+        airplanes.map(async (pl) => {
+          if (!pl.aircraftId) return [] as (AirportFlightHistoryItem & { airportIcao: string })[];
+          const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
+            `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
+          );
+          const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+          const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+          for (const r of pages) {
+            if (!r) continue;
+            for (const raw of r.flights ?? []) {
+              if (!raw.flightID) continue;
+              const pilot = raw.pilot?.username ?? "";
+              if (!pilot || pilot.toLowerCase() === meLc) continue; // my own flights already in logbook
+              const planeOwner = raw.airplane?.owner?.username ?? "";
+              if (planeOwner.toLowerCase() !== meLc) continue;
+              const paxAircraft = raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0;
+              const origin = raw.origin?.icao ?? "";
+              const destination = raw.destination?.icao ?? "";
+              items.push({
+                id: raw.flightID,
+                ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "",
+                visitor: pilot,
+                isOwner: false,
+                role: "takeoff",
+                otherIcao: destination,
+                paxVisitor: raw.pax ?? 0,
+                paxAirport: 0,
+                paxAircraft,
+                aircraft: raw.airplane?.name ?? pl.name,
+                airportIcao: origin || destination,
+                // capture both endpoints for activity rendering
+                _origin: origin,
+                _destination: destination,
+              } as AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string });
+            }
+          }
+          return items;
+        }),
+      ),
+    ]);
+
+    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.flat()];
+    // De-dupe across hubs + aircraft feeds (a flight can appear in multiple sources).
+    type VisitorFlightRec = AirportFlightHistoryItem & {
+      airportIcao: string;
+      _origin?: string;
+      _destination?: string;
+    };
+    const byVisitorFlight = new Map<string, VisitorFlightRec>();
+    for (const v of visitorFlights as VisitorFlightRec[]) {
       const prev = byVisitorFlight.get(v.id);
-      if (!prev) byVisitorFlight.set(v.id, v);
-      else
+      if (!prev) {
+        byVisitorFlight.set(v.id, v);
+      } else {
         byVisitorFlight.set(v.id, {
           ...prev,
           paxAirport: prev.paxAirport + v.paxAirport,
           // paxAircraft is per-flight, not per-hub — take max so we don't double-count.
           paxAircraft: Math.max(prev.paxAircraft ?? 0, v.paxAircraft ?? 0),
+          _origin: prev._origin ?? v._origin,
+          _destination: prev._destination ?? v._destination,
         });
+      }
     }
     const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
 
@@ -785,15 +851,22 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     }));
 
     // Visitor flights as activity, marked clearly.
-    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => ({
-      id: `visitor-${v.id}`,
-      kind: "route" as const,
-      actorHandle: v.visitor,
-      hubIcao: v.airportIcao,
-      message: `(Visitor) @${v.visitor} · ${v.role === "takeoff" ? `${v.airportIcao} → ${v.otherIcao}` : `${v.otherIcao} → ${v.airportIcao}`} · ${v.aircraft}${v.paxAircraft ? " · my aircraft" : ""}`,
-      delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
-      at: v.ts,
-    }));
+    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => {
+      const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
+      const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
+      const tags: string[] = [];
+      if (v.paxAircraft) tags.push("my aircraft");
+      if (v.paxAirport) tags.push("my airport");
+      return {
+        id: `visitor-${v.id}`,
+        kind: "route" as const,
+        actorHandle: v.visitor,
+        hubIcao: v.airportIcao,
+        message: `(Visitor) @${v.visitor} · ${orig} → ${dest} · ${v.aircraft}${tags.length ? ` · ${tags.join(" + ")}` : ""}`,
+        delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
+        at: v.ts,
+      };
+    });
 
 
     // Visitors: from logbook only my flights are visible, so this is empty for v1.
