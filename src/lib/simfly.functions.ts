@@ -115,9 +115,17 @@ async function resolveNonce(username: string): Promise<number | null> {
   return null;
 }
 
+function sanitiseNonce(raw: string | undefined | null): string {
+  if (!raw) return "";
+  // SimFly nonces are numeric ids — reject anything else to prevent
+  // query-string injection when interpolated into upstream URLs.
+  return /^\d+$/.test(raw) ? raw : "";
+}
+
 async function resolveIdentity(input?: { username?: string; nonce?: string }) {
   const username = (input?.username || defaultUsername()).trim();
-  if (input?.nonce) return { username, nonce: input.nonce };
+  const supplied = sanitiseNonce(input?.nonce);
+  if (supplied) return { username, nonce: supplied };
   if (username.toLowerCase() === defaultUsername().toLowerCase()) {
     return { username, nonce: defaultNonce() };
   }
