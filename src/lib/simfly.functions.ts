@@ -1360,7 +1360,7 @@ type RawAirportHistFlight = {
   pax?: number;
   xp?: number;
   pilot?: { username?: string };
-  airplane?: { name?: string; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number };
+  airplane?: { name?: string; aircraftId?: string; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number };
   origin?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
   destination?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
 };
