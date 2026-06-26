@@ -160,6 +160,20 @@ async function fetchText(url: string): Promise<string | null> {
   }
 }
 
+async function fetchJSONPages<T>(urls: string[], concurrency = 4): Promise<(T | null)[]> {
+  const out: (T | null)[] = new Array(urls.length).fill(null);
+  let next = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(concurrency, urls.length) }, async () => {
+      while (next < urls.length) {
+        const idx = next++;
+        out[idx] = await fetchJSON<T>(urls[idx]);
+      }
+    }),
+  );
+  return out;
+}
+
 // ----- Raw response shapes -----
 
 type RawProfile = {
@@ -741,14 +755,14 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       ),
       // Aircraft history: any flight on one of my airplanes — even between
       // airports I don't own — pays me the aircraft owner cut.
-      Promise.all(
-        airplanes.map(async (pl) => {
-          if (!pl.aircraftId) return [] as (AirportFlightHistoryItem & { airportIcao: string })[];
+      (async () => {
+        const items: (AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string })[] = [];
+        for (const pl of airplanes) {
+          if (!pl.aircraftId) continue;
           const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
             `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
           );
-          const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
-          const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+          const pages = await fetchJSONPages<RawAirportHistPage>(urls, 4);
           for (const r of pages) {
             if (!r) continue;
             for (const raw of r.flights ?? []) {
@@ -756,7 +770,8 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
               const pilot = raw.pilot?.username ?? "";
               if (!pilot || pilot.toLowerCase() === meLc) continue; // my own flights already in logbook
               const planeOwner = raw.airplane?.owner?.username ?? "";
-              if (planeOwner.toLowerCase() !== meLc) continue;
+              const isOwnedPlane = planeOwner.toLowerCase() === meLc || raw.airplane?.aircraftId === pl.aircraftId;
+              if (!isOwnedPlane) continue;
               const paxAircraft = raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0;
               const origin = raw.origin?.icao ?? "";
               const destination = raw.destination?.icao ?? "";
@@ -775,15 +790,15 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
                 // capture both endpoints for activity rendering
                 _origin: origin,
                 _destination: destination,
-              } as AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string });
+              });
             }
           }
-          return items;
-        }),
-      ),
+        }
+        return items;
+      })(),
     ]);
 
-    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.flat()];
+    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane];
     // De-dupe across hubs + aircraft feeds (a flight can appear in multiple sources).
     type VisitorFlightRec = AirportFlightHistoryItem & {
       airportIcao: string;
@@ -884,8 +899,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       aircraft,
       hubs,
       activity: [...flightActivity, ...visitorActivity]
-        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-        .slice(0, 250),
+        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
 
       earningsTimeseries,
       xpByAsset,
