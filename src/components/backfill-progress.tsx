@@ -70,7 +70,6 @@ export function BackfillIndicator() {
 
   if (!row) return null;
   if (dismissed) return null;
-  if (row.status === "idle") return null;
   if (row.status === "completed") return null;
 
   const percent =
@@ -84,7 +83,11 @@ export function BackfillIndicator() {
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {row.status === "failed" ? "Backfill failed" : "Importing logbook"}
+              {row.status === "failed"
+                ? "Backfill failed"
+                : row.status === "idle"
+                  ? "Preparing logbook import"
+                  : "Importing logbook"}
             </div>
             <div className="text-sm font-semibold text-foreground">@{row.username}</div>
           </div>

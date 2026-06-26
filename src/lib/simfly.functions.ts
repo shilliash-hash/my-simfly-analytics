@@ -31,7 +31,7 @@ import type {
  *  GET /api/user/stats?nonce=&username=       lifetime rewards + flight stats
  *  GET /api/user/pax?nonce=&username=         available PAX wallet balance
  *  GET /api/user/assets/all?username=&nonce=  airports + airplanes + licences
- *  GET /api/user/flights?username=&nonce=&page=N   paginated logbook
+ *  GET /api/user/flights?username=&nonce=&fpage=N  paginated logbook
  *  GET /api/user/badges?username=&nonce=      earned event badges
  *  GET /api/user/assets/details/airport/{ICAO}      airport detail
  *  GET /api/user/assets/details/airplane/{uuid}     airplane detail
@@ -838,7 +838,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
       fetchText(`${SIMFLY_BASE}/user/pax?${qs}`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`),
     ]);
 
     if (!profile) {
@@ -1901,7 +1901,7 @@ export const getBackfillEstimate = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
     const [p1, assets] = await Promise.all([
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
     ]);
     const logbookPages = Math.max(1, Math.min(1000, Number(p1?.totalPages) || 1));

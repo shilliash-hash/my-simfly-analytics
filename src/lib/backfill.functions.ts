@@ -27,6 +27,7 @@ const FETCH_TIMEOUT_MS = 12_000;
 const PAGES_PER_TICK = 20;
 const TICK_CONCURRENCY = 6;
 const MAX_PAGES_CAP = 5000;
+const UPSERT_CHUNK_SIZE = 100;
 
 type RawFlightLite = {
   id: string;
@@ -128,6 +129,78 @@ function emptyRow(username: string): BackfillStatusRow {
   };
 }
 
+type SupabaseLike = {
+  from: (table: string) => {
+    select: (columns?: string, options?: { count?: "exact"; head?: boolean }) => {
+      eq: (column: string, value: string) => PromiseLike<{ count: number | null; error: { message?: string } | null }>;
+    };
+    upsert: (
+      values: unknown,
+      options?: { onConflict?: string; ignoreDuplicates?: boolean },
+    ) => PromiseLike<{ error: { message?: string } | null }>;
+  };
+};
+
+async function countCachedFlights(supabaseAdmin: SupabaseLike, username: string): Promise<number> {
+  const { count, error } = await supabaseAdmin
+    .from("simfly_flights")
+    .select("flight_id", { count: "exact", head: true })
+    .eq("username", username);
+  if (error) throw new Error(error.message ?? "Unable to count imported flights.");
+  return count ?? 0;
+}
+
+function expectedComplete(row: BackfillStatusRow): number {
+  return Math.max(0, row.flights_total_est || row.flights_imported || 0);
+}
+
+async function repairIfPrematurelyCompleted(
+  supabaseAdmin: SupabaseLike,
+  row: BackfillStatusRow,
+): Promise<BackfillStatusRow> {
+  const expected = expectedComplete(row);
+  if (row.status !== "completed" || expected <= 0) return row;
+  const actual = await countCachedFlights(supabaseAdmin, row.username);
+  // SimFly totals can drift by a couple of records while a user is flying, but
+  // a "completed" row with only page-1 data is invalid and must be re-run.
+  if (actual >= Math.max(0, expected - 2)) return row;
+  const repaired: BackfillStatusRow = {
+    ...row,
+    status: "running",
+    current_page: 0,
+    flights_imported: actual,
+    error_message: `Import restarted: only ${actual} of ~${expected} cached flights were found after a completed run.`,
+    last_page_at: null,
+    started_at: row.started_at ?? new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabaseAdmin.from("backfill_progress").upsert(repaired);
+  if (error) throw new Error(error.message ?? "Unable to repair backfill progress.");
+  return repaired;
+}
+
+async function upsertFlightRows(
+  supabaseAdmin: SupabaseLike,
+  rows: Record<string, unknown>[],
+): Promise<void> {
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
+    const { error } = await supabaseAdmin.from("simfly_flights").upsert(chunk, {
+      onConflict: "username,flight_id",
+      ignoreDuplicates: true,
+    });
+    if (error) throw new Error(error.message ?? "Unable to import flight rows.");
+  }
+}
+
+async function upsertProgress(
+  supabaseAdmin: SupabaseLike,
+  row: BackfillStatusRow,
+): Promise<void> {
+  const { error } = await supabaseAdmin.from("backfill_progress").upsert(row);
+  if (error) throw new Error(error.message ?? "Unable to update backfill progress.");
+}
+
 function flightToRow(username: string, f: RawFlightLite): Record<string, unknown> {
   return {
     username,
@@ -184,12 +257,14 @@ export const getBackfillStatus = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<BackfillStatusRow> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
     const { data: row } = await supabaseAdmin
       .from("backfill_progress")
       .select("*")
       .eq("username", username)
       .maybeSingle();
-    return (row as BackfillStatusRow | null) ?? emptyRow(username);
+    const current = (row as BackfillStatusRow | null) ?? emptyRow(username);
+    return repairIfPrematurelyCompleted(db, current);
   });
 
 export const getFlightsForUser = createServerFn({ method: "GET" })
@@ -213,7 +288,7 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
   firstPage: RawFlightsPage | null;
 }> {
   const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
-  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`);
+  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`);
   if (!p1) return { totalPages: 0, totalFlights: 0, firstPage: null };
   return {
     totalPages: Math.max(1, Math.min(MAX_PAGES_CAP, Number(p1.totalPages) || 1)),
@@ -231,6 +306,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
       (username === DEFAULT_USERNAME ? DEFAULT_NONCE : DEFAULT_NONCE);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
 
     const { data: existing } = await supabaseAdmin
       .from("backfill_progress")
@@ -249,42 +325,64 @@ export const tickBackfill = createServerFn({ method: "POST" })
           status: "failed",
           error_message: "Unable to reach SimFly logbook (page 1).",
         };
-        await supabaseAdmin.from("backfill_progress").upsert(failed);
+        await upsertProgress(db, failed);
         return failed;
       }
 
       // Persist page 1 immediately.
       if (disc.firstPage?.flights?.length) {
-        await supabaseAdmin
-          .from("simfly_flights")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .upsert(disc.firstPage.flights.map((f) => flightToRow(username, f)) as any, {
-            onConflict: "username,flight_id",
-            ignoreDuplicates: true,
-          });
+        await upsertFlightRows(
+          db,
+          disc.firstPage.flights.map((f) => flightToRow(username, f)),
+        );
       }
+
+      const cachedCount = await countCachedFlights(db, username);
 
       row = {
         username,
         status: "running",
         total_pages: disc.totalPages,
         current_page: 1,
-        flights_imported: disc.firstPage?.flights?.length ?? 0,
+        flights_imported: cachedCount,
         flights_total_est: disc.totalFlights,
         error_message: null,
         started_at: new Date().toISOString(),
         last_page_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      await supabaseAdmin.from("backfill_progress").upsert(row);
+      await upsertProgress(db, row);
       return row;
     }
+
+    row = await repairIfPrematurelyCompleted(db, row);
 
     // Already done — no-op (graphs auto-refresh page 1 separately via getSimflyPayload).
     if (row.current_page >= row.total_pages) {
       if (row.status !== "completed") {
-        const completed = { ...row, status: "completed" as const, updated_at: new Date().toISOString() };
-        await supabaseAdmin.from("backfill_progress").upsert(completed);
+        const actual = await countCachedFlights(db, username);
+        const expected = expectedComplete(row);
+        if (expected > 0 && actual < Math.max(0, expected - 2)) {
+          const repaired: BackfillStatusRow = {
+            ...row,
+            status: "running",
+            current_page: 0,
+            flights_imported: actual,
+            error_message: `Import restarted: only ${actual} of ~${expected} cached flights were found before completion.`,
+            last_page_at: null,
+            updated_at: new Date().toISOString(),
+          };
+          await upsertProgress(db, repaired);
+          return repaired;
+        }
+        const completed = {
+          ...row,
+          status: "completed" as const,
+          flights_imported: actual,
+          error_message: null,
+          updated_at: new Date().toISOString(),
+        };
+        await upsertProgress(db, completed);
         return completed;
       }
       return row;
@@ -296,7 +394,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
     const urls = Array.from(
       { length: endPage - startPage + 1 },
-      (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&page=${startPage + i}`,
+      (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&fpage=${startPage + i}`,
     );
 
     let pages: (RawFlightsPage | null)[] = [];
@@ -309,8 +407,20 @@ export const tickBackfill = createServerFn({ method: "POST" })
         error_message: err instanceof Error ? err.message : String(err),
         updated_at: new Date().toISOString(),
       };
-      await supabaseAdmin.from("backfill_progress").upsert(failed);
+      await upsertProgress(db, failed);
       return failed;
+    }
+
+    const failedPage = pages.findIndex((p) => !p || !Array.isArray(p.flights));
+    if (failedPage >= 0) {
+      const retrying: BackfillStatusRow = {
+        ...row,
+        status: "running",
+        error_message: `Temporary SimFly fetch failure around page ${startPage + failedPage}; retrying without advancing progress.`,
+        updated_at: new Date().toISOString(),
+      };
+      await upsertProgress(db, retrying);
+      return retrying;
     }
 
     const rowsToInsert = pages
@@ -318,27 +428,30 @@ export const tickBackfill = createServerFn({ method: "POST" })
       .map((f) => flightToRow(username, f));
 
     if (rowsToInsert.length) {
-      await supabaseAdmin
-        .from("simfly_flights")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert(rowsToInsert as any, {
-          onConflict: "username,flight_id",
-          ignoreDuplicates: true,
-        });
+      await upsertFlightRows(db, rowsToInsert);
     }
 
-    const newImported = row.flights_imported + rowsToInsert.length;
+    const newImported = await countCachedFlights(db, username);
     const advanced = endPage;
     const done = advanced >= row.total_pages;
+    const expected = expectedComplete({ ...row, flights_total_est: row.flights_total_est });
     const next: BackfillStatusRow = {
       ...row,
-      status: done ? "completed" : "running",
+      status: done && (expected <= 0 || newImported >= Math.max(0, expected - 2)) ? "completed" : "running",
       current_page: advanced,
       flights_imported: newImported,
+      error_message:
+        done && expected > 0 && newImported < Math.max(0, expected - 2)
+          ? `Final verification found only ${newImported} of ~${expected} cached flights; continuing import instead of marking complete.`
+          : null,
       last_page_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    await supabaseAdmin.from("backfill_progress").upsert(next);
+    if (done && next.status === "running") {
+      next.current_page = 0;
+      next.last_page_at = null;
+    }
+    await upsertProgress(db, next);
     return next;
   });
 
@@ -351,8 +464,9 @@ export const resetBackfill = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<BackfillStatusRow> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
     await supabaseAdmin.from("simfly_flights").delete().eq("username", username);
     const fresh = emptyRow(username);
-    await supabaseAdmin.from("backfill_progress").upsert(fresh);
+    await upsertProgress(db, fresh);
     return fresh;
   });
