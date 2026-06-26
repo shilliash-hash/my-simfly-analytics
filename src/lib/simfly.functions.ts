@@ -829,13 +829,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     const earningsTimeseries = flightsToTimeseries(flights);
 
-    // Visitor history: other pilots flying through my hubs. The airport leg
-    // (origin.earnedPax / destination.earnedPax) is real PAX paid to me even
-    // though the visiting pilot keeps 60% of the gross. Page through every
-    // owned airport, then fold into the daily timeseries + activity feed.
+    // Visitor history: other pilots flying through my assets. The airport leg
+    // (origin.earnedPax / destination.earnedPax) and aircraft rental leg are
+    // real PAX paid to me even when I am not the pilot.
     const VISITOR_PAGES = 25;
-    const AIRCRAFT_PAGES = 25;
-    const meLc = username.toLowerCase();
 
     const [visitorPerAirport, aircraftPerPlane] = await Promise.all([
       Promise.all(
@@ -855,53 +852,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           return items;
         }),
       ),
-      // Aircraft history: any flight on one of my airplanes — even between
-      // airports I don't own — pays me the aircraft owner cut.
-      (async () => {
-        const items: (AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string })[] = [];
-        const requests = airplanes.flatMap((pl) =>
-          pl.aircraftId
-            ? Array.from({ length: AIRCRAFT_PAGES }, (_, i) => ({
-                plane: pl,
-                url: `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
-              }))
-            : [],
-        );
-        const pages = await fetchJSONPages<RawAirportHistPage>(requests.map((r) => r.url), 6);
-        for (let idx = 0; idx < pages.length; idx++) {
-          const r = pages[idx];
-          const pl = requests[idx].plane;
-          if (!r) continue;
-          for (const raw of r.flights ?? []) {
-              if (!raw.flightID) continue;
-              const pilot = raw.pilot?.username ?? "";
-              if (!pilot || pilot.toLowerCase() === meLc) continue; // my own flights already in logbook
-              const planeOwner = raw.airplane?.owner?.username ?? "";
-              const isOwnedPlane = planeOwner.toLowerCase() === meLc || raw.airplane?.aircraftId === pl.aircraftId;
-              if (!isOwnedPlane) continue;
-              const paxAircraft = raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0;
-              const origin = raw.origin?.icao ?? "";
-              const destination = raw.destination?.icao ?? "";
-              items.push({
-                id: raw.flightID,
-                ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "",
-                visitor: pilot,
-                isOwner: false,
-                role: "takeoff",
-                otherIcao: destination,
-                paxVisitor: raw.pax ?? 0,
-                paxAirport: 0,
-                paxAircraft,
-                aircraft: raw.airplane?.name ?? pl.name,
-                airportIcao: origin || destination,
-                // capture both endpoints for activity rendering
-                _origin: origin,
-                _destination: destination,
-              });
-            }
-          }
-        return items;
-      })(),
+      // 3+ month aircraft backfill: any external flight on one of my airplanes
+      // must be recovered even when neither airport is mine.
+      fetchAircraftOwnedVisitorBackfill(airplanes, username),
     ]);
 
     const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane];
@@ -937,6 +890,13 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
       visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
     }
+    const existingDays = new Set(earningsTimeseries.map((pt) => pt.date));
+    for (const [date] of visitorByDay) {
+      if (!existingDays.has(date)) {
+        earningsTimeseries.push({ date, pax: 0, paxKept: 0, paxDonated: 0, paxVisitors: 0, xp: 0 });
+      }
+    }
+    earningsTimeseries.sort((a, b) => a.date.localeCompare(b.date));
     for (const pt of earningsTimeseries) {
       pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
     }
