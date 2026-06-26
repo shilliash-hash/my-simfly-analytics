@@ -137,9 +137,10 @@ async function resolveIdentity(input?: { username?: string; nonce?: string }) {
 function identity(input?: { username?: string; nonce?: string }) {
   const username = input?.username || defaultUsername();
   const cached = nonceCache.get(username.toLowerCase());
+  const supplied = sanitiseNonce(input?.nonce);
   return {
     username,
-    nonce: input?.nonce || (cached ? String(cached) : defaultNonce()),
+    nonce: supplied || (cached ? String(cached) : defaultNonce()),
   };
 }
 
