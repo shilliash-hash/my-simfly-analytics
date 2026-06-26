@@ -657,6 +657,91 @@ function flightsToLog(flights: RawFlightLite[]): FlightLog[] {
   }));
 }
 
+type AircraftVisitorHistoryItem = AirportFlightHistoryItem & {
+  airportIcao: string;
+  _origin?: string;
+  _destination?: string;
+};
+
+function normaliseAircraftVisitorFlight(
+  raw: RawAirportHistFlight,
+  plane: AircraftExt,
+  me: string,
+): AircraftVisitorHistoryItem | null {
+  if (!raw.flightID) return null;
+  const pilot = raw.pilot?.username ?? "";
+  if (!pilot || pilot.toLowerCase() === me.toLowerCase()) return null;
+
+  const planeOwner = raw.airplane?.owner?.username ?? "";
+  const isOwnedPlane = planeOwner.toLowerCase() === me.toLowerCase() || raw.airplane?.aircraftId === plane.aircraftId;
+  if (!isOwnedPlane) return null;
+
+  const origin = raw.origin?.icao ?? "";
+  const destination = raw.destination?.icao ?? "";
+  return {
+    id: raw.flightID,
+    ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? new Date(uuidV7TimestampMs(raw.flightID) ?? Date.now()).toISOString(),
+    visitor: pilot,
+    isOwner: false,
+    role: "takeoff",
+    otherIcao: destination,
+    paxVisitor: raw.pax ?? 0,
+    paxAirport: 0,
+    paxAircraft: raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0,
+    aircraft: raw.airplane?.name ?? plane.name,
+    airportIcao: origin || destination,
+    _origin: origin,
+    _destination: destination,
+  };
+}
+
+async function fetchAircraftOwnedVisitorBackfill(
+  airplanes: AircraftExt[],
+  username: string,
+): Promise<AircraftVisitorHistoryItem[]> {
+  const cutoffMs = Date.now() - AIRCRAFT_BACKFILL_DAYS * 86_400_000;
+  const all: AircraftVisitorHistoryItem[] = [];
+
+  const scanPlane = async (plane: AircraftExt) => {
+    if (!plane.aircraftId) return [] as AircraftVisitorHistoryItem[];
+    const out: AircraftVisitorHistoryItem[] = [];
+    for (let page = 1; page <= AIRCRAFT_BACKFILL_PAGE_LIMIT; page += AIRCRAFT_BACKFILL_BATCH_SIZE) {
+      const pageNumbers = Array.from(
+        { length: Math.min(AIRCRAFT_BACKFILL_BATCH_SIZE, AIRCRAFT_BACKFILL_PAGE_LIMIT - page + 1) },
+        (_, i) => page + i,
+      );
+      const pages = await fetchJSONPages<RawAirportHistPage>(
+        pageNumbers.map((n) => `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(plane.aircraftId)}/flights?page=${n}`),
+        3,
+      );
+
+      let sawAnyFlight = false;
+      let sawInBackfillWindow = false;
+      for (const r of pages) {
+        if (!r?.flights?.length) continue;
+        sawAnyFlight = true;
+        for (const raw of r.flights) {
+          const ms = histFlightTimeMs(raw);
+          if (ms === null || ms >= cutoffMs) sawInBackfillWindow = true;
+          if (ms !== null && ms < cutoffMs) continue;
+          const item = normaliseAircraftVisitorFlight(raw, plane, username);
+          if (item) out.push(item);
+        }
+      }
+
+      if (!sawAnyFlight || !sawInBackfillWindow) break;
+    }
+    return out;
+  };
+
+  for (let i = 0; i < airplanes.length; i += 2) {
+    const batch = await Promise.all(airplanes.slice(i, i + 2).map(scanPlane));
+    all.push(...batch.flat());
+  }
+
+  return all;
+}
+
 // ----- Server functions -----
 
 export const getSimflyPayload = createServerFn({ method: "GET" })
