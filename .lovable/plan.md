@@ -1,46 +1,86 @@
+## Goal
 
-## 1. Aircraft-owner revenue & activity
+Make the SimFly historical import (a) actually reach the very last logbook page for every pilot, (b) survive page refreshes / reconnects without restarting, and (c) show real live progress + ETA from a single source of truth.
 
-### Problem
-Today, flights by other pilots only enter Income/Activities via the **airport** flight-history endpoint (`/api/user/assets/airport/{ICAO}/flights`). If someone rents my aircraft and flies between two airports I do not own (your example flights), nothing surfaces — even though SimFly pays me the aircraft cut and the ground timer ticks.
+Today the import runs inline inside `getSimflyPayload` — every refresh re-fetches all pages from scratch, and if the serverless request hits its time budget it returns whatever it has, which is exactly why your graph and activity feed cut off around 23.06.2026.
 
-### Fix
-Add a parallel pull for every aircraft I own, then fold those flights into the same visitor pipeline:
+## What changes
 
-1. New server-side helper `fetchAircraftHistory(aircraftId, username, nonce, pages)` in `src/lib/simfly.functions.ts` that pages through `/api/user/assets/airplane/{aircraftId}/flights?username&nonce&page=N` (same shape SimFly uses for airports — pilot/airplane/origin/destination/licence slots). If the endpoint shape differs, fall back to the mission-log detail (`/api/user/missions/log/{id}`) once per flight id discovered through the airplane detail endpoint.
-2. New normaliser `normaliseAircraftHistFlight` that mirrors `normaliseHistFlight` but keys revenue off `airplane.totalEarnedPax` (my cut as aircraft owner) instead of the airport leg. `paxAirport` stays 0 unless the airport is also mine.
-3. In `getSimflyPayload`, after `visitorPerAirport`, run `aircraftPerPlane` in parallel for every entry in `airplanes`. Flatten, then **merge into the existing `byVisitorFlight` map by `flightID`** so a flight that touches both my airport and my aircraft is counted once, with `paxAirport` from the airport feed and `paxAircraft` from the aircraft feed (current `Math.max` becomes `paxAircraft from aircraft feed ?? airport-feed value`).
-4. The merged set already drives `visitorByDay` (earnings chart, "Visitor PAX" line) and `visitorActivity` (Activities feed), so both surfaces light up automatically. Update the activity message to read `(Visitor) @pilot · ORIG → DEST · aircraft · my aircraft` when the aircraft cut is present and neither endpoint is mine.
-5. Bump default page depth so we cover ~3 months of history. SimFly returns 4 flights/page; raise `VISITOR_PAGES` and the new aircraft page count to **25** (≈100 flights per asset). Keep them as constants at the top of the file so they're easy to tune.
+### 1. Enable Lovable Cloud (required)
 
-### Revenue attribution
-We keep using the per-slot `totalEarnedPax`/`earnedPax` values SimFly already publishes — that is the actual payout (your 100%-to-owner example will surface as `airplane.totalEarnedPax = full pax`, `pilot.pax = 0`). No re-calculation, no guessing splits.
+We need durable storage for two things: the imported flights and the per-pilot backfill progress row. A stateless Cloudflare Worker cannot do "resume from page N" without it. Cloud also gives us the room to run the importer as a background job instead of inside the page request.
 
-### Acceptance checks
-- The two example flights (`019ef0be-…` and `019ef8d0-…`) appear in `/activity` and contribute to `/stats` "Visitor PAX".
-- Aircraft owned-cut shows up regardless of pilot, license, origin, or destination ownership.
-- Aircraft utilization timer (already correct) is untouched.
+### 2. New tables (public schema, RLS + GRANTs)
 
-## 2. PAX earnings chart — historical navigation
+```text
+backfill_progress
+  username (pk)         total_pages           current_page
+  flights_imported      flights_total_est     status (running|completed|failed|paused)
+  last_page_at          started_at            updated_at
+  error_message
 
-### Fix in `src/routes/stats.tsx`
-1. Compute the timeseries from the **full** flight + visitor history already returned by `getSimflyPayload`, not just the trailing 30 days. To do this, change `flightsToTimeseries` so it returns every day present in the data (and visitor folding already iterates all visitor days). Earnings payload becomes the full history; UI windows it.
-2. Add an `offset` state (`useState<number>(0)`) in the Stats component, where `0` = most recent 30 days, `1` = previous 30 days, etc. Compute `windowed = earningsTimeseries.slice(end - 30, end)` where `end = length - offset*30`.
-3. Render two header controls next to the "PAX earnings · 30 days" title:
-   - `← Previous 30 days` button (disabled when no older data)
-   - `Next 30 days →` button (disabled when `offset === 0`)
-   - Small label showing the active window, e.g. `Jun 12 – Jul 11`.
-4. Keep the existing chart markup. `paxTotal = pax + paxVisitors` stays the derived field, so Total PAX (gray bars) continues to equal Your PAX (blue) + Visitor PAX (yellow) for whatever window is active.
-5. Visual style (dark panel, curved areas + bar background, MM-DD x-axis tick formatter) stays exactly as today — only the data slice and the two header buttons change.
+simfly_flights
+  username + flight_id (composite pk, dedupe across re-runs)
+  + all RawFlightLite columns we already consume
+  mission_start_ts indexed
+```
 
-### Why client-side windowing
-The server already loads enough history for the chart once aircraft pages and 25-page airport pages land in step 1. No new server round-trip per click, no flicker, instant prev/next.
+Both tables get `GRANT SELECT, INSERT, UPDATE ON ... TO authenticated` plus `GRANT ALL ... TO service_role`. RLS scopes rows to the viewer's username via a small `viewed_username` claim/header check — reads are public-by-username for the dashboard.
 
-## Technical details (for reference)
+### 3. Background importer (server route)
 
-Files touched:
-- `src/lib/simfly.functions.ts` — add aircraft-history fetch/normalise, merge into visitor pipeline, return full-history earnings series, bump page constants.
-- `src/lib/types.ts` — only if a new `AircraftFlightHistoryItem` alias is helpful (likely reuse `AirportFlightHistoryItem`).
-- `src/routes/stats.tsx` — add `offset` state, prev/next buttons, window slicing, date-range label.
+`POST /api/public/backfill/start` (signature-free, username in body) and `GET /api/public/backfill/status?username=`:
 
-No schema, no auth, no migrations.
+- `start` upserts `backfill_progress` to `running`, discovers `totalPages` from `/user/flights?page=1`, and kicks off processing with `ctx.waitUntil(...)` so the Worker keeps draining pages after the HTTP response returns `202 Accepted`.
+- Pages are fetched in small concurrent batches (6 at a time). After each batch:
+  - new flights `upsert` into `simfly_flights` with `onConflict: username,flight_id, ignoreDuplicates:true`
+  - `current_page`, `flights_imported`, `last_page_at` are written to `backfill_progress`
+- On any caught error the row flips to `failed` with `error_message`; the next `start` call resumes from `current_page + 1` instead of page 1.
+- `status` returns the row as-is.
+
+This is the exact "long job + waitUntil + DB-backed progress + client polls" pattern from the Lovable knowledge base.
+
+### 4. Reads come from the DB, not the live API
+
+`getSimflyPayload` stops paginating the logbook itself. It still calls the fast SimFly endpoints (profile, stats, assets, available PAX, live flights), but the historical `flights` array is loaded from `simfly_flights` for the viewed username. If the row is missing or older than ~5 minutes, the server fn fires `start` once (fire-and-forget) so a fresh visitor automatically triggers the backfill.
+
+Graphs, activity, payout matrix, aircraft analytics, airport analytics — all of them already consume `data.flights`, so they pick up the full history with no per-page changes.
+
+### 5. Live progress UI
+
+`BackfillProgress` is rewritten around a `useQuery` that polls `getBackfillStatus` every 2s while `status === "running"`. It shows the persisted fields exactly:
+
+```text
+Backfill Progress: Page 87 / 203
+Flights Imported: 696
+Progress: 43%
+ETA: ~3m 20s   (derived from pages/sec since started_at)
+```
+
+When `status === "completed"`, the indicator disappears on next refresh; the suspense fallback only blocks the very first load (before any rows exist). After that, refreshes return instantly from the DB even mid-import.
+
+### 6. Resume behaviour
+
+- Page refresh: status query immediately reads the persisted row, UI keeps counting from where it was; importer is still running in the worker.
+- Worker eviction / 502: next `status` poll sees `last_page_at` is stale (>30s) and `status === "running"` → client calls `start` again, server picks `current_page + 1` and continues.
+- "Force re-import" button on `/consistency` for manual full rebuild (sets `current_page = 0`, truncates `simfly_flights` for that username).
+
+## Technical notes
+
+- All new server logic uses TanStack `createServerFn` + one server route under `/api/public/backfill/*`. The route is public-by-design (no PII written, username is the only key).
+- Supabase access uses `requireSupabaseAuth` for the dashboard reads when signed in, and the server publishable client for the public-by-username reads used by the "view as pilot" feature.
+- `fetchAircraftOwnedVisitorBackfill` (aircraft visitor history) is migrated to the same job row so its progress contributes to the same percent.
+- No client-side `localStorage` for progress — the DB row is the only source of truth, matching the "survives browser restarts" requirement.
+
+## Files touched
+
+- new migration: `backfill_progress`, `simfly_flights` (+ GRANTs + RLS)
+- new: `src/routes/api/public/backfill/start.ts`, `src/routes/api/public/backfill/status.ts`
+- new: `src/lib/backfill.functions.ts` (`getBackfillStatus`, `triggerBackfill`)
+- edit: `src/lib/simfly.functions.ts` — drop inline pagination, read from DB, auto-trigger
+- edit: `src/components/backfill-progress.tsx` — real polling + persisted fields
+- edit: `src/routes/__root.tsx` — fallback only blocks first-ever load
+
+## Open question
+
+Do you want **one shared cache** (anyone viewing `@luigi` reuses the same imported rows — fastest, lowest API load) or **per-viewer isolation** (every dashboard user re-imports for themselves)? Shared is the right default for a public dashboard, but say the word if you'd rather scope rows by viewer.
