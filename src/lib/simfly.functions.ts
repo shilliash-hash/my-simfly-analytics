@@ -1873,7 +1873,7 @@ export const getBackfillEstimate = createServerFn({ method: "GET" })
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
     ]);
     const logbookPages = Math.max(1, Math.min(1000, Number(p1?.totalPages) || 1));
-    const airplanes = (assets?.items ?? []).filter((a) => a?.type === "airplane").length;
+    const airplanes = (assets?.items ?? []).filter((a) => a?.type === "Airplane").length;
     // Heavy backfill scans up to AIRCRAFT_BACKFILL_PAGE_LIMIT pages per plane,
     // but most planes finish far earlier. Use a soft estimate of ~12 pages/plane
     // for time projection only — pagesTotal exposes the true ceiling.
