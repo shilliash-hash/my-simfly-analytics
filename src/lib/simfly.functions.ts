@@ -1810,6 +1810,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
           ts: f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "",
           role: isOrigin ? "takeoff" : "landing",
           otherIcao: (isOrigin ? f.destination?.icao : f.origin?.icao) ?? "—",
+          distanceNm: f.distance ?? f.flightDistance ?? f.totalDistance,
           aircraftName: f.airplane?.name ?? f.airplane?.icao ?? "—",
           tailNumber: (f.airplane as { tailNumber?: string } | undefined)?.tailNumber,
           pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",
