@@ -1521,6 +1521,9 @@ type RawAirportHistFlight = {
   landingTime?: string;
   pax?: number;
   xp?: number;
+  distance?: number;
+  flightDistance?: number;
+  totalDistance?: number;
   pilot?: { username?: string };
   airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
   origin?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
@@ -1717,6 +1720,7 @@ export type PayoutMatrixFlight = {
   ts: string;
   role: "takeoff" | "landing";
   otherIcao: string;
+  distanceNm?: number;
   aircraftName: string;
   tailNumber?: string;
   pilot: string;
@@ -1806,6 +1810,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
           ts: f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "",
           role: isOrigin ? "takeoff" : "landing",
           otherIcao: (isOrigin ? f.destination?.icao : f.origin?.icao) ?? "—",
+          distanceNm: f.distance ?? f.flightDistance ?? f.totalDistance,
           aircraftName: f.airplane?.name ?? f.airplane?.icao ?? "—",
           tailNumber: (f.airplane as { tailNumber?: string } | undefined)?.tailNumber,
           pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",

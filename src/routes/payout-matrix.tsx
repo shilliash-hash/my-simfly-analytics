@@ -297,6 +297,7 @@ function CellDetailsDialog({
                   <tr className="text-[10px] uppercase tracking-wider text-foreground/60">
                     <th className="text-left px-3 py-2">When</th>
                     <th className="text-left px-3 py-2">Route</th>
+                    <th className="text-right px-3 py-2">Distance</th>
                     <th className="text-left px-3 py-2">Aircraft</th>
                     <th className="text-left px-3 py-2">Pilot</th>
                     <th className="text-right px-3 py-2">Base</th>
@@ -314,6 +315,9 @@ function CellDetailsDialog({
                         {s.role === "takeoff"
                           ? `${icao} → ${s.otherIcao}`
                           : `${s.otherIcao} → ${icao}`}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/70 whitespace-nowrap">
+                        {typeof s.distanceNm === "number" ? `${Math.round(s.distanceNm)} NM` : "—"}
                       </td>
                       <td className="px-3 py-1.5">
                         {s.aircraftName}
