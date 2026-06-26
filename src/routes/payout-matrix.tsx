@@ -46,7 +46,7 @@ function PayoutMatrixPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
-        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from this airport's real flight history. Flights with weekly 3× or other bonus multipliers are excluded here so the matrix reflects the expected payout of a standard flight. This normalization applies only to this matrix — Income, Activity, Stats, Visitors, Consistency and all other reports continue to show actual payouts received, bonuses included."
+        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded as a separate transaction — we ignore only that bonus line and use the standard Airport Profit Split as the base payout, so bonus flights still count toward the sample. This normalization applies only to this matrix — Income, Activity, Stats, Visitors, Consistency and all other reports continue to show actual payouts received, bonuses included."
       />
 
       <div className="mb-6 flex flex-wrap gap-3 items-end">
@@ -147,7 +147,7 @@ function MatrixTable({
           <p className="text-xs text-foreground/60 mt-1">
             {matrix.flightsUsed.toLocaleString()} flights used
             {" · "}
-            {matrix.flightsExcluded.toLocaleString()} excluded (bonus / incomplete)
+            {matrix.flightsExcluded.toLocaleString()} skipped (incomplete / missing tier)
             {" · "}
             {matrix.flightsSampled.toLocaleString()} sampled across {matrix.pagesFetched} pages
             {isFetching ? " · refreshing…" : ""}
