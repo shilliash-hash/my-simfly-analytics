@@ -24,10 +24,12 @@ const NAV = [
   { to: "/licenses",   label: "Licenses",  icon: IdCard },
   { to: "/rankings",   label: "Rankings",  icon: Trophy },
   { to: "/activity",   label: "Activity",  icon: Activity },
-  { to: "/stats",      label: "Stats",     icon: BarChart3 },
-  { to: "/compare",    label: "Compare",   icon: GitCompareArrows },
-  { to: "/community",  label: "Community", icon: Users },
+  { to: "/stats",       label: "Stats",       icon: BarChart3 },
+  { to: "/consistency", label: "Consistency", icon: ShieldCheck },
+  { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
+  { to: "/community",   label: "Community",   icon: Users },
 ] as const;
+
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
