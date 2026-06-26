@@ -27,8 +27,8 @@ function fmt(n: number) {
 
 function ConsistencyPage() {
   const fn = useServerFn(getRevenueConsistencyCheck);
-  const viewed = useViewedUser();
-  const username = viewed?.username;
+  const username = useViewedUser();
+
   const keyTag = username?.toLowerCase() ?? "__self__";
   const [onlyMismatches, setOnlyMismatches] = useState(false);
 
