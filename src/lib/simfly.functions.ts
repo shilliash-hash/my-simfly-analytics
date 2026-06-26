@@ -42,6 +42,9 @@ const SIMFLY_BASE = "https://simfly.io/api";
 const DEFAULT_USERNAME = "shill";
 const DEFAULT_NONCE = "1697880083";
 const FETCH_TIMEOUT_MS = 12_000;
+const AIRCRAFT_BACKFILL_DAYS = 100;
+const AIRCRAFT_BACKFILL_PAGE_LIMIT = 180;
+const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
 
 function defaultUsername() {
   return process.env.SIMFLY_USERNAME || DEFAULT_USERNAME;
@@ -167,11 +170,25 @@ async function fetchJSONPages<T>(urls: string[], concurrency = 4): Promise<(T | 
     Array.from({ length: Math.min(concurrency, urls.length) }, async () => {
       while (next < urls.length) {
         const idx = next++;
-        out[idx] = await fetchJSON<T>(urls[idx]);
+        out[idx] = (await fetchJSON<T>(urls[idx])) ?? (await fetchJSON<T>(urls[idx]));
       }
     }),
   );
   return out;
+}
+
+function uuidV7TimestampMs(id?: string): number | null {
+  const prefix = id?.replace(/-/g, "").slice(0, 12);
+  if (!prefix || prefix.length !== 12) return null;
+  const ms = Number.parseInt(prefix, 16);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+function histFlightTimeMs(raw: RawAirportHistFlight): number | null {
+  const ts = raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "";
+  const parsed = ts ? new Date(ts).getTime() : NaN;
+  if (Number.isFinite(parsed)) return parsed;
+  return uuidV7TimestampMs(raw.flightID);
 }
 
 // ----- Raw response shapes -----
