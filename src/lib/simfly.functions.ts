@@ -1690,11 +1690,25 @@ export const getVisitorHistory = createServerFn({ method: "GET" })
 // Tier (category) × Level by sampling the airport's public flight log and
 // excluding any flight that received a bonus multiplier (weekly 3× etc.).
 
+export type PayoutMatrixFlight = {
+  flightId: string;
+  ts: string;
+  role: "takeoff" | "landing";
+  otherIcao: string;
+  aircraftName: string;
+  tailNumber?: string;
+  pilot: string;
+  basePax: number;
+  bonusPax: number;
+  totalPax: number;
+};
+
 export type PayoutMatrixCell = {
   tier: number;
   level: number;
   avgPax: number;
   flights: number;
+  samples: PayoutMatrixFlight[];
 };
 
 export type AirportPayoutMatrix = {
@@ -1719,7 +1733,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
     );
     const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
 
-    type Bucket = { sum: number; n: number };
+    type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
     const buckets = new Map<string, Bucket>();
     const tierSet = new Set<number>();
     const levelSet = new Set<number>();
@@ -1735,7 +1749,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
         continue;
       }
       consecutiveEmpty = 0;
-      for (const f of r.flights) {
+      for (const f of r.flights as RawAirportHistFlight[]) {
         sampled++;
         const isOrigin = f.origin?.icao === data.icao;
         const side = isOrigin ? f.origin : f.destination;
@@ -1762,9 +1776,21 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
         tierSet.add(tier);
         levelSet.add(level);
         const key = `${tier}:${level}`;
-        const b = buckets.get(key) ?? { sum: 0, n: 0 };
+        const b = buckets.get(key) ?? { sum: 0, n: 0, samples: [] };
         b.sum += earned;
         b.n += 1;
+        b.samples.push({
+          flightId: f.flightID,
+          ts: f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "",
+          role: isOrigin ? "takeoff" : "landing",
+          otherIcao: (isOrigin ? f.destination?.icao : f.origin?.icao) ?? "—",
+          aircraftName: f.airplane?.name ?? f.airplane?.icao ?? "—",
+          tailNumber: (f.airplane as { tailNumber?: string } | undefined)?.tailNumber,
+          pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",
+          basePax: earned,
+          bonusPax: bonus,
+          totalPax: side.totalEarnedPax ?? (earned + bonus),
+        });
         buckets.set(key, b);
         used++;
       }
@@ -1773,7 +1799,11 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
     const cells: PayoutMatrixCell[] = [];
     for (const [key, b] of buckets) {
       const [tier, level] = key.split(":").map(Number);
-      cells.push({ tier, level, avgPax: b.sum / b.n, flights: b.n });
+      // Sort samples newest first, cap to keep payload small.
+      const samples = b.samples
+        .sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0))
+        .slice(0, 200);
+      cells.push({ tier, level, avgPax: b.sum / b.n, flights: b.n, samples });
     }
 
     return {
@@ -1788,3 +1818,4 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
       fetchedAt: new Date().toISOString(),
     };
   });
+
