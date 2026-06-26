@@ -11,6 +11,8 @@ import {
   Plane,
   IdCard,
   Coffee,
+  ShieldCheck,
+
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
