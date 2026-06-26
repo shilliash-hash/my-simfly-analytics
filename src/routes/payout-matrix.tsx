@@ -154,8 +154,8 @@ function MatrixTable({
           </p>
         </div>
         <p className="text-[10px] uppercase tracking-wider text-foreground/50 max-w-sm text-right">
-          Estimated base payout — averages your airport's actual share
-          (profit split already applied), excluding triple-payout and other bonuses.
+          Base payout estimate · bonus filter applied only here.
+          Income, Activity, Stats and Consistency keep showing real payouts with all bonuses.
         </p>
       </header>
 
