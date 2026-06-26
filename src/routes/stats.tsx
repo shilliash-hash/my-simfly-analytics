@@ -50,24 +50,11 @@ function Stats() {
         description="Charts and live visitor activity across your airports."
       />
 
-      <div className="panel mb-6 rounded-xl p-5">
+      <EarningsChart series={data.earningsTimeseries} />
+
+      <div className="panel mb-6 rounded-xl p-5" style={{ display: "none" }}>
         <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
           <h2 className="font-display text-lg font-semibold">PAX earnings · 30 days</h2>
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--runway)]" />
-              Your PAX
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: "var(--instrument)" }} />
-              Visitor PAX
-            </span>
-            <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--foreground)] opacity-60" />
-              Total PAX
-            </span>
-            <span className="hidden sm:inline opacity-70">Combined daily token income (A + B).</span>
-          </div>
         </div>
         <div className="h-72 w-full">
           <ResponsiveContainer>
