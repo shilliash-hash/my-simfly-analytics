@@ -1720,6 +1720,7 @@ export type PayoutMatrixFlight = {
   ts: string;
   role: "takeoff" | "landing";
   otherIcao: string;
+  distanceNm?: number;
   aircraftName: string;
   tailNumber?: string;
   pilot: string;
