@@ -1500,9 +1500,10 @@ type RawAirportHistFlight = {
   pax?: number;
   xp?: number;
   pilot?: { username?: string };
-  airplane?: { name?: string; aircraftId?: string; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number };
-  origin?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
-  destination?: { icao?: string; earnedPax?: number; totalEarnedPax?: number };
+  airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
+  origin?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
+  destination?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
+
 };
 
 type RawAirportHistFlightWithLicence = RawAirportHistFlight & {
