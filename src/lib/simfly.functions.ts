@@ -741,7 +741,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
             `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${nonce}&page=${i + 1}`,
           );
-          const pages = await Promise.all(urls.map((u) => fetchJSON<RawAirportHistPage>(u)));
+          const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
           const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
           for (const r of pages) {
             if (!r) continue;
@@ -757,15 +757,20 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       // airports I don't own — pays me the aircraft owner cut.
       (async () => {
         const items: (AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string })[] = [];
-        for (const pl of airplanes) {
-          if (!pl.aircraftId) continue;
-          const urls = Array.from({ length: AIRCRAFT_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
-          );
-          const pages = await fetchJSONPages<RawAirportHistPage>(urls, 4);
-          for (const r of pages) {
-            if (!r) continue;
-            for (const raw of r.flights ?? []) {
+        const requests = airplanes.flatMap((pl) =>
+          pl.aircraftId
+            ? Array.from({ length: AIRCRAFT_PAGES }, (_, i) => ({
+                plane: pl,
+                url: `${SIMFLY_BASE}/user/assets/airplane/${encodeURIComponent(pl.aircraftId)}/flights?page=${i + 1}`,
+              }))
+            : [],
+        );
+        const pages = await fetchJSONPages<RawAirportHistPage>(requests.map((r) => r.url), 6);
+        for (let idx = 0; idx < pages.length; idx++) {
+          const r = pages[idx];
+          const pl = requests[idx].plane;
+          if (!r) continue;
+          for (const raw of r.flights ?? []) {
               if (!raw.flightID) continue;
               const pilot = raw.pilot?.username ?? "";
               if (!pilot || pilot.toLowerCase() === meLc) continue; // my own flights already in logbook
@@ -793,7 +798,6 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
               });
             }
           }
-        }
         return items;
       })(),
     ]);
