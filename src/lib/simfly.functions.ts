@@ -931,7 +931,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       fetchAircraftOwnedVisitorBackfill(airplanes, username),
     ]);
 
-    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane];
+    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.items];
     // De-dupe across hubs + aircraft feeds (a flight can appear in multiple sources).
     type VisitorFlightRec = AirportFlightHistoryItem & {
       airportIcao: string;
