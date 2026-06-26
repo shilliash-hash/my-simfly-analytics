@@ -272,7 +272,6 @@ export const getFlightsForUser = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<RawFlightLite[]> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const db = supabaseAdmin as unknown as SupabaseLike;
     // Cap defensively. Most pilots have far fewer than this.
     const { data: rows } = await supabaseAdmin
       .from("simfly_flights")
@@ -307,6 +306,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
       (username === DEFAULT_USERNAME ? DEFAULT_NONCE : DEFAULT_NONCE);
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
 
     const { data: existing } = await supabaseAdmin
       .from("backfill_progress")
