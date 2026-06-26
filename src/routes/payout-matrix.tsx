@@ -207,15 +207,29 @@ function MatrixTable({
       )}
 
       <footer className="px-5 py-3 border-t border-border text-[11px] text-foreground/50">
-        Confidence shown as flight count. Cells with fewer than 3 flights are
-        marked as low confidence; cells with no data show "Insufficient data".
-        Recalculate by re-selecting the airport — results are cached for 15 minutes.
+        Click any cell to inspect the individual flights contributing to its average.
+        Cells with fewer than 3 flights are marked as low confidence; cells with no
+        data show "Insufficient data". Results are cached for 15 minutes.
       </footer>
+
+      <CellDetailsDialog
+        icao={icao}
+        cell={selected}
+        onClose={() => setSelected(null)}
+      />
     </section>
   );
 }
 
-function MatrixCellTd({ cell, maxAvg }: { cell?: PayoutMatrixCell; maxAvg: number }) {
+function MatrixCellTd({
+  cell,
+  maxAvg,
+  onOpen,
+}: {
+  cell?: PayoutMatrixCell;
+  maxAvg: number;
+  onOpen?: () => void;
+}) {
   if (!cell) {
     return (
       <td className="px-3 py-2 text-right text-[11px] text-foreground/30 italic">
@@ -227,19 +241,116 @@ function MatrixCellTd({ cell, maxAvg }: { cell?: PayoutMatrixCell; maxAvg: numbe
   const lowConfidence = cell.flights < 3;
   return (
     <td
-      className={cn(
-        "px-3 py-2 text-right tabular-nums",
-        lowConfidence ? "text-foreground/60" : "text-foreground",
-      )}
+      className="p-0"
       style={{
         backgroundColor: `rgba(34, 211, 238, ${0.05 + intensity * 0.22})`,
       }}
-      title={`${cell.flights} flight${cell.flights === 1 ? "" : "s"} averaged${lowConfidence ? " (low confidence)" : ""}`}
     >
-      <div className="font-semibold">{cell.avgPax.toFixed(2)}</div>
-      <div className="text-[10px] text-foreground/50">
-        n={cell.flights}{lowConfidence ? " ·  low" : ""}
-      </div>
+      <button
+        type="button"
+        onClick={onOpen}
+        title={`${cell.flights} flight${cell.flights === 1 ? "" : "s"} — click to see contributing flights`}
+        className={cn(
+          "w-full px-3 py-2 text-right tabular-nums cursor-pointer transition-colors hover:bg-cyan-400/10 focus:outline-none focus:ring-1 focus:ring-cyan-400/60",
+          lowConfidence ? "text-foreground/60" : "text-foreground",
+        )}
+      >
+        <div className="font-semibold">{cell.avgPax.toFixed(2)}</div>
+        <div className="text-[10px] text-foreground/50">
+          n={cell.flights}{lowConfidence ? " ·  low" : ""}
+        </div>
+      </button>
     </td>
+  );
+}
+
+function CellDetailsDialog({
+  icao,
+  cell,
+  onClose,
+}: {
+  icao: string;
+  cell: PayoutMatrixCell | null;
+  onClose: () => void;
+}) {
+  const open = !!cell;
+  return (
+    <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : undefined)}>
+      <DialogContent className="max-w-2xl">
+        {cell && (
+          <>
+            <DialogHeader>
+              <DialogTitle>
+                {icao} · Tier {cell.tier} · Level {cell.level}
+              </DialogTitle>
+              <DialogDescription>
+                {cell.flights.toLocaleString()} flight{cell.flights === 1 ? "" : "s"} averaged{" "}
+                <span className="text-foreground font-medium">{cell.avgPax.toFixed(3)} PAX</span>{" "}
+                base payout. Bonus transactions (e.g. Weekly Cycle 3×) are shown for reference but
+                are not part of the matrix average.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="mt-2 max-h-[60vh] overflow-y-auto rounded border border-border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/40 sticky top-0">
+                  <tr className="text-[10px] uppercase tracking-wider text-foreground/60">
+                    <th className="text-left px-3 py-2">When</th>
+                    <th className="text-left px-3 py-2">Route</th>
+                    <th className="text-left px-3 py-2">Aircraft</th>
+                    <th className="text-left px-3 py-2">Pilot</th>
+                    <th className="text-right px-3 py-2">Base</th>
+                    <th className="text-right px-3 py-2">Bonus</th>
+                    <th className="text-right px-3 py-2">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cell.samples.map((s) => (
+                    <tr key={s.flightId} className="border-t border-border/60">
+                      <td className="px-3 py-1.5 text-foreground/70 whitespace-nowrap">
+                        {s.ts ? new Date(s.ts).toLocaleString() : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono">
+                        {s.role === "takeoff"
+                          ? `${icao} → ${s.otherIcao}`
+                          : `${s.otherIcao} → ${icao}`}
+                      </td>
+                      <td className="px-3 py-1.5">
+                        {s.aircraftName}
+                        {s.tailNumber ? (
+                          <span className="text-foreground/50"> · {s.tailNumber}</span>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-1.5 text-foreground/70">{s.pilot}</td>
+                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                        {s.basePax.toFixed(2)}
+                      </td>
+                      <td
+                        className={cn(
+                          "px-3 py-1.5 text-right tabular-nums",
+                          s.bonusPax > 0 ? "text-amber-400" : "text-foreground/30",
+                        )}
+                      >
+                        {s.bonusPax > 0 ? `+${s.bonusPax.toFixed(2)}` : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/70">
+                        {s.totalPax.toFixed(2)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {cell.samples.length < cell.flights ? (
+              <p className="mt-2 text-[10px] text-foreground/50">
+                Showing the {cell.samples.length} most recent of {cell.flights} contributing
+                flights.
+              </p>
+            ) : null}
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
