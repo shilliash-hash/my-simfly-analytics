@@ -128,9 +128,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense fallback={<BackfillProgress />}>
+      <Suspense fallback={<div className="min-h-screen bg-background" />}>
         <Outlet />
       </Suspense>
+      <BackfillIndicator />
     </QueryClientProvider>
   );
 }
