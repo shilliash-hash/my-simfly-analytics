@@ -274,8 +274,33 @@ function CellDetailsDialog({
   onClose: () => void;
 }) {
   const open = !!cell;
+  const [distSort, setDistSort] = useState<"none" | "asc" | "desc">("none");
+
+  const sortedSamples = useMemo(() => {
+    if (!cell) return [];
+    if (distSort === "none") return cell.samples;
+    const arr = [...cell.samples];
+    arr.sort((a, b) => {
+      const av = typeof a.distanceNm === "number" ? a.distanceNm : Number.POSITIVE_INFINITY;
+      const bv = typeof b.distanceNm === "number" ? b.distanceNm : Number.POSITIVE_INFINITY;
+      return distSort === "asc" ? av - bv : bv - av;
+    });
+    return arr;
+  }, [cell, distSort]);
+
+  const cycleDistSort = () =>
+    setDistSort((s) => (s === "none" ? "asc" : s === "asc" ? "desc" : "none"));
+
   return (
-    <Dialog open={open} onOpenChange={(o) => (!o ? onClose() : undefined)}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          setDistSort("none");
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="max-w-2xl">
         {cell && (
           <>
@@ -297,7 +322,19 @@ function CellDetailsDialog({
                   <tr className="text-[10px] uppercase tracking-wider text-foreground/60">
                     <th className="text-left px-3 py-2">When</th>
                     <th className="text-left px-3 py-2">Route</th>
-                    <th className="text-right px-3 py-2">Distance</th>
+                    <th className="text-right px-3 py-2">
+                      <button
+                        type="button"
+                        onClick={cycleDistSort}
+                        className="inline-flex items-center gap-1 uppercase tracking-wider hover:text-foreground transition-colors"
+                        title="Sort by distance"
+                      >
+                        Distance
+                        <span className="text-foreground/50">
+                          {distSort === "asc" ? "▲" : distSort === "desc" ? "▼" : "↕"}
+                        </span>
+                      </button>
+                    </th>
                     <th className="text-left px-3 py-2">Aircraft</th>
                     <th className="text-left px-3 py-2">Pilot</th>
                     <th className="text-right px-3 py-2">Base</th>
@@ -306,7 +343,8 @@ function CellDetailsDialog({
                   </tr>
                 </thead>
                 <tbody>
-                  {cell.samples.map((s) => (
+                  {sortedSamples.map((s) => (
+
                     <tr key={s.flightId} className="border-t border-border/60">
                       <td className="px-3 py-1.5 text-foreground/70 whitespace-nowrap">
                         {s.ts ? new Date(s.ts).toLocaleString() : "—"}
