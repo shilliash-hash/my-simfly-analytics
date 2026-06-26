@@ -116,3 +116,101 @@ function Stats() {
     </AppShell>
   );
 }
+
+function EarningsChart({ series }: { series: { date: string; pax: number; paxVisitors?: number }[] }) {
+  const [offset, setOffset] = useState(0);
+  const total = series.length;
+  const end = Math.max(30, total - offset * 30);
+  const start = Math.max(0, end - 30);
+  const windowed = useMemo(
+    () => series.slice(start, end).map((d) => ({ ...d, paxTotal: (d.pax ?? 0) + (d.paxVisitors ?? 0) })),
+    [series, start, end],
+  );
+  const olderAvailable = start > 0;
+  const newerAvailable = offset > 0;
+  const fmt = (d: string) => {
+    if (!d) return "";
+    const dt = new Date(d + "T00:00:00Z");
+    return dt.toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
+  };
+  const rangeLabel =
+    windowed.length > 0 ? `${fmt(windowed[0].date)} – ${fmt(windowed[windowed.length - 1].date)}` : "";
+  return (
+    <div className="panel mb-6 rounded-xl p-5">
+      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
+        <div className="flex items-baseline gap-3">
+          <h2 className="font-display text-lg font-semibold">PAX earnings · 30 days</h2>
+          <span className="mono text-[11px] text-muted-foreground">{rangeLabel}</span>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--runway)]" />
+              Your PAX
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: "var(--instrument)" }} />
+              Visitor PAX
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--foreground)] opacity-60" />
+              Total PAX
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setOffset((o) => o + 1)}
+              disabled={!olderAvailable}
+              className="rounded border border-border bg-background/40 p-1 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label="Previous 30 days"
+              title="Previous 30 days"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOffset((o) => Math.max(0, o - 1))}
+              disabled={!newerAvailable}
+              className="rounded border border-border bg-background/40 p-1 text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30"
+              aria-label="Next 30 days"
+              title="Next 30 days"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+      <div className="h-72 w-full">
+        <ResponsiveContainer>
+          <ComposedChart data={windowed} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
+            <defs>
+              <linearGradient id="gPax" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--runway)" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="var(--runway)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="gVisitors" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="var(--instrument)" stopOpacity={0.45} />
+                <stop offset="100%" stopColor="var(--instrument)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
+            <CartesianGrid stroke="var(--border)" vertical={false} />
+            <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} stroke="var(--muted-foreground)" fontSize={11} />
+            <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
+            <Tooltip
+              contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+              formatter={(v: number, name) => {
+                const label =
+                  name === "paxVisitors" ? "Visitor PAX" : name === "paxTotal" ? "Total PAX" : "Your PAX";
+                return [formatNumber(v) + " PAX", label];
+              }}
+            />
+            <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(255,255,255,0.12)" radius={[3, 3, 0, 0]} />
+            <Area type="monotone" dataKey="pax" name="pax" stroke="var(--runway)" strokeWidth={2} fill="url(#gPax)" />
+            <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gVisitors)" />
+          </ComposedChart>
+        </ResponsiveContainer>
+      </div>
+    </div>
+  );
+}
