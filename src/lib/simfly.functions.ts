@@ -851,15 +851,22 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     }));
 
     // Visitor flights as activity, marked clearly.
-    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => ({
-      id: `visitor-${v.id}`,
-      kind: "route" as const,
-      actorHandle: v.visitor,
-      hubIcao: v.airportIcao,
-      message: `(Visitor) @${v.visitor} · ${v.role === "takeoff" ? `${v.airportIcao} → ${v.otherIcao}` : `${v.otherIcao} → ${v.airportIcao}`} · ${v.aircraft}${v.paxAircraft ? " · my aircraft" : ""}`,
-      delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
-      at: v.ts,
-    }));
+    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => {
+      const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
+      const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
+      const tags: string[] = [];
+      if (v.paxAircraft) tags.push("my aircraft");
+      if (v.paxAirport) tags.push("my airport");
+      return {
+        id: `visitor-${v.id}`,
+        kind: "route" as const,
+        actorHandle: v.visitor,
+        hubIcao: v.airportIcao,
+        message: `(Visitor) @${v.visitor} · ${orig} → ${dest} · ${v.aircraft}${tags.length ? ` · ${tags.join(" + ")}` : ""}`,
+        delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
+        at: v.ts,
+      };
+    });
 
 
     // Visitors: from logbook only my flights are visible, so this is empty for v1.
