@@ -1,94 +1,46 @@
-# SimFly Hub — content & metrics overhaul
 
-Switch the whole hub from "XP first" to "PAX first", expose available wallet balance, add drill-in pages for Licenses and Aircraft, and rework Stats / Rankings / Compare / Community around per-airport visitor revenue share.
+## 1. Aircraft-owner revenue & activity
 
-## Data layer (`src/lib/simfly.functions.ts` + `types.ts`)
+### Problem
+Today, flights by other pilots only enter Income/Activities via the **airport** flight-history endpoint (`/api/user/assets/airport/{ICAO}/flights`). If someone rents my aircraft and flies between two airports I do not own (your example flights), nothing surfaces — even though SimFly pays me the aircraft cut and the ground timer ticks.
 
-Extend the loader to pull what the public API actually exposes:
+### Fix
+Add a parallel pull for every aircraft I own, then fold those flights into the same visitor pipeline:
 
-- `GET /api/user/pax` → `availablePax` (currently spendable balance, e.g. 301.75).
-- Reuse `/api/user/stats` `rewards.totalPAXReceived` as `lifetimePax`.
-- Walk `/api/user/flights?page=N` for ~3 pages to get a working logbook window (~24 flights) — each row has `pax` (my share), `xp`, `mission_start_ts`, `departure_icao`, `destination_icao`, `licence`, `licence_rank`, `licence_rankName`, `aircraftId`, `aircraft`.
-- Per-airport detail: `/api/user/assets/details/airport/{ICAO}` (rotation, maxRotation, totalRotations, totalTakeoff, totalLanding, percToUser, level_progress, nextRotationRestoreTime).
-- Live visitors: `/api/asset/airport/{ICAO}/flights` → players currently flying through (`username`, `usernonce`, `aircraftName`, `originICAO`, `destinationICAO`, `userAvatar`).
+1. New server-side helper `fetchAircraftHistory(aircraftId, username, nonce, pages)` in `src/lib/simfly.functions.ts` that pages through `/api/user/assets/airplane/{aircraftId}/flights?username&nonce&page=N` (same shape SimFly uses for airports — pilot/airplane/origin/destination/licence slots). If the endpoint shape differs, fall back to the mission-log detail (`/api/user/missions/log/{id}`) once per flight id discovered through the airplane detail endpoint.
+2. New normaliser `normaliseAircraftHistFlight` that mirrors `normaliseHistFlight` but keys revenue off `airplane.totalEarnedPax` (my cut as aircraft owner) instead of the airport leg. `paxAirport` stays 0 unless the airport is also mine.
+3. In `getSimflyPayload`, after `visitorPerAirport`, run `aircraftPerPlane` in parallel for every entry in `airplanes`. Flatten, then **merge into the existing `byVisitorFlight` map by `flightID`** so a flight that touches both my airport and my aircraft is counted once, with `paxAirport` from the airport feed and `paxAircraft` from the aircraft feed (current `Math.max` becomes `paxAircraft from aircraft feed ?? airport-feed value`).
+4. The merged set already drives `visitorByDay` (earnings chart, "Visitor PAX" line) and `visitorActivity` (Activities feed), so both surfaces light up automatically. Update the activity message to read `(Visitor) @pilot · ORIG → DEST · aircraft · my aircraft` when the aircraft cut is present and neither endpoint is mine.
+5. Bump default page depth so we cover ~3 months of history. SimFly returns 4 flights/page; raise `VISITOR_PAGES` and the new aircraft page count to **25** (≈100 flights per asset). Keep them as constants at the top of the file so they're easy to tune.
 
-Derived (computed in the server fn, not the UI):
-- `paxLast7d`, `paxLast30d` from flight timestamps.
-- Per-airport visitor table: from logbook, group flights where `departure_icao` or `destination_icao == airport.icao`, exclude `username == me`, aggregate `{visits, paxForVisitor (their share — derive as `total_reward - pax`), paxForOwner (= my pax on those legs)}`. Note: my logbook only contains my own flights, so this captures "visits where I was the pilot to/from my own airport" — not third-party visits. Honest visitor PAX-share would require iterating live flights endpoint over time; for v1 we show **live visitors now** + **my flights from my airports** and label clearly.
-- `paxByAirport`, `paxByAircraft`, `paxByLicense` rollups for charts.
-- Airport tier label: `category 4 → T4 Large`, `3 → T3 Medium`, `2 → T2 Regional`, `1 → T1 Small`.
+### Revenue attribution
+We keep using the per-slot `totalEarnedPax`/`earnedPax` values SimFly already publishes — that is the actual payout (your 100%-to-owner example will surface as `airplane.totalEarnedPax = full pax`, `pilot.pax = 0`). No re-calculation, no guessing splits.
 
-New types: `AirportTier`, `AirportVisitor`, `LicenseSummary`, `AircraftSummary`, and extend `SimflyPayload` with `availablePax`, `lifetimePax`, `paxLast7d`, `paxLast30d`.
+### Acceptance checks
+- The two example flights (`019ef0be-…` and `019ef8d0-…`) appear in `/activity` and contribute to `/stats` "Visitor PAX".
+- Aircraft owned-cut shows up regardless of pilot, license, origin, or destination ownership.
+- Aircraft utilization timer (already correct) is untouched.
 
-## Overview (`/`)
+## 2. PAX earnings chart — historical navigation
 
-- Headline stat changes:
-  - "Available PAX" (was "Total PAX") — `availablePax`, with `lifetimePax` as the subtitle.
-  - "PAX last 7d" and "PAX last 30d" as two extra stat cards.
-  - Keep Aircraft / Hubs counts.
-- Earnings chart: **PAX only** (drop the XP series — it visually flattens PAX).
-- "Top hubs" cards switch primary metric from XP to lifetime PAX; show tier badge (T4/T3/T2) and `rotation/maxRotation (remaining)`.
+### Fix in `src/routes/stats.tsx`
+1. Compute the timeseries from the **full** flight + visitor history already returned by `getSimflyPayload`, not just the trailing 30 days. To do this, change `flightsToTimeseries` so it returns every day present in the data (and visitor folding already iterates all visitor days). Earnings payload becomes the full history; UI windows it.
+2. Add an `offset` state (`useState<number>(0)`) in the Stats component, where `0` = most recent 30 days, `1` = previous 30 days, etc. Compute `windowed = earningsTimeseries.slice(end - 30, end)` where `end = length - offset*30`.
+3. Render two header controls next to the "PAX earnings · 30 days" title:
+   - `← Previous 30 days` button (disabled when no older data)
+   - `Next 30 days →` button (disabled when `offset === 0`)
+   - Small label showing the active window, e.g. `Jun 12 – Jul 11`.
+4. Keep the existing chart markup. `paxTotal = pax + paxVisitors` stays the derived field, so Total PAX (gray bars) continues to equal Your PAX (blue) + Visitor PAX (yellow) for whatever window is active.
+5. Visual style (dark panel, curved areas + bar background, MM-DD x-axis tick formatter) stays exactly as today — only the data slice and the two header buttons change.
 
-## Airports (`/airports`)
+### Why client-side windowing
+The server already loads enough history for the chart once aircraft pages and 25-page airport pages land in step 1. No new server round-trip per click, no flicker, instant prev/next.
 
-- New "Tier" column rendered as a colored badge (T4 cyan, T3 amber, T2 violet).
-- Rotations column shows `used/max (remaining)` with the remaining number tinted green when >25 % capacity, amber <25 %, red at 0.
-- Add columns: "PAX 7d" and "PAX 30d" computed from the flight rollup for flights touching that airport.
-- Keep search/sort; default sort = lifetime PAX desc.
+## Technical details (for reference)
 
-## Airport drill-in (`/airports/$id`) — already exists
+Files touched:
+- `src/lib/simfly.functions.ts` — add aircraft-history fetch/normalise, merge into visitor pipeline, return full-history earnings series, bump page constants.
+- `src/lib/types.ts` — only if a new `AircraftFlightHistoryItem` alias is helpful (likely reuse `AirportFlightHistoryItem`).
+- `src/routes/stats.tsx` — add `offset` state, prev/next buttons, window slicing, date-range label.
 
-- Add Tier badge, available-vs-max rotation block with restore countdown, percToUser %, and a **Live visitors** table (from `/api/asset/airport/{ICAO}/flights`, filtered to exclude me): username, aircraft, route, sim. Each row links to `/players/$handle`.
-
-## NEW Aircraft page (`/aircraft`)
-
-Table of every owned airplane: thumbnail, tail / type, current ICAO, level + progress bar, **lifetime PAX (primary)**, lifetime XP, status (active / in ground op with countdown). Sortable, default by lifetime PAX desc. Row links to `/aircraft/$id` drill-in (basic v1: detail JSON from `/api/user/assets/details/airplane/{uuid}` rendered as stat grid + my recent flights filtered to that `aircraftId`).
-
-## NEW Licenses page (`/licenses`)
-
-Table per license: badge image, name, rank (with rank name), level + progress, lifetime PAX (primary), lifetime XP. Drill-in `/licenses/$slug` shows my flights flown on that license (filter logbook by `licence` code).
-
-## Stats (`/stats`)
-
-- Chart 1: "PAX earnings — last 30 days" (single PAX series; remove XP).
-- Chart 2: "PAX by asset" (bar chart, airports + aircraft, replaces XP by asset).
-- Replace "Fleet Traffic" pie with **"Visitors on my airports"**: a stacked card per owned airport showing live visitor count (excluding me) + small table of current visitors (username, aircraft, route).
-
-## Rankings (`/rankings`)
-
-- "Top hubs by XP" → **Top hubs by lifetime PAX**.
-- Each hub row shows tier badge + a thin progress bar "% to next airport level" derived from `level_progress`, replacing the raw XP figure.
-- "Top players by PAX" stays, but secondary metric becomes their hub count.
-- "Daily growth" board → **PAX per rotation cycle** (lifetime PAX ÷ totalRotations) — a cleaner efficiency metric than the current bogus daily number.
-
-## Compare hubs (`/compare`)
-
-Reorder + relabel columns:
-1. Tier (T4/T3/T2 badge — primary sort).
-2. Level (with % to next).
-3. Lifetime PAX.
-4. PAX per week (avg = paxLast30d × 7/30) — replaces "Monthly flow" / "Daily PAX".
-5. Rotations used / max (remaining).
-6. Owner.
-
-Drop XP columns entirely.
-
-## Community (`/community`)
-
-Repurpose: instead of a generic player grid, show **"My visitors"** — aggregated from my logbook, grouped by counterpart pilot (the *other* end of each flight that involves one of my airports). For each visitor: avatar, handle, arrivals count, total `paxForVisitor / paxForMe`. Keep a separate "Browse all players" section below using the existing community list. Clearly label the visitor table's data source ("derived from my recent flights").
-
-## Memory
-
-Add a `mem://features/simfly-metrics.md` note: PAX > XP everywhere; tier mapping (cat 4=T4 Large, 3=T3 Medium, 2=T2 Regional, 1=T1 Small); rotation render `used/max (remaining)` with green/amber/red; available PAX endpoint `/api/user/pax`.
-
-## Out of scope (deferred, per user)
-
-- "View another player" search/switcher.
-- Real third-party visitor revenue (would need a background poller against `/api/asset/airport/{ICAO}/flights`).
-
-## Technical notes
-
-- All new fetches stay in `simfly.functions.ts` server functions — no client-side SimFly calls, no leaked CORS.
-- Flights fetched across 3 pages in parallel via `Promise.all([page1, page2, page3])` (≈24 flights) — bounded so SSR latency stays under ~1s.
-- All new colors via existing semantic tokens (cyan / amber / violet / emerald / rose) — no hardcoded hex.
-- License & Aircraft drill-in pages register through file-based routing only (`aircraft.tsx`, `aircraft.$id.tsx`, `licenses.tsx`, `licenses.$slug.tsx`); never hand-edit `routeTree.gen.ts`.
+No schema, no auth, no migrations.
