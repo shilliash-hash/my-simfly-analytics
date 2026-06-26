@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getSimflyPayload } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber, relativeTime } from "@/components/app-shell";
@@ -54,6 +54,11 @@ function ActivityFeed() {
   );
   const [filter, setFilter] = useState<"all" | "visitors" | ActivityKind>("all");
   const [page, setPage] = useState(0);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   const items =
     filter === "all"
@@ -98,7 +103,8 @@ function ActivityFeed() {
       </div>
 
       <ol className="panel divide-y divide-border rounded-xl">
-        {visible.map((a) => {
+        {!hydrated && <li className="p-6 text-center text-xs text-muted-foreground">Loading activity…</li>}
+        {hydrated && visible.map((a) => {
           const isVisitor = isVisitorEntry(a);
           const Icon = isVisitor ? ArrowUpRight : ICONS[a.kind];
           const message = isVisitor ? a.message.replace(/^\(Visitor\)\s*/, "") : a.message;
@@ -126,12 +132,12 @@ function ActivityFeed() {
             </li>
           );
         })}
-        {visible.length === 0 && (
+        {hydrated && visible.length === 0 && (
           <li className="p-6 text-center text-xs text-muted-foreground">No activity for this filter.</li>
         )}
       </ol>
 
-      {items.length > PAGE_SIZE && (
+      {hydrated && items.length > PAGE_SIZE && (
         <div className="mt-4 flex items-center justify-between gap-3">
           <div className="mono text-[11px] uppercase tracking-widest text-muted-foreground">
             {formatNumber(start + 1)}–{formatNumber(Math.min(start + PAGE_SIZE, items.length))} of {formatNumber(items.length)}
