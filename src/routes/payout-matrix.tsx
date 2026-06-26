@@ -316,7 +316,7 @@ function CellDetailsDialog({
               </DialogDescription>
             </DialogHeader>
 
-            <div className="mt-2 max-h-[60vh] overflow-y-auto rounded border border-border">
+            <div className="mt-2 max-h-[70vh] overflow-y-auto overflow-x-hidden rounded border border-border">
               <table className="w-full text-xs">
                 <thead className="bg-muted/40 sticky top-0">
                   <tr className="text-[10px] uppercase tracking-wider text-foreground/60">
