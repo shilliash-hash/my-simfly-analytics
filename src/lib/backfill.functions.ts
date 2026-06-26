@@ -132,12 +132,12 @@ function emptyRow(username: string): BackfillStatusRow {
 type SupabaseLike = {
   from: (table: string) => {
     select: (columns?: string, options?: { count?: "exact"; head?: boolean }) => {
-      eq: (column: string, value: string) => Promise<{ count: number | null; error: { message?: string } | null }>;
+      eq: (column: string, value: string) => PromiseLike<{ count: number | null; error: { message?: string } | null }>;
     };
     upsert: (
       values: unknown,
       options?: { onConflict?: string; ignoreDuplicates?: boolean },
-    ) => Promise<{ error: { message?: string } | null }>;
+    ) => PromiseLike<{ error: { message?: string } | null }>;
   };
 };
 
@@ -257,13 +257,14 @@ export const getBackfillStatus = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<BackfillStatusRow> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
     const { data: row } = await supabaseAdmin
       .from("backfill_progress")
       .select("*")
       .eq("username", username)
       .maybeSingle();
     const current = (row as BackfillStatusRow | null) ?? emptyRow(username);
-    return repairIfPrematurelyCompleted(supabaseAdmin, current);
+    return repairIfPrematurelyCompleted(db, current);
   });
 
 export const getFlightsForUser = createServerFn({ method: "GET" })
@@ -271,6 +272,7 @@ export const getFlightsForUser = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<RawFlightLite[]> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
     // Cap defensively. Most pilots have far fewer than this.
     const { data: rows } = await supabaseAdmin
       .from("simfly_flights")
@@ -323,19 +325,19 @@ export const tickBackfill = createServerFn({ method: "POST" })
           status: "failed",
           error_message: "Unable to reach SimFly logbook (page 1).",
         };
-        await upsertProgress(supabaseAdmin, failed);
+        await upsertProgress(db, failed);
         return failed;
       }
 
       // Persist page 1 immediately.
       if (disc.firstPage?.flights?.length) {
         await upsertFlightRows(
-          supabaseAdmin,
+          db,
           disc.firstPage.flights.map((f) => flightToRow(username, f)),
         );
       }
 
-      const cachedCount = await countCachedFlights(supabaseAdmin, username);
+      const cachedCount = await countCachedFlights(db, username);
 
       row = {
         username,
@@ -349,16 +351,16 @@ export const tickBackfill = createServerFn({ method: "POST" })
         last_page_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
-      await upsertProgress(supabaseAdmin, row);
+      await upsertProgress(db, row);
       return row;
     }
 
-    row = await repairIfPrematurelyCompleted(supabaseAdmin, row);
+    row = await repairIfPrematurelyCompleted(db, row);
 
     // Already done — no-op (graphs auto-refresh page 1 separately via getSimflyPayload).
     if (row.current_page >= row.total_pages) {
       if (row.status !== "completed") {
-        const actual = await countCachedFlights(supabaseAdmin, username);
+        const actual = await countCachedFlights(db, username);
         const expected = expectedComplete(row);
         if (expected > 0 && actual < Math.max(0, expected - 2)) {
           const repaired: BackfillStatusRow = {
@@ -370,7 +372,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
             last_page_at: null,
             updated_at: new Date().toISOString(),
           };
-          await upsertProgress(supabaseAdmin, repaired);
+          await upsertProgress(db, repaired);
           return repaired;
         }
         const completed = {
@@ -380,7 +382,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
           error_message: null,
           updated_at: new Date().toISOString(),
         };
-        await upsertProgress(supabaseAdmin, completed);
+        await upsertProgress(db, completed);
         return completed;
       }
       return row;
@@ -405,7 +407,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
         error_message: err instanceof Error ? err.message : String(err),
         updated_at: new Date().toISOString(),
       };
-      await upsertProgress(supabaseAdmin, failed);
+      await upsertProgress(db, failed);
       return failed;
     }
 
@@ -417,7 +419,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
         error_message: `Temporary SimFly fetch failure around page ${startPage + failedPage}; retrying without advancing progress.`,
         updated_at: new Date().toISOString(),
       };
-      await upsertProgress(supabaseAdmin, retrying);
+      await upsertProgress(db, retrying);
       return retrying;
     }
 
@@ -426,10 +428,10 @@ export const tickBackfill = createServerFn({ method: "POST" })
       .map((f) => flightToRow(username, f));
 
     if (rowsToInsert.length) {
-      await upsertFlightRows(supabaseAdmin, rowsToInsert);
+      await upsertFlightRows(db, rowsToInsert);
     }
 
-    const newImported = await countCachedFlights(supabaseAdmin, username);
+    const newImported = await countCachedFlights(db, username);
     const advanced = endPage;
     const done = advanced >= row.total_pages;
     const expected = expectedComplete({ ...row, flights_total_est: row.flights_total_est });
@@ -449,7 +451,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
       next.current_page = 0;
       next.last_page_at = null;
     }
-    await upsertProgress(supabaseAdmin, next);
+    await upsertProgress(db, next);
     return next;
   });
 
@@ -462,8 +464,9 @@ export const resetBackfill = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<BackfillStatusRow> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as SupabaseLike;
     await supabaseAdmin.from("simfly_flights").delete().eq("username", username);
     const fresh = emptyRow(username);
-    await upsertProgress(supabaseAdmin, fresh);
+    await upsertProgress(db, fresh);
     return fresh;
   });
