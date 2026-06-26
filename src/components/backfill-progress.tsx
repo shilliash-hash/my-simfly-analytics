@@ -1,91 +1,134 @@
-import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getBackfillEstimate } from "@/lib/simfly.functions";
+import { getBackfillStatus, tickBackfill, type BackfillStatusRow } from "@/lib/backfill.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 
-// Rough throughput: server fetches logbook pages at concurrency 6 (~250ms/page)
-// and aircraft history at concurrency ~8. Combined effective rate ≈ 22 pages/sec.
-const PAGES_PER_SEC = 22;
-
 function fmtTime(s: number) {
-  if (!Number.isFinite(s) || s < 0) s = 0;
+  if (!Number.isFinite(s) || s <= 0) return "0s";
   if (s < 60) return `${Math.ceil(s)}s`;
   const m = Math.floor(s / 60);
   const r = Math.ceil(s % 60);
   return `${m}m ${r}s`;
 }
 
-export function BackfillProgress() {
-  const estimateFn = useServerFn(getBackfillEstimate);
-  const { keyTag, payload } = useSimflyArgs();
-  const { data: est } = useQuery({
-    queryKey: ["simfly", "estimate", keyTag],
-    queryFn: () => estimateFn(payload ? { data: payload } : undefined),
-    staleTime: 5 * 60_000,
+function etaSeconds(row: BackfillStatusRow): number {
+  if (row.current_page <= 0 || !row.started_at) return 0;
+  const startedMs = new Date(row.started_at).getTime();
+  const elapsed = Math.max(1, (Date.now() - startedMs) / 1000);
+  const pagesPerSec = row.current_page / elapsed;
+  const remaining = Math.max(0, row.total_pages - row.current_page);
+  if (pagesPerSec <= 0) return 0;
+  return remaining / pagesPerSec;
+}
+
+/**
+ * Persistent backfill indicator. Reads the DB-backed progress row, and
+ * while status === "running" continuously calls `tickBackfill` to advance
+ * the import. Survives refreshes, browser restarts, and reconnects — the
+ * row in the DB is the single source of truth.
+ */
+export function BackfillIndicator() {
+  const statusFn = useServerFn(getBackfillStatus);
+  const tickFn = useServerFn(tickBackfill);
+  const qc = useQueryClient();
+  const { keyTag, payload, username } = useSimflyArgs();
+  const ticking = useRef(false);
+  const [dismissed, setDismissed] = useState(false);
+
+  const { data: row } = useQuery({
+    queryKey: ["backfill", "status", keyTag],
+    queryFn: () => statusFn(username ? { data: { username } } : undefined),
+    refetchInterval: (q) => {
+      const r = q.state.data as BackfillStatusRow | undefined;
+      if (!r) return 2000;
+      return r.status === "running" || r.status === "idle" ? 2000 : false;
+    },
   });
 
-  const [elapsed, setElapsed] = useState(0);
+  // Drive ticks while running. Each tick advances ~20 pages.
   useEffect(() => {
-    const t0 = Date.now();
-    const id = setInterval(() => setElapsed((Date.now() - t0) / 1000), 200);
-    return () => clearInterval(id);
-  }, []);
+    if (!row) return;
+    if (row.status === "completed" || row.status === "failed") return;
+    if (ticking.current) return;
+    ticking.current = true;
+    (async () => {
+      try {
+        const tickPayload = payload ?? (username ? { username } : undefined);
+        const next = await tickFn(tickPayload ? { data: tickPayload } : undefined);
+        qc.setQueryData(["backfill", "status", keyTag], next);
+        // If we just imported new flights, the main payload's cached "flights"
+        // is stale — invalidate so graphs/activity pick them up.
+        if (next.flights_imported !== row.flights_imported) {
+          qc.invalidateQueries({ queryKey: ["simfly", keyTag] });
+        }
+      } finally {
+        ticking.current = false;
+      }
+    })();
+  }, [row, tickFn, qc, keyTag, username, payload]);
 
-  const totalPages = est?.pagesTotal ?? 0;
-  const etaTotal = totalPages > 0 ? totalPages / PAGES_PER_SEC : 0;
-  // Asymptotic progress so it never visually completes before the data arrives.
-  const ratio = etaTotal > 0 ? Math.min(0.97, elapsed / etaTotal) : Math.min(0.9, elapsed / 18);
-  const pagesDone = Math.floor(ratio * totalPages);
-  const remaining = Math.max(0, totalPages - pagesDone);
-  const etaRemaining = Math.max(0, etaTotal - elapsed);
+  if (!row) return null;
+  if (dismissed) return null;
+  if (row.status === "idle") return null;
+  if (row.status === "completed") return null;
+
+  const percent =
+    row.total_pages > 0 ? Math.min(100, Math.round((row.current_page / row.total_pages) * 100)) : 0;
+  const eta = etaSeconds(row);
+  const flightsTarget = row.flights_total_est || undefined;
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background p-6">
-      <div className="panel w-full max-w-md rounded-2xl p-6">
-        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          Importing pilot history
-        </div>
-        <div className="mt-2 text-lg font-semibold text-foreground">
-          {est?.username ? `@${est.username}` : "Fetching logbook…"}
-        </div>
-
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-secondary">
-          <div
-            className="h-full bg-runway transition-[width] duration-200 ease-out"
-            style={{ width: `${Math.round(ratio * 100)}%` }}
-          />
-        </div>
-
-        <div className="mono mt-3 flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
-          <span>
-            {totalPages > 0
-              ? `${pagesDone} / ${totalPages} pages`
-              : "Discovering pages…"}
-          </span>
-          <span>{Math.round(ratio * 100)}%</span>
-        </div>
-
-        <div className="mono mt-1 flex items-center justify-between text-[10px] uppercase tracking-widest text-muted-foreground/80">
-          <span>Elapsed {fmtTime(elapsed)}</span>
-          {totalPages > 0 && remaining > 0 && (
-            <span>~{fmtTime(etaRemaining)} left</span>
+    <div className="fixed bottom-4 right-4 z-50 w-[320px]">
+      <div className="panel rounded-xl border border-border bg-background/95 p-4 shadow-lg backdrop-blur">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              {row.status === "failed" ? "Backfill failed" : "Importing logbook"}
+            </div>
+            <div className="text-sm font-semibold text-foreground">@{row.username}</div>
+          </div>
+          {row.status === "failed" && (
+            <button
+              onClick={() => setDismissed(true)}
+              className="mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+            >
+              dismiss
+            </button>
           )}
         </div>
 
-        {est && (
-          <div className="mono mt-4 grid grid-cols-2 gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <div className="rounded-md border border-border bg-background/50 px-2 py-1.5">
-              <div className="text-muted-foreground/70">Logbook</div>
-              <div className="text-foreground">{est.logbookPages} pages</div>
+        {row.status === "failed" ? (
+          <div className="mt-2 text-xs text-destructive">{row.error_message ?? "Unknown error"}</div>
+        ) : (
+          <>
+            <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
+              <div
+                className="h-full bg-runway transition-[width] duration-300"
+                style={{ width: `${percent}%` }}
+              />
             </div>
-            <div className="rounded-md border border-border bg-background/50 px-2 py-1.5">
-              <div className="text-muted-foreground/70">Aircraft scan</div>
-              <div className="text-foreground">{est.airplanes} planes</div>
+            <div className="mono mt-2 flex items-center justify-between text-[11px] uppercase tracking-widest text-muted-foreground">
+              <span>
+                Page {row.current_page} / {row.total_pages}
+              </span>
+              <span>{percent}%</span>
             </div>
-          </div>
+            <div className="mono mt-1 flex items-center justify-between text-[10px] uppercase tracking-widest text-muted-foreground/80">
+              <span>
+                Flights {row.flights_imported}
+                {flightsTarget ? ` / ~${flightsTarget}` : ""}
+              </span>
+              <span>ETA ~{fmtTime(eta)}</span>
+            </div>
+          </>
         )}
       </div>
     </div>
   );
+}
+
+// Legacy default export kept so existing fallback imports don't break.
+export function BackfillProgress() {
+  return <BackfillIndicator />;
 }
