@@ -1521,6 +1521,9 @@ type RawAirportHistFlight = {
   landingTime?: string;
   pax?: number;
   xp?: number;
+  distance?: number;
+  flightDistance?: number;
+  totalDistance?: number;
   pilot?: { username?: string };
   airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
   origin?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
