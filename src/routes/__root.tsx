@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
-import { BackfillProgress } from "@/components/backfill-progress";
+import { BackfillIndicator } from "@/components/backfill-progress";
 
 function NotFoundComponent() {
   return (
