@@ -127,13 +127,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-            Loading pilot data…
-          </div>
-        }
-      >
+      <Suspense fallback={<BackfillProgress />}>
         <Outlet />
       </Suspense>
     </QueryClientProvider>
