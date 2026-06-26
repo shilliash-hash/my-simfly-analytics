@@ -52,48 +52,6 @@ function Stats() {
 
       <EarningsChart series={data.earningsTimeseries} />
 
-      <div className="panel mb-6 rounded-xl p-5" style={{ display: "none" }}>
-        <div className="mb-4 flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="font-display text-lg font-semibold">PAX earnings · 30 days</h2>
-        </div>
-        <div className="h-72 w-full">
-          <ResponsiveContainer>
-            <ComposedChart
-              data={data.earningsTimeseries.map((d) => ({
-                ...d,
-                paxTotal: (d.pax ?? 0) + (d.paxVisitors ?? 0),
-              }))}
-              margin={{ left: -10, right: 6, top: 6, bottom: 0 }}
-            >
-              <defs>
-                <linearGradient id="gPax" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--runway)" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="var(--runway)" stopOpacity={0} />
-                </linearGradient>
-                <linearGradient id="gVisitors" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--instrument)" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="var(--instrument)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid stroke="var(--border)" vertical={false} />
-              <XAxis dataKey="date" tickFormatter={(d) => d.slice(5)} stroke="var(--muted-foreground)" fontSize={11} />
-              <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
-              <Tooltip
-                contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number, name) => {
-                  const label =
-                    name === "paxVisitors" ? "Visitor PAX" : name === "paxTotal" ? "Total PAX" : "Your PAX";
-                  return [formatNumber(v) + " PAX", label];
-                }}
-              />
-              <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(255,255,255,0.12)" radius={[3, 3, 0, 0]} />
-              <Area type="monotone" dataKey="pax" name="pax" stroke="var(--runway)" strokeWidth={2} fill="url(#gPax)" />
-              <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gVisitors)" />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       <div className="panel mb-6 rounded-xl p-5">
         <h2 className="font-display mb-4 text-lg font-semibold">PAX by asset</h2>
         <div className="h-72 w-full">
