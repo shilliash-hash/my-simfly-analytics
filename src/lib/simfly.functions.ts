@@ -1855,3 +1855,35 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
     };
   });
 
+
+/**
+ * Lightweight estimate of how big the historical backfill will be.
+ * Hits page 1 of the logbook and the assets list (both cheap) to compute
+ * total logbook pages and the number of owned airplanes the heavy backfill
+ * will scan. Used by the client to render an import-progress indicator
+ * while getSimflyPayload is in flight.
+ */
+export const getBackfillEstimate = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
+  .handler(async ({ data }) => {
+    const { username, nonce } = await resolveIdentity(data);
+    const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
+    const [p1, assets] = await Promise.all([
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
+      fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
+    ]);
+    const logbookPages = Math.max(1, Math.min(1000, Number(p1?.totalPages) || 1));
+    const airplanes = (assets?.items ?? []).filter((a) => a?.type === "Airplane").length;
+    // Heavy backfill scans up to AIRCRAFT_BACKFILL_PAGE_LIMIT pages per plane,
+    // but most planes finish far earlier. Use a soft estimate of ~12 pages/plane
+    // for time projection only — pagesTotal exposes the true ceiling.
+    const aircraftPagesEstimate = airplanes * 12;
+    return {
+      username,
+      logbookPages,
+      airplanes,
+      aircraftPagesEstimate,
+      pagesTotal: logbookPages + aircraftPagesEstimate,
+      fetchedAt: new Date().toISOString(),
+    };
+  });

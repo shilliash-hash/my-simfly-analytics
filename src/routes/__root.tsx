@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { BackfillProgress } from "@/components/backfill-progress";
 
 function NotFoundComponent() {
   return (
@@ -127,13 +128,7 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Suspense
-        fallback={
-          <div className="flex min-h-screen items-center justify-center bg-background text-sm text-muted-foreground">
-            Loading pilot data…
-          </div>
-        }
-      >
+      <Suspense fallback={<BackfillProgress />}>
         <Outlet />
       </Suspense>
     </QueryClientProvider>
