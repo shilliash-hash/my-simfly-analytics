@@ -190,7 +190,14 @@ function MatrixTable({
                   </th>
                   {levels.map((l) => {
                     const cell = byKey.get(`${t}:${l}`);
-                    return <MatrixCellTd key={l} cell={cell} maxAvg={maxAvg} />;
+                    return (
+                      <MatrixCellTd
+                        key={l}
+                        cell={cell}
+                        maxAvg={maxAvg}
+                        onOpen={() => cell && setSelected(cell)}
+                      />
+                    );
                   })}
                 </tr>
               ))}
