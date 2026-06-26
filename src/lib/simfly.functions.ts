@@ -1273,6 +1273,15 @@ export const checkSimflySession = createServerFn({ method: "GET" }).handler(
   async (): Promise<SimflySessionStatus> => {
     const checkedAt = new Date().toISOString();
     const { username, nonce } = identity();
+    // Never include the configured username or nonce in user-facing messages —
+    // this endpoint is unauthenticated, so any leak is publicly accessible.
+    if (!username || !nonce) {
+      return {
+        status: "missing",
+        message: "SimFly credentials are not configured on the server.",
+        checkedAt,
+      };
+    }
     try {
       const res = await fetch(
         `${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`,
@@ -1282,18 +1291,16 @@ export const checkSimflySession = createServerFn({ method: "GET" }).handler(
         return {
           status: "ok",
           httpStatus: res.status,
-          message: `Live SimFly data for @${username}`,
+          message: "Live SimFly data is available.",
           checkedAt,
-          username,
         };
       }
       if (res.status === 404) {
         return {
           status: "missing",
           httpStatus: 404,
-          message: `SimFly user @${username} (nonce ${nonce}) not found. Set SIMFLY_USERNAME / SIMFLY_NONCE.`,
+          message: "Configured SimFly account was not found upstream.",
           checkedAt,
-          username,
         };
       }
       return {
@@ -1301,14 +1308,12 @@ export const checkSimflySession = createServerFn({ method: "GET" }).handler(
         httpStatus: res.status,
         message: `SimFly returned HTTP ${res.status}.`,
         checkedAt,
-        username,
       };
-    } catch (err) {
+    } catch {
       return {
         status: "error",
-        message: `Could not reach SimFly: ${err instanceof Error ? err.message : "unknown"}.`,
+        message: "Could not reach SimFly.",
         checkedAt,
-        username,
       };
     }
   },
