@@ -46,7 +46,7 @@ function PayoutMatrixPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
-        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from this airport's real flight history. Flights with weekly 3× or other bonus multipliers are excluded so the matrix reflects the expected payout of a standard flight."
+        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from this airport's real flight history. Flights with weekly 3× or other bonus multipliers are excluded here so the matrix reflects the expected payout of a standard flight. This normalization applies only to this matrix — Income, Activity, Stats, Visitors, Consistency and all other reports continue to show actual payouts received, bonuses included."
       />
 
       <div className="mb-6 flex flex-wrap gap-3 items-end">
