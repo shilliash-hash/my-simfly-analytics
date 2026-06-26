@@ -288,7 +288,7 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
   firstPage: RawFlightsPage | null;
 }> {
   const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
-  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`);
+  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`);
   if (!p1) return { totalPages: 0, totalFlights: 0, firstPage: null };
   return {
     totalPages: Math.max(1, Math.min(MAX_PAGES_CAP, Number(p1.totalPages) || 1)),
@@ -394,7 +394,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
     const urls = Array.from(
       { length: endPage - startPage + 1 },
-      (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&page=${startPage + i}`,
+      (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&fpage=${startPage + i}`,
     );
 
     let pages: (RawFlightsPage | null)[] = [];
