@@ -634,7 +634,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${nonce}`;
 
-    const [profile, stats, assets, availablePaxRaw, p1, p2, p3] = await Promise.all([
+    const [profile, stats, assets, availablePaxRaw, p1, p2, p3, p4, p5, p6] = await Promise.all([
       fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${nonce}&username=${encodeURIComponent(username)}`),
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
@@ -642,6 +642,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=1`),
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=2`),
       fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=3`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=4`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=5`),
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&page=6`),
     ]);
 
     if (!profile) {
