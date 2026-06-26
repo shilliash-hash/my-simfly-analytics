@@ -14,7 +14,123 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      backfill_progress: {
+        Row: {
+          created_at: string
+          current_page: number
+          error_message: string | null
+          flights_imported: number
+          flights_total_est: number
+          last_page_at: string | null
+          started_at: string | null
+          status: string
+          total_pages: number
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          current_page?: number
+          error_message?: string | null
+          flights_imported?: number
+          flights_total_est?: number
+          last_page_at?: string | null
+          started_at?: string | null
+          status?: string
+          total_pages?: number
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          current_page?: number
+          error_message?: string | null
+          flights_imported?: number
+          flights_total_est?: number
+          last_page_at?: string | null
+          started_at?: string | null
+          status?: string
+          total_pages?: number
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      simfly_flights: {
+        Row: {
+          aircraft: string | null
+          aircraft_icao: string | null
+          aircraft_id: string | null
+          aircraft_tail_number: string | null
+          created_at: string
+          departure_icao: string | null
+          destination_icao: string | null
+          destination_name: string | null
+          flight_id: string
+          flight_time: string | null
+          landing_rate: number | null
+          licence: string | null
+          licence_rank: number | null
+          licence_rank_name: string | null
+          mission_start_ts: string | null
+          origin_name: string | null
+          pax: number | null
+          raw: Json
+          total_distance: number | null
+          total_reward: number | null
+          username: string
+          xp: number | null
+        }
+        Insert: {
+          aircraft?: string | null
+          aircraft_icao?: string | null
+          aircraft_id?: string | null
+          aircraft_tail_number?: string | null
+          created_at?: string
+          departure_icao?: string | null
+          destination_icao?: string | null
+          destination_name?: string | null
+          flight_id: string
+          flight_time?: string | null
+          landing_rate?: number | null
+          licence?: string | null
+          licence_rank?: number | null
+          licence_rank_name?: string | null
+          mission_start_ts?: string | null
+          origin_name?: string | null
+          pax?: number | null
+          raw: Json
+          total_distance?: number | null
+          total_reward?: number | null
+          username: string
+          xp?: number | null
+        }
+        Update: {
+          aircraft?: string | null
+          aircraft_icao?: string | null
+          aircraft_id?: string | null
+          aircraft_tail_number?: string | null
+          created_at?: string
+          departure_icao?: string | null
+          destination_icao?: string | null
+          destination_name?: string | null
+          flight_id?: string
+          flight_time?: string | null
+          landing_rate?: number | null
+          licence?: string | null
+          licence_rank?: number | null
+          licence_rank_name?: string | null
+          mission_start_ts?: string | null
+          origin_name?: string | null
+          pax?: number | null
+          raw?: Json
+          total_distance?: number | null
+          total_reward?: number | null
+          username?: string
+          xp?: number | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
