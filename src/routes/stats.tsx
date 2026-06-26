@@ -7,7 +7,7 @@ import { getSimflyPayload, getAirportVisitors } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import {
-  ComposedChart, AreaChart, Area, BarChart, Bar, Cell,
+  ComposedChart, Area, BarChart, Bar, Cell,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
