@@ -12,6 +12,7 @@ import {
   IdCard,
   Coffee,
   ShieldCheck,
+  Grid3x3,
 
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -25,6 +26,7 @@ const NAV = [
   { to: "/rankings",   label: "Rankings",  icon: Trophy },
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
+  { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
   { to: "/consistency", label: "Consistency", icon: ShieldCheck },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
