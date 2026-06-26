@@ -320,7 +320,8 @@ export const tickBackfill = createServerFn({ method: "POST" })
     if (rowsToInsert.length) {
       await supabaseAdmin
         .from("simfly_flights")
-        .upsert(rowsToInsert, {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(rowsToInsert as any, {
           onConflict: "username,flight_id",
           ignoreDuplicates: true,
         });
