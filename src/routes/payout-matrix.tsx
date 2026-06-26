@@ -143,6 +143,7 @@ function MatrixTable({
     () => matrix.cells.reduce((m, c) => Math.max(m, c.avgPax), 0) || 1,
     [matrix.cells],
   );
+  const [selected, setSelected] = useState<PayoutMatrixCell | null>(null);
 
   return (
     <section className="rounded-lg border border-border bg-card overflow-hidden">
