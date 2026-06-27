@@ -303,8 +303,18 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
  * indexes every public pilot and returns `usernonce` for an exact `uname`
  * match — works regardless of whether the pilot is currently airborne.
  */
-async function resolvePilotNonce(username: string): Promise<string | null> {
-  if (username.toLowerCase() === DEFAULT_USERNAME.toLowerCase()) return DEFAULT_NONCE;
+type NonceCacheDb = {
+  from: (table: string) => {
+    select: (columns?: string) => {
+      eq: (column: string, value: string) => {
+        maybeSingle: () => PromiseLike<{ data: { nonce?: string } | null; error: unknown }>;
+      };
+    };
+    upsert: (values: unknown, options?: { onConflict?: string }) => PromiseLike<{ error: unknown }>;
+  };
+};
+
+async function lookupNonceFromSkyRank(username: string): Promise<string | null> {
   const periods = ["all", "month", "week", "day"] as const;
   for (const period of periods) {
     const url = `${SIMFLY_BASE}/game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`;
@@ -319,6 +329,40 @@ async function resolvePilotNonce(username: string): Promise<string | null> {
     if (typeof n === "number" && Number.isFinite(n) && n > 0) return String(n);
   }
   return null;
+}
+
+async function resolvePilotNonce(username: string): Promise<string | null> {
+  if (username.toLowerCase() === DEFAULT_USERNAME.toLowerCase()) return DEFAULT_NONCE;
+
+  // Check cache first to avoid hammering the Sky Ranking endpoint.
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as NonceCacheDb;
+    const { data: cached } = await db
+      .from("pilot_nonces")
+      .select("nonce")
+      .eq("username", username)
+      .maybeSingle();
+    const cachedNonce = sanitiseNonce(cached?.nonce);
+    if (cachedNonce) return cachedNonce;
+  } catch {
+    // Cache miss / read failure — fall through to live lookup.
+  }
+
+  const resolved = await lookupNonceFromSkyRank(username);
+  if (!resolved) return null;
+
+  try {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const db = supabaseAdmin as unknown as NonceCacheDb;
+    await db.from("pilot_nonces").upsert(
+      { username, nonce: resolved, resolved_at: new Date().toISOString() },
+      { onConflict: "username" },
+    );
+  } catch {
+    // Persisting the cache is best-effort; the resolved nonce is still valid.
+  }
+  return resolved;
 }
 
 export const tickBackfill = createServerFn({ method: "POST" })

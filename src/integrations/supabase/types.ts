@@ -56,6 +56,27 @@ export type Database = {
         }
         Relationships: []
       }
+      pilot_nonces: {
+        Row: {
+          created_at: string
+          nonce: string
+          resolved_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          nonce: string
+          resolved_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          nonce?: string
+          resolved_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
       simfly_flights: {
         Row: {
           aircraft: string | null
