@@ -297,13 +297,40 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
   };
 }
 
+/**
+ * Resolve a pilot's per-user `nonce` (the numeric id baked into every public
+ * `/logbook/<username>/<nonce>` URL on SimFly). The Sky Ranking endpoint
+ * indexes every public pilot and returns `usernonce` for an exact `uname`
+ * match — works regardless of whether the pilot is currently airborne.
+ */
+async function resolvePilotNonce(username: string): Promise<string | null> {
+  if (username.toLowerCase() === DEFAULT_USERNAME.toLowerCase()) return DEFAULT_NONCE;
+  const periods = ["all", "month", "week", "day"] as const;
+  for (const period of periods) {
+    const url = `${SIMFLY_BASE}/game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`;
+    const data = await fetchJSON<{
+      success?: boolean;
+      content?: { ranks?: { username?: string; usernonce?: number }[] };
+    }>(url);
+    const hit = (data?.content?.ranks ?? []).find(
+      (r) => (r.username ?? "").toLowerCase() === username.toLowerCase(),
+    );
+    const n = hit?.usernonce;
+    if (typeof n === "number" && Number.isFinite(n) && n > 0) return String(n);
+  }
+  return null;
+}
+
 export const tickBackfill = createServerFn({ method: "POST" })
   .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
   .handler(async ({ data }): Promise<BackfillStatusRow> => {
     const username = sanitiseUsername(data?.username) || DEFAULT_USERNAME;
+    const suppliedNonce = sanitiseNonce(data?.nonce);
     const nonce =
-      sanitiseNonce(data?.nonce) ||
-      (username === DEFAULT_USERNAME ? DEFAULT_NONCE : DEFAULT_NONCE);
+      suppliedNonce ||
+      (username.toLowerCase() === DEFAULT_USERNAME.toLowerCase()
+        ? DEFAULT_NONCE
+        : (await resolvePilotNonce(username)) || "");
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const db = supabaseAdmin as unknown as SupabaseLike;
@@ -316,6 +343,18 @@ export const tickBackfill = createServerFn({ method: "POST" })
 
     let row = (existing as BackfillStatusRow | null) ?? null;
 
+    if (!nonce) {
+      const failed: BackfillStatusRow = {
+        ...(row ?? emptyRow(username)),
+        username,
+        status: "failed",
+        error_message: `Could not resolve a public logbook for @${username}. The SimFly Sky Ranking has no entry for this pilot — check the username spelling.`,
+        updated_at: new Date().toISOString(),
+      };
+      await upsertProgress(db, failed);
+      return failed;
+    }
+
     // First tick (or row missing) — discover totals.
     if (!row || row.total_pages <= 0) {
       const disc = await discoverTotalPages(username, nonce);
@@ -323,7 +362,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
         const failed: BackfillStatusRow = {
           ...emptyRow(username),
           status: "failed",
-          error_message: "Unable to reach SimFly logbook (page 1).",
+          error_message: `Unable to reach SimFly logbook for @${username} (resolved nonce ${nonce}). The pilot may have no public flights yet.`,
         };
         await upsertProgress(db, failed);
         return failed;
