@@ -79,6 +79,17 @@ async function resolveNonce(username: string): Promise<number | null> {
   const cached = nonceCache.get(key);
   if (cached) return cached;
 
+  // 0) Primary: SimFly Sky Ranking exposes every public pilot with their
+  // numeric `usernonce` (the same id used in /logbook/<user>/<nonce> URLs).
+  for (const period of ["all", "month", "week", "day"] as const) {
+    const r = await fetchJSON<{
+      content?: { ranks?: { username?: string; usernonce?: number }[] };
+    }>(`${SIMFLY_BASE}/game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`);
+    for (const e of r?.content?.ranks ?? []) rememberNonce(e.username, e.usernonce);
+    const hit = nonceCache.get(key);
+    if (hit) return hit;
+  }
+
   // 1) Try live flights — fastest path if the pilot is airborne.
   const live = await fetchJSON<RawLiveFlightsEnvelope>(`${SIMFLY_BASE}/live/flights`);
   for (const d of live?.data ?? []) rememberNonce(d.username, d.usernonce);
