@@ -92,12 +92,43 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
       signal: ctl.signal,
     });
     if (!res.ok) return null;
-    return (await res.json()) as T;
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      // SimFly returns 200 OK with a JSON error envelope on overload
+      // (e.g. {code: 1040, message: "Too many connections"}). Treat as transient.
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "code" in parsed &&
+        "message" in parsed &&
+        !("success" in parsed) &&
+        !("flights" in parsed) &&
+        !("page" in parsed)
+      ) {
+        return null;
+      }
+      return parsed as T;
+    } catch {
+      // Plaintext error body like "Error.BrainServer.ConnectionRefused".
+      return null;
+    }
   } catch {
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJSONWithRetry<T>(url: string, attempts = 4): Promise<T | null> {
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetchJSON<T>(url);
+    if (res) return res;
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+    }
+  }
+  return null;
 }
 
 async function fetchPages<T>(urls: string[], concurrency: number): Promise<(T | null)[]> {
