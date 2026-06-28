@@ -92,12 +92,43 @@ async function fetchJSON<T>(url: string): Promise<T | null> {
       signal: ctl.signal,
     });
     if (!res.ok) return null;
-    return (await res.json()) as T;
+    const text = await res.text();
+    try {
+      const parsed = JSON.parse(text) as unknown;
+      // SimFly returns 200 OK with a JSON error envelope on overload
+      // (e.g. {code: 1040, message: "Too many connections"}). Treat as transient.
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        "code" in parsed &&
+        "message" in parsed &&
+        !("success" in parsed) &&
+        !("flights" in parsed) &&
+        !("page" in parsed)
+      ) {
+        return null;
+      }
+      return parsed as T;
+    } catch {
+      // Plaintext error body like "Error.BrainServer.ConnectionRefused".
+      return null;
+    }
   } catch {
     return null;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+async function fetchJSONWithRetry<T>(url: string, attempts = 4): Promise<T | null> {
+  for (let i = 0; i < attempts; i++) {
+    const res = await fetchJSON<T>(url);
+    if (res) return res;
+    if (i < attempts - 1) {
+      await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+    }
+  }
+  return null;
 }
 
 async function fetchPages<T>(urls: string[], concurrency: number): Promise<(T | null)[]> {
@@ -288,7 +319,7 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
   firstPage: RawFlightsPage | null;
 }> {
   const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
-  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`);
+  const p1 = await fetchJSONWithRetry<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`, 5);
   if (!p1) return { totalPages: 0, totalFlights: 0, firstPage: null };
   return {
     totalPages: Math.max(1, Math.min(MAX_PAGES_CAP, Number(p1.totalPages) || 1)),
@@ -318,10 +349,10 @@ async function lookupNonceFromSkyRank(username: string): Promise<string | null> 
   const periods = ["all", "month", "week", "day"] as const;
   for (const period of periods) {
     const url = `${SIMFLY_BASE}/game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`;
-    const data = await fetchJSON<{
+    const data = await fetchJSONWithRetry<{
       success?: boolean;
       content?: { ranks?: { username?: string; usernonce?: number }[] };
-    }>(url);
+    }>(url, 4);
     const hit = (data?.content?.ranks ?? []).find(
       (r) => (r.username ?? "").toLowerCase() === username.toLowerCase(),
     );
