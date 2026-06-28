@@ -349,10 +349,10 @@ async function lookupNonceFromSkyRank(username: string): Promise<string | null> 
   const periods = ["all", "month", "week", "day"] as const;
   for (const period of periods) {
     const url = `${SIMFLY_BASE}/game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`;
-    const data = await fetchJSON<{
+    const data = await fetchJSONWithRetry<{
       success?: boolean;
       content?: { ranks?: { username?: string; usernonce?: number }[] };
-    }>(url);
+    }>(url, 4);
     const hit = (data?.content?.ranks ?? []).find(
       (r) => (r.username ?? "").toLowerCase() === username.toLowerCase(),
     );
