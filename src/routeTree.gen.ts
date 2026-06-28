@@ -18,6 +18,7 @@ import { Route as CompareRouteImport } from './routes/compare'
 import { Route as CommunityRouteImport } from './routes/community'
 import { Route as AirportsRouteImport } from './routes/airports'
 import { Route as AircraftRouteImport } from './routes/aircraft'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as ActivityRouteImport } from './routes/activity'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as PlayersHandleRouteImport } from './routes/players.$handle'
@@ -70,6 +71,11 @@ const AircraftRoute = AircraftRouteImport.update({
   path: '/aircraft',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
@@ -104,6 +110,7 @@ const AircraftIdRoute = AircraftIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/admin': typeof AdminRoute
   '/aircraft': typeof AircraftRouteWithChildren
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
@@ -121,6 +128,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/admin': typeof AdminRoute
   '/aircraft': typeof AircraftRouteWithChildren
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/admin': typeof AdminRoute
   '/aircraft': typeof AircraftRouteWithChildren
   '/airports': typeof AirportsRouteWithChildren
   '/community': typeof CommunityRoute
@@ -158,6 +167,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/activity'
+    | '/admin'
     | '/aircraft'
     | '/airports'
     | '/community'
@@ -175,6 +185,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/activity'
+    | '/admin'
     | '/aircraft'
     | '/airports'
     | '/community'
@@ -192,6 +203,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/activity'
+    | '/admin'
     | '/aircraft'
     | '/airports'
     | '/community'
@@ -210,6 +222,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
+  AdminRoute: typeof AdminRoute
   AircraftRoute: typeof AircraftRouteWithChildren
   AirportsRoute: typeof AirportsRouteWithChildren
   CommunityRoute: typeof CommunityRoute
@@ -285,6 +298,13 @@ declare module '@tanstack/react-router' {
       path: '/aircraft'
       fullPath: '/aircraft'
       preLoaderRoute: typeof AircraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/activity': {
@@ -371,6 +391,7 @@ const LicensesRouteWithChildren = LicensesRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
+  AdminRoute: AdminRoute,
   AircraftRoute: AircraftRouteWithChildren,
   AirportsRoute: AirportsRouteWithChildren,
   CommunityRoute: CommunityRoute,

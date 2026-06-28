@@ -13,6 +13,7 @@ import {
   Coffee,
   ShieldCheck,
   Grid3x3,
+  Wrench,
 
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -30,6 +31,7 @@ const NAV = [
   { to: "/consistency", label: "Consistency", icon: ShieldCheck },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
+  { to: "/admin",       label: "Admin",       icon: Wrench },
 ] as const;
 
 
