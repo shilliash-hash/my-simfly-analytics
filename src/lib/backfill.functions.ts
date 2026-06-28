@@ -319,7 +319,7 @@ async function discoverTotalPages(username: string, nonce: string): Promise<{
   firstPage: RawFlightsPage | null;
 }> {
   const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
-  const p1 = await fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`);
+  const p1 = await fetchJSONWithRetry<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`, 5);
   if (!p1) return { totalPages: 0, totalFlights: 0, firstPage: null };
   return {
     totalPages: Math.max(1, Math.min(MAX_PAGES_CAP, Number(p1.totalPages) || 1)),
