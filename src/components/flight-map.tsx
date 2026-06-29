@@ -22,6 +22,7 @@ type LayerState = {
   airports: boolean;
   aircraft: boolean;
   licenses: boolean;
+  inflight: boolean;
 };
 
 const DEFAULT_LAYERS: LayerState = {
@@ -29,6 +30,7 @@ const DEFAULT_LAYERS: LayerState = {
   airports: true,
   aircraft: false,
   licenses: false,
+  inflight: true,
 };
 
 function formatRemaining(rawMins: number) {
@@ -74,6 +76,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
     airports: null,
     aircraft: null,
     licenses: null,
+    inflight: null,
   });
   const fittedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
@@ -318,6 +321,44 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       }
       layersRef.current.licenses = licenseLayer;
 
+      // In-flight layer (red takeoff at origin, landing at destination, faint route)
+      const inflightLayer = L.layerGroup();
+      // Lucide-style takeoff / landing SVGs (stroke=white over red disc) — matches site iconography
+      const takeoffSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.639 10.258 4 8l-1 3 9 5 2-1 6 1 1-3-6.361-2.742Z"/><path d="M2 22h20"/></svg>`;
+      const landingSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 22h20"/><path d="M3.77 10.77 2 9l2-2 5.5 1.5L15 3l3 1-3 7 5.5 1.5L21 14l-2 2-15.23-5.23Z"/></svg>`;
+      const makePlaneIcon = (svg: string) =>
+        L.divIcon({
+          className: "",
+          html: `<div style="display:grid;place-items:center;width:22px;height:22px;border-radius:50%;background:#DC2626;border:1.5px solid #0A0F1C;box-shadow:0 0 0 1px rgba(220,38,38,.45)">${svg}</div>`,
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
+        });
+      for (const f of liveFlights) {
+        const o = f.origin ? byIcao.get(f.origin.toUpperCase()) : undefined;
+        const d = f.destination ? byIcao.get(f.destination.toUpperCase()) : undefined;
+        if (!o || !d) continue;
+        L.polyline([[o.lat, o.lon], [d.lat, d.lon]], {
+          color: "#EF4444",
+          weight: 1.5,
+          opacity: 0.45,
+          dashArray: "4 6",
+          interactive: false,
+        }).addTo(inflightLayer);
+        const tipHtml = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
+          <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">${esc(f.tailNumber || f.aircraftICAO)}</div>
+          <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(f.aircraftName)}</div>
+          <div style="margin-top:4px"><span style="color:#FFFFFF;font-weight:600">Route:</span> <span style="color:#7DD3FC;font-weight:700">${esc(f.origin)} → ${esc(f.destination)}</span></div>
+          ${f.pilotUsername ? `<div><span style="color:#FFFFFF;font-weight:600">Pilot:</span> <span style="color:#7DD3FC;font-weight:700">@${esc(f.pilotUsername)}</span></div>` : ""}
+        </div>`;
+        const oM = L.marker([o.lat, o.lon], { icon: makePlaneIcon(takeoffSvg), zIndexOffset: 500 });
+        oM.bindTooltip(tipHtml, { direction: "top", offset: L.point(0, -10), className: "simfly-tip" });
+        oM.addTo(inflightLayer);
+        const dM = L.marker([d.lat, d.lon], { icon: makePlaneIcon(landingSvg), zIndexOffset: 500 });
+        dM.bindTooltip(tipHtml, { direction: "top", offset: L.point(0, -10), className: "simfly-tip" });
+        dM.addTo(inflightLayer);
+      }
+      layersRef.current.inflight = inflightLayer;
+
       // Apply current toggle state
       (Object.keys(layers) as (keyof LayerState)[]).forEach((k) => {
         const grp = layersRef.current[k];
@@ -338,7 +379,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routes, hubIcaos, geoQuery.data, aircraftPositions, licensePositions]);
+  }, [routes, hubIcaos, geoQuery.data, aircraftPositions, licensePositions, liveFlights]);
 
   // Cheap toggle: add/remove existing layer groups without rebuilding
   useEffect(() => {
@@ -387,6 +428,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Toggle k="inflight" label="In flight" dot="#EF4444" />
           <Toggle k="routes" label="Routes" dot="#A78BFA" />
           <Toggle k="airports" label="My airports" dot="#22D3EE" />
           <Toggle k="aircraft" label="My aircraft" dot="#22C55E" />

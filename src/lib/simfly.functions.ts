@@ -1540,10 +1540,11 @@ export const getAirportVisitors = createServerFn({ method: "GET" })
 // in parallel and filters where the flying username matches me. A flight is
 // reported once even if it appears on both origin and destination feeds.
 export const getMyLiveFlights = createServerFn({ method: "GET" })
-  .inputValidator((d: { icaos: string[]; username?: string }) => d)
+  .inputValidator((d: { icaos: string[]; username?: string; tails?: string[] }) => d)
   .handler(async ({ data }): Promise<MyLiveFlight[]> => {
     const { username } = identity({ username: data.username });
     const icaos = (data.icaos ?? []).filter(Boolean).slice(0, 24);
+    const myTails = new Set((data.tails ?? []).filter(Boolean).map((t) => t.toLowerCase()));
     const results = await Promise.all(
       icaos.map(async (icao) => {
         try {
@@ -1560,7 +1561,9 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
     const me = username.toLowerCase();
     for (const { icao, list } of results) {
       for (const f of list) {
-        if (f.username?.toLowerCase() !== me) continue;
+        const isMine = f.username?.toLowerCase() === me;
+        const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
+        if (!isMine && !isMyPlane) continue;
         if (seen.has(f.id)) continue;
         seen.set(f.id, {
           id: f.id,
@@ -1572,6 +1575,7 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
           sim: f.simKind,
           observedAt: icao,
           licenceCode: f.licence || undefined,
+          pilotUsername: f.username,
         });
       }
     }
