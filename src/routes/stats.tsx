@@ -205,7 +205,7 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
                 return [formatNumber(v) + " PAX", label];
               }}
             />
-            <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(255,255,255,0.12)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(226,232,240,0.35)" radius={[3, 3, 0, 0]} />
             <Area type="monotone" dataKey="pax" name="pax" stroke="var(--runway)" strokeWidth={2} fill="url(#gPax)" />
             <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gVisitors)" />
           </ComposedChart>
