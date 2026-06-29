@@ -68,7 +68,7 @@ function Sidebar() {
       </div>
 
       <nav className="mt-4 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-        {NAV.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}
