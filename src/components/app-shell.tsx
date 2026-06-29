@@ -29,10 +29,10 @@ const NAV = [
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
-  { to: "/consistency", label: "Consistency", icon: ShieldCheck },
+  { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
-  { to: "/admin",       label: "Admin",       icon: Wrench },
+  { to: "/admin",       label: "Admin",       icon: Wrench, adminOnly: true },
 ] as const;
 
 
