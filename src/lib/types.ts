@@ -180,6 +180,12 @@ export interface AirportLiveVisitor {
   destination: string;
   sim?: string;
   tailNumber?: string;
+  /** Unix ms when the mission started (derived from UUIDv7 id). */
+  departureMs?: number;
+  /** Estimated arrival (unix ms) from distance/cruise-speed model. */
+  etaMs?: number;
+  /** Great-circle distance in nautical miles. */
+  distanceNm?: number;
 }
 
 /** My own aircraft currently airborne, derived from live feeds of my hubs. */
@@ -197,6 +203,12 @@ export interface MyLiveFlight {
   licenceCode?: string;
   /** SimFly username of the pilot operating this flight (may differ from the viewer). */
   pilotUsername?: string;
+  /** Unix ms when the mission started (derived from UUIDv7 id). */
+  departureMs?: number;
+  /** Estimated arrival (unix ms) from distance/cruise-speed model. */
+  etaMs?: number;
+  /** Great-circle distance in nautical miles. */
+  distanceNm?: number;
 }
 
 export interface VisitorAggregate {
