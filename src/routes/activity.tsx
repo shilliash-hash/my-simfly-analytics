@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { getSimflyPayload } from "@/lib/simfly.functions";
+import { useEffect, useMemo, useState } from "react";
+import { getSimflyPayload, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber, relativeTime } from "@/components/app-shell";
 import { FlightMap } from "@/components/flight-map";
@@ -44,7 +44,7 @@ const COLORS: Record<ActivityKind, string> = {
 
 function ActivityFeed() {
   const fn = useServerFn(getSimflyPayload);
-  const { keyTag, payload } = useSimflyArgs();
+  const { keyTag, payload, username } = useSimflyArgs();
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -52,6 +52,18 @@ function ActivityFeed() {
       staleTime: 30_000,
     }),
   );
+  const liveFn = useServerFn(getMyLiveFlights);
+  const icaos = useMemo(
+    () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
+    [data.airports],
+  );
+  const { data: liveFlights = [] } = useQuery({
+    queryKey: ["simfly", "myLive", keyTag, icaos],
+    queryFn: () => liveFn({ data: { icaos, ...(username ? { username } : {}) } }),
+    enabled: icaos.length > 0,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
   const [filter, setFilter] = useState<"all" | "visitors" | ActivityKind>("all");
   const [page, setPage] = useState(0);
   const [hydrated, setHydrated] = useState(false);
@@ -85,7 +97,13 @@ function ActivityFeed() {
       />
 
       <div className="mb-6">
-        <FlightMap hubs={data.airports} flights={data.flights} />
+        <FlightMap
+          hubs={data.airports}
+          flights={data.flights}
+          airplanes={data.airplanes}
+          licenses={data.licenses}
+          liveFlights={liveFlights}
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-border bg-background/50 p-1">
