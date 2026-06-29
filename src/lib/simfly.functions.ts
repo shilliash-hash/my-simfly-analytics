@@ -46,6 +46,20 @@ const AIRCRAFT_BACKFILL_DAYS = 100;
 const AIRCRAFT_BACKFILL_PAGE_LIMIT = 180;
 const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
 
+// ---- Per-isolate in-memory cache for heavy SimFly scans.
+// Survives within a single Cloudflare Worker isolate so repeated dashboard
+// loads / route remounts within the TTL skip the 25×hubs + aircraft sweep
+// and the 20k-row DB read entirely. Self-evicts when the isolate recycles.
+const HEAVY_CACHE_TTL_MS = 90_000;
+const heavyCache = new Map<string, { at: number; value: unknown }>();
+async function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = heavyCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  const value = await fn();
+  heavyCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 function defaultUsername() {
   return process.env.SIMFLY_USERNAME || DEFAULT_USERNAME;
 }
