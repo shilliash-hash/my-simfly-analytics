@@ -267,14 +267,14 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
             fillOpacity: 0.95,
           });
           marker.bindTooltip(
-            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;color:#F8FAFC">
-              <div style="font-weight:700;font-size:13px">${esc(r.p.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#22D3EE;font-weight:600">${esc(r.p.tailNumber || r.p.icao)}</div>
-              <div style="margin-top:4px"><span style="color:#CBD5E1">Location:</span> <span style="color:#FFFFFF;font-weight:600">${esc(where)}</span></div>
-              <div><span style="color:#CBD5E1">Status:</span> <span style="color:#FFFFFF;font-weight:600">${esc(status.label)}</span></div>
-              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
+            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">${esc(r.p.tailNumber || r.p.icao)}</div>
+              <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(r.p.name)}</div>
+              <div style="margin-top:4px"><span style="color:#FFFFFF;font-weight:600">Location:</span> <span style="color:#7DD3FC;font-weight:700">${esc(where)}</span></div>
+              <div><span style="color:#FFFFFF;font-weight:600">Status:</span> <span style="color:#7DD3FC;font-weight:700">${esc(status.label)}</span></div>
+              ${status.remaining ? `<div style="color:#7DD3FC;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
-            { direction: "top", offset: L.point(0, -6) },
+            { direction: "top", offset: L.point(0, -6), className: "simfly-tip" },
           );
           marker.addTo(aircraftLayer);
         });
@@ -304,14 +304,14 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           });
           const marker = L.marker([g.lat + offset, g.lon + offset], { icon });
           marker.bindTooltip(
-            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;color:#F8FAFC">
-              <div style="font-weight:700;font-size:13px">${esc(r.l.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#FACC15;font-weight:600">${esc(r.l.code)} · Level ${r.l.level}</div>
-              <div style="margin-top:4px"><span style="color:#CBD5E1">Location:</span> <span style="color:#FFFFFF;font-weight:600">${esc(where)}</span></div>
-              <div><span style="color:#CBD5E1">Status:</span> <span style="color:#FFFFFF;font-weight:600">${esc(status.label)}</span></div>
-              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
+            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
+              <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">${esc(r.l.code)} · L${r.l.level}</div>
+              <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(r.l.name)}</div>
+              <div style="margin-top:4px"><span style="color:#FFFFFF;font-weight:600">Location:</span> <span style="color:#7DD3FC;font-weight:700">${esc(where)}</span></div>
+              <div><span style="color:#FFFFFF;font-weight:600">Status:</span> <span style="color:#7DD3FC;font-weight:700">${esc(status.label)}</span></div>
+              ${status.remaining ? `<div style="color:#7DD3FC;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
-            { direction: "top", offset: L.point(0, -6) },
+            { direction: "top", offset: L.point(0, -6), className: "simfly-tip" },
           );
           marker.addTo(licenseLayer);
         });
