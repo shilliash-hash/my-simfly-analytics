@@ -260,29 +260,39 @@ async function upsertFlightRows(
   rows: Record<string, unknown>[],
   username?: string,
 ): Promise<void> {
-  for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
-    const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
-    const { error } = await supabaseAdmin.from("simfly_flights").upsert(chunk, {
-      onConflict: "username,flight_id",
-      ignoreDuplicates: true,
-    });
+  const tag = username ? `[backfill:${username}]` : "[backfill]";
+  const cleanRows = rows.map((row) => sanitiseFlightRowForDb(row, username));
+  for (let i = 0; i < cleanRows.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = cleanRows.slice(i, i + UPSERT_CHUNK_SIZE);
+    const { error } = await safeUpsertFlightBatch(supabaseAdmin, chunk);
     if (!error) continue;
     // Chunk failed — retry one row at a time so one bad flight can't poison
     // an entire batch. Log + skip the offender, keep going.
-    const tag = username ? `[backfill:${username}]` : "[backfill]";
     console.warn(`${tag} chunk upsert failed (${error.message}); retrying ${chunk.length} rows individually`);
     for (const row of chunk) {
-      const { error: rowErr } = await supabaseAdmin.from("simfly_flights").upsert([row], {
-        onConflict: "username,flight_id",
-        ignoreDuplicates: true,
-      });
+      const { error: rowErr } = await safeUpsertFlightBatch(supabaseAdmin, [row]);
       if (rowErr) {
         console.error(
-          `${tag} SKIPPED flight_id=${String(row.flight_id ?? "?")} — ${rowErr.message ?? "unknown error"}`,
+          `${tag} SKIPPED ${formatFlightRowContext(row)} — ${rowErr.message ?? "unknown error"}`,
           { row },
         );
       }
     }
+  }
+}
+
+async function safeUpsertFlightBatch(
+  supabaseAdmin: SupabaseLike,
+  values: Record<string, unknown>[],
+): Promise<{ error: { message?: string } | null }> {
+  try {
+    const { error } = await supabaseAdmin.from("simfly_flights").upsert(values, {
+      onConflict: "username,flight_id",
+      ignoreDuplicates: true,
+    });
+    return { error };
+  } catch (err) {
+    return { error: { message: err instanceof Error ? err.message : String(err) } };
   }
 }
 
@@ -313,25 +323,68 @@ const NON_NUMERIC_PLACEHOLDERS = new Set([
  * but couldn't be parsed — the caller logs a structured diagnostic so we
  * never crash a whole batch on a single "N/A" cell.
  */
-function safeNumeric(raw: unknown): { value: number | null; invalid: boolean } {
-  if (raw === null || raw === undefined) return { value: null, invalid: false };
+function safeNumeric(raw: unknown): { value: number | null; invalid: boolean; placeholder: boolean } {
+  if (raw === null || raw === undefined) return { value: null, invalid: false, placeholder: false };
   if (typeof raw === "number") {
-    return Number.isFinite(raw) ? { value: raw, invalid: false } : { value: null, invalid: true };
+    return Number.isFinite(raw)
+      ? { value: raw, invalid: false, placeholder: false }
+      : { value: null, invalid: true, placeholder: false };
   }
-  if (typeof raw === "boolean") return { value: raw ? 1 : 0, invalid: false };
+  if (typeof raw === "boolean") return { value: raw ? 1 : 0, invalid: false, placeholder: false };
   const s = String(raw).trim();
-  if (NON_NUMERIC_PLACEHOLDERS.has(s.toLowerCase())) return { value: null, invalid: false };
+  if (NON_NUMERIC_PLACEHOLDERS.has(s.toLowerCase())) {
+    return { value: null, invalid: false, placeholder: true };
+  }
   const cleaned = s.replace(/,/g, "").replace(/[^0-9eE+\-.]/g, "").trim();
   if (cleaned === "" || cleaned === "-" || cleaned === "+" || cleaned === ".") {
-    return { value: null, invalid: true };
+    return { value: null, invalid: true, placeholder: false };
   }
   const n = Number(cleaned);
-  return Number.isFinite(n) ? { value: n, invalid: false } : { value: null, invalid: true };
+  return Number.isFinite(n)
+    ? { value: n, invalid: false, placeholder: false }
+    : { value: null, invalid: true, placeholder: false };
 }
 
 type FlightConvertCtx = { page: number; index: number; total: number };
 
-function flightToRow(
+const DB_NUMERIC_COLUMNS = [
+  "landing_rate",
+  "total_distance",
+  "total_reward",
+  "pax",
+  "xp",
+  "licence_rank",
+] as const;
+
+function formatFlightRowContext(row: Record<string, unknown>): string {
+  const ctx = row.__import_ctx as FlightConvertCtx | undefined;
+  const mission = String(row.flight_id ?? "?");
+  if (!ctx) return `mission=${mission}`;
+  return `mission=${mission} page=${ctx.page} flight=${ctx.index + 1}/${ctx.total}`;
+}
+
+export function sanitiseFlightRowForDb(
+  row: Record<string, unknown>,
+  username?: string,
+): Record<string, unknown> {
+  const next = { ...row };
+  delete next.__import_ctx;
+  const tag = username ? `[backfill:${username}]` : "[backfill]";
+  for (const col of DB_NUMERIC_COLUMNS) {
+    const raw = row[col];
+    const { value, invalid, placeholder } = safeNumeric(raw);
+    const finalValue = col === "licence_rank" && value !== null ? Math.trunc(value) : value;
+    if (invalid || placeholder) {
+      console.warn(
+        `${tag} invalid numeric — ${formatFlightRowContext(row)} column=${col} value=${JSON.stringify(raw)} → storing NULL`,
+      );
+    }
+    next[col] = finalValue;
+  }
+  return next;
+}
+
+export function flightToRow(
   username: string,
   f: RawFlightLite,
   ctx?: FlightConvertCtx,
@@ -346,8 +399,8 @@ function flightToRow(
   ];
   const numeric: Record<string, number | null> = {};
   for (const [col, raw] of NUMERIC_COLS) {
-    const { value, invalid } = safeNumeric(raw);
-    if (invalid) {
+    const { value, invalid, placeholder } = safeNumeric(raw);
+    if (invalid || placeholder) {
       const where = ctx
         ? `mission=${f.id ?? "?"} page=${ctx.page} flight=${ctx.index + 1}/${ctx.total}`
         : `mission=${f.id ?? "?"}`;
@@ -373,6 +426,7 @@ function flightToRow(
     origin_name: f.origin?.name ?? null,
     destination_name: f.destination?.name ?? null,
     ...numeric,
+    __import_ctx: ctx,
     raw: JSON.parse(JSON.stringify(f)),
   };
 }
