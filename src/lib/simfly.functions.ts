@@ -1141,8 +1141,18 @@ export type RevenueConsistencyReport = {
 };
 
 export const getRevenueConsistencyCheck = createServerFn({ method: "GET" })
-  .inputValidator((d?: { username?: string; nonce?: string; pages?: number }) => d ?? {})
+  .inputValidator(
+    (d?: { adminToken?: string; username?: string; nonce?: string; pages?: number }) =>
+      d ?? {},
+  )
   .handler(async ({ data }): Promise<RevenueConsistencyReport> => {
+    // Admin-only: revenue audit is an operational tool, not a public report.
+    const expected = process.env.ADMIN_TOKEN;
+    if (!expected) throw new Error("ADMIN_TOKEN is not configured on the server.");
+    const { createHash, timingSafeEqual } = await import("node:crypto");
+    const provided = createHash("sha256").update(String(data.adminToken ?? ""), "utf8").digest();
+    const known = createHash("sha256").update(expected, "utf8").digest();
+    if (!timingSafeEqual(provided, known)) throw new Error("Forbidden: admin token required.");
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
     const meLc = username.toLowerCase();
