@@ -363,7 +363,7 @@ function formatFlightRowContext(row: Record<string, unknown>): string {
   return `mission=${mission} page=${ctx.page} flight=${ctx.index + 1}/${ctx.total}`;
 }
 
-function sanitiseFlightRowForDb(
+export function sanitiseFlightRowForDb(
   row: Record<string, unknown>,
   username?: string,
 ): Record<string, unknown> {
