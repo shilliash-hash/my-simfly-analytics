@@ -712,14 +712,24 @@ export const tickBackfill = createServerFn({ method: "POST" })
     const rowsToInsert: Record<string, unknown>[] = [];
     for (const o of outcomes) {
       if (!o.ok) continue;
-      for (const f of o.data.flights) rowsToInsert.push(flightToRow(username, f));
+      const total = o.data.flights.length;
+      for (let index = 0; index < total; index++) {
+        const f = o.data.flights[index];
+        try {
+          rowsToInsert.push(flightToRow(username, f, { page: o.page, index, total }));
+        } catch (convErr) {
+          console.error(
+            `[backfill:${username}] SKIPPED flight — page=${o.page} flight=${index + 1}/${total} mission=${f?.id ?? "?"}: ${convErr instanceof Error ? convErr.message : String(convErr)}`,
+          );
+        }
+      }
     }
 
     if (rowsToInsert.length) {
       logImport(username, `Writing ${rowsToInsert.length} flight rows for pages ${startPage}..${endPage} to database`);
       const tDb = Date.now();
       try {
-        await upsertFlightRows(db, rowsToInsert);
+        await upsertFlightRows(db, rowsToInsert, username);
       } catch (err) {
         const stack = err instanceof Error ? err.stack : String(err);
         console.error(
