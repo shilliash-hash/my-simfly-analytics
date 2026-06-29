@@ -41,7 +41,9 @@ function AircraftPage() {
     staleTime: 30_000,
   });
 
-  // Map by tailNumber (case-insensitive) and fall back to aircraft type ICAO.
+  // Match strictly by tail number. Matching by aircraft type ICAO would
+  // incorrectly flag a grounded plane as airborne whenever any other plane
+  // of the same type (mine or someone else's) is in flight.
   const liveByTail = useMemo(() => {
     const m = new Map<string, MyLiveFlight>();
     for (const f of liveFlights) {
@@ -49,24 +51,12 @@ function AircraftPage() {
     }
     return m;
   }, [liveFlights]);
-  const liveByType = useMemo(() => {
-    const m = new Map<string, MyLiveFlight>();
-    for (const f of liveFlights) {
-      if (f.aircraftICAO && !m.has(f.aircraftICAO.toLowerCase())) {
-        m.set(f.aircraftICAO.toLowerCase(), f);
-      }
-    }
-    return m;
-  }, [liveFlights]);
 
   function liveFor(p: AircraftExt): MyLiveFlight | undefined {
-    if (p.tailNumber && liveByTail.has(p.tailNumber.toLowerCase())) {
-      return liveByTail.get(p.tailNumber.toLowerCase());
-    }
-    if (p.icao && liveByType.has(p.icao.toLowerCase())) {
-      return liveByType.get(p.icao.toLowerCase());
-    }
-    return undefined;
+    // A plane in a ground-operation cooldown cannot be airborne.
+    if (p.inGroundOperation) return undefined;
+    if (!p.tailNumber) return undefined;
+    return liveByTail.get(p.tailNumber.toLowerCase());
   }
 
   const [query, setQuery] = useState("");
