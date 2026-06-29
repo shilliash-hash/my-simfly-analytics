@@ -77,21 +77,31 @@ export function BackfillIndicator() {
   const eta = etaSeconds(row);
   const flightsTarget = row.flights_total_est || undefined;
 
+  const isStalled = row.status === "stalled";
+  const label =
+    row.status === "failed"
+      ? "Backfill failed"
+      : isStalled
+        ? "Backfill stalled"
+        : row.status === "idle"
+          ? "Preparing logbook import"
+          : "Importing logbook";
+
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[320px]">
+    <div className="fixed bottom-4 right-4 z-50 w-[340px]">
       <div className="panel rounded-xl border border-border bg-background/95 p-4 shadow-lg backdrop-blur">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              {row.status === "failed"
-                ? "Backfill failed"
-                : row.status === "idle"
-                  ? "Preparing logbook import"
-                  : "Importing logbook"}
+            <div
+              className={`mono text-[10px] uppercase tracking-widest ${
+                isStalled ? "text-amber-500" : "text-muted-foreground"
+              }`}
+            >
+              {label}
             </div>
             <div className="text-sm font-semibold text-foreground">@{row.username}</div>
           </div>
-          {row.status === "failed" && (
+          {(row.status === "failed" || isStalled) && (
             <button
               onClick={() => setDismissed(true)}
               className="mono text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
@@ -107,7 +117,7 @@ export function BackfillIndicator() {
           <>
             <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-secondary">
               <div
-                className="h-full bg-runway transition-[width] duration-300"
+                className={`h-full transition-[width] duration-300 ${isStalled ? "bg-amber-500" : "bg-runway"}`}
                 style={{ width: `${percent}%` }}
               />
             </div>
@@ -122,8 +132,24 @@ export function BackfillIndicator() {
                 Flights {row.flights_imported}
                 {flightsTarget ? ` / ~${flightsTarget}` : ""}
               </span>
-              <span>ETA ~{fmtTime(eta)}</span>
+              <span>
+                {isStalled
+                  ? `Stalled ${row.seconds_since_progress ?? "?"}s`
+                  : `ETA ~${fmtTime(eta)}`}
+              </span>
             </div>
+            {row.next_page !== undefined && (
+              <div className="mono mt-1 text-[10px] uppercase tracking-widest text-muted-foreground/70">
+                Next page → {row.next_page}
+              </div>
+            )}
+            {row.error_message && (
+              <div
+                className={`mt-2 text-[11px] ${isStalled ? "text-amber-500" : "text-muted-foreground"}`}
+              >
+                {row.error_message}
+              </div>
+            )}
           </>
         )}
       </div>
