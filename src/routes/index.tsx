@@ -87,7 +87,14 @@ function Overview() {
 
 
       <CurrentFlightHero
-        live={myFlights[0] ?? null}
+        live={(() => {
+          // A flight is only "current" if it is not yet recorded as a completed
+          // flight in the logbook. SimFly's airport /flights feed keeps a flight
+          // visible for a short window after landing, which previously caused
+          // completed flights to flicker back into the "current" state.
+          const completedIds = new Set(data.flights.map((f) => f.id));
+          return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
+        })()}
         lastFlight={data.flights[0] ?? null}
       />
 
@@ -509,12 +516,6 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
             <div>
               <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">PAX earned</div>
               <div className="font-display mt-0.5 text-base font-semibold text-runway">+{lastFlight.pax.toFixed(2)}</div>
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Reward</div>
-              <div className="font-display mt-0.5 text-base font-semibold" style={{ color: "var(--instrument)" }}>
-                +{formatNumber(Math.round(lastFlight.totalReward))}
-              </div>
             </div>
           </div>
         )}
