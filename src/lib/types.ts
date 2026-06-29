@@ -195,6 +195,8 @@ export interface MyLiveFlight {
   observedAt: string;
   /** Licence code used for this flight (e.g. YFX-MN-0E2), when provided by the live feed. */
   licenceCode?: string;
+  /** SimFly username of the pilot operating this flight (may differ from the viewer). */
+  pilotUsername?: string;
 }
 
 export interface VisitorAggregate {
