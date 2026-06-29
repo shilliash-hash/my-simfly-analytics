@@ -66,17 +66,7 @@ function LicensesPage() {
             className="panel group block rounded-xl p-5 transition-colors hover:bg-secondary/40"
           >
             <div className="flex items-start gap-3">
-              {l.imageSrc && (
-                <img
-                  src={
-                    l.imageSrc.startsWith("http")
-                      ? l.imageSrc
-                      : `https://simfly.io${l.imageSrc}`
-                  }
-                  alt=""
-                  className="h-12 w-12 shrink-0 rounded-md object-cover"
-                />
-              )}
+              <LevelBadge level={l.level} />
               <div className="min-w-0 flex-1">
                 <div className="font-display truncate text-base font-semibold">{l.name}</div>
                 <div className="mono text-[11px] uppercase tracking-widest text-muted-foreground">
