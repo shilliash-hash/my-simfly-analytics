@@ -428,6 +428,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           </h2>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Toggle k="inflight" label="In flight" dot="#EF4444" />
           <Toggle k="routes" label="Routes" dot="#A78BFA" />
           <Toggle k="airports" label="My airports" dot="#22D3EE" />
           <Toggle k="aircraft" label="My aircraft" dot="#22C55E" />
