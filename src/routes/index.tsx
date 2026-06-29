@@ -87,7 +87,14 @@ function Overview() {
 
 
       <CurrentFlightHero
-        live={myFlights[0] ?? null}
+        live={(() => {
+          // A flight is only "current" if it is not yet recorded as a completed
+          // flight in the logbook. SimFly's airport /flights feed keeps a flight
+          // visible for a short window after landing, which previously caused
+          // completed flights to flicker back into the "current" state.
+          const completedIds = new Set(data.flights.map((f) => f.id));
+          return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
+        })()}
         lastFlight={data.flights[0] ?? null}
       />
 
