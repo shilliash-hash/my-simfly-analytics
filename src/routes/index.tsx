@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
@@ -88,10 +88,6 @@ function Overview() {
 
       <CurrentFlightHero
         live={(() => {
-          // A flight is only "current" if it is not yet recorded as a completed
-          // flight in the logbook. SimFly's airport /flights feed keeps a flight
-          // visible for a short window after landing, which previously caused
-          // completed flights to flicker back into the "current" state.
           const completedIds = new Set(data.flights.map((f) => f.id));
           return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
         })()}
