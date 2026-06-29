@@ -231,29 +231,17 @@ function expectedComplete(row: BackfillStatusRow): number {
 }
 
 async function repairIfPrematurelyCompleted(
-  supabaseAdmin: SupabaseLike,
+  _supabaseAdmin: SupabaseLike,
   row: BackfillStatusRow,
 ): Promise<BackfillStatusRow> {
-  const expected = expectedComplete(row);
-  if (row.status !== "completed" || expected <= 0) return row;
-  const actual = await countCachedFlights(supabaseAdmin, row.username);
-  // SimFly totals can drift by a couple of records while a user is flying, but
-  // a "completed" row with only page-1 data is invalid and must be re-run.
-  if (actual >= Math.max(0, expected - 2)) return row;
-  const repaired: BackfillStatusRow = {
-    ...row,
-    status: "running",
-    current_page: 0,
-    flights_imported: actual,
-    error_message: `Import restarted: only ${actual} of ~${expected} cached flights were found after a completed run.`,
-    last_page_at: null,
-    started_at: row.started_at ?? new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  const { error } = await supabaseAdmin.from("backfill_progress").upsert(persistable(repaired));
-  if (error) throw new Error(error.message ?? "Unable to repair backfill progress.");
-  return repaired;
+  // Append-only sync: a completed historical backfill is authoritative and
+  // is NEVER auto-restarted. Only an admin reset (resetBackfill / admin
+  // dashboard) may trigger a fresh full rebuild. Incremental sync of new
+  // flights happens via the page-1 upsert path in getSimflyPayload, which
+  // uses ignoreDuplicates so existing rows are never rewritten.
+  return row;
 }
+
 
 async function upsertFlightRows(
   supabaseAdmin: SupabaseLike,
@@ -645,26 +633,12 @@ export const tickBackfill = createServerFn({ method: "POST" })
       return row;
     }
 
-    row = await repairIfPrematurelyCompleted(db, row);
-
-    // Already done — no-op (graphs auto-refresh page 1 separately via getSimflyPayload).
+    // Already done — mark complete and stop. Append-only: never rewind
+    // current_page back to 0 because of count drift; new flights are
+    // picked up incrementally by the page-1 upsert in getSimflyPayload.
     if (row.current_page >= row.total_pages) {
       if (row.status !== "completed") {
         const actual = await countCachedFlights(db, username);
-        const expected = expectedComplete(row);
-        if (expected > 0 && actual < Math.max(0, expected - 2)) {
-          const repaired: BackfillStatusRow = {
-            ...row,
-            status: "running",
-            current_page: 0,
-            flights_imported: actual,
-            error_message: `Import restarted: only ${actual} of ~${expected} cached flights were found before completion.`,
-            last_page_at: null,
-            updated_at: new Date().toISOString(),
-          };
-          await upsertProgress(db, repaired);
-          return repaired;
-        }
         const completed = {
           ...row,
           status: "completed" as const,
@@ -677,6 +651,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
       }
       return row;
     }
+
 
     // Fetch the next batch of older pages.
     const startPage = row.current_page + 1;
@@ -809,23 +784,20 @@ export const tickBackfill = createServerFn({ method: "POST" })
     const newImported = await countCachedFlights(db, username);
     const advanced = endPage;
     const done = advanced >= row.total_pages;
-    const expected = expectedComplete({ ...row, flights_total_est: row.flights_total_est });
+    // Append-only: once we've walked every page, the run is complete.
+    // We never rewind current_page based on count drift — any new flights
+    // that show up later are picked up incrementally via the page-1
+    // upsert path in getSimflyPayload (ignoreDuplicates = true).
     const next: BackfillStatusRow = {
       ...row,
-      status: done && (expected <= 0 || newImported >= Math.max(0, expected - 2)) ? "completed" : "running",
+      status: done ? "completed" : "running",
       current_page: advanced,
       flights_imported: newImported,
-      error_message:
-        done && expected > 0 && newImported < Math.max(0, expected - 2)
-          ? `Final verification found only ${newImported} of ~${expected} cached flights; continuing import instead of marking complete.`
-          : null,
+      error_message: null,
       last_page_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
-    if (done && next.status === "running") {
-      next.current_page = 0;
-      next.last_page_at = null;
-    }
+
     logImport(username, `Tick end — advanced to page ${advanced}${done ? " (done)" : `, moving to page ${advanced + 1}`}`, {
       imported: newImported,
       status: next.status,
