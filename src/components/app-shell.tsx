@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
+import { useAdminToken } from "@/lib/admin-token";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
@@ -28,7 +29,7 @@ const NAV = [
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
-  { to: "/consistency", label: "Consistency", icon: ShieldCheck },
+  { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
   { to: "/admin",       label: "Admin",       icon: Wrench },
@@ -50,6 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function Sidebar() {
+  const isAdmin = !!useAdminToken();
+  const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
   return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0">
       <div className="panel flex items-center gap-3 rounded-xl px-4 py-3">
@@ -65,7 +68,7 @@ function Sidebar() {
       </div>
 
       <nav className="mt-4 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-        {NAV.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <Link
             key={to}
             to={to}

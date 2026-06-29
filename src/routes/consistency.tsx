@@ -1,17 +1,20 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { getRevenueConsistencyCheck } from "@/lib/simfly.functions";
+import { verifyAdminToken } from "@/lib/admin.functions";
+import { setAdminToken, useAdminToken } from "@/lib/admin-token";
 import { useViewedUser } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
-import { CheckCircle2, AlertTriangle, RefreshCw } from "lucide-react";
+import { CheckCircle2, AlertTriangle, RefreshCw, ShieldAlert } from "lucide-react";
 
 export const Route = createFileRoute("/consistency")({
   component: ConsistencyPage,
   head: () => ({
     meta: [
       { title: "Revenue Consistency — SimFly Hub" },
+      { name: "robots", content: "noindex,nofollow" },
       {
         name: "description",
         content:
@@ -26,31 +29,103 @@ function fmt(n: number) {
 }
 
 function ConsistencyPage() {
+  const token = useAdminToken();
+  return (
+    <AppShell>
+      <PageHeader
+        eyebrow="Audit · Admin only"
+        title="Revenue consistency"
+        description="Compare per-flight payout from SimFly against what the hub credits you. Mismatches flag any flight where we under- or over-attribute PAX."
+      />
+      {token ? <ConsistencyReport token={token} /> : <AdminGate />}
+    </AppShell>
+  );
+}
+
+function AdminGate() {
+  const verify = useServerFn(verifyAdminToken);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await verify({ data: { token: value.trim() } });
+      setAdminToken(value.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Invalid token");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="panel max-w-md space-y-4 rounded-xl p-6">
+      <div className="flex items-center gap-2 text-instrument">
+        <ShieldAlert className="h-5 w-5" />
+        <h2 className="font-display text-lg font-semibold">Administrator access required</h2>
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Revenue consistency is an internal audit tool. Sign in with the admin token to continue, or{" "}
+        <Link to="/" className="text-runway hover:underline">return to Overview</Link>.
+      </p>
+      <form onSubmit={submit} className="space-y-3">
+        <label className="mono block text-[10px] uppercase tracking-widest text-muted-foreground">
+          Admin Token
+        </label>
+        <input
+          type="password"
+          autoComplete="current-password"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="Paste ADMIN_TOKEN"
+          className="w-full rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm outline-none focus:border-runway"
+        />
+        {error && <div className="text-xs text-destructive">{error}</div>}
+        <button
+          type="submit"
+          disabled={busy || !value.trim()}
+          className="rounded-md bg-runway px-4 py-2 text-sm font-medium text-background hover:bg-runway/90 disabled:opacity-50"
+        >
+          {busy ? "Verifying..." : "Unlock"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function ConsistencyReport({ token }: { token: string }) {
   const fn = useServerFn(getRevenueConsistencyCheck);
   const username = useViewedUser();
-
   const keyTag = username?.toLowerCase() ?? "__self__";
   const [onlyMismatches, setOnlyMismatches] = useState(false);
 
-  const { data, refetch, isFetching } = useSuspenseQuery(
-    queryOptions({
-      queryKey: ["consistency", keyTag],
-      queryFn: () => fn(username ? { data: { username } } : undefined),
-      staleTime: 60_000,
-    }),
-  );
+  const { data, refetch, isFetching, error } = useQuery({
+    queryKey: ["consistency", keyTag, "admin"],
+    queryFn: () =>
+      fn({ data: { adminToken: token, ...(username ? { username } : {}) } }),
+    staleTime: 60_000,
+  });
+
+  if (error) {
+    return (
+      <div className="panel rounded-xl p-6 text-sm text-destructive">
+        {error instanceof Error ? error.message : "Failed to run consistency check."}
+      </div>
+    );
+  }
+  if (!data) {
+    return <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Running audit…</div>;
+  }
 
   const rows = onlyMismatches ? data.rows.filter((r) => Math.abs(r.diff) > 0.01) : data.rows;
   const cleanRun = data.mismatches === 0;
 
   return (
-    <AppShell>
-      <PageHeader
-        eyebrow="Audit"
-        title="Revenue consistency"
-        description="Compare per-flight payout from SimFly against what the hub credits you. Mismatches flag any flight where we under- or over-attribute PAX."
-      />
-
+    <>
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
         <Stat label="Flights examined" value={formatNumber(data.flightsExamined)} />
         <Stat label="Matches" value={formatNumber(data.matches)} tone="ok" />
@@ -149,7 +224,7 @@ function ConsistencyPage() {
       <p className="mono mt-4 text-[10px] uppercase tracking-widest text-muted-foreground">
         Scanned {data.scannedAirports} airports · {data.scannedAircraft} aircraft · {new Date(data.checkedAt).toLocaleTimeString()}
       </p>
-    </AppShell>
+    </>
   );
 }
 
