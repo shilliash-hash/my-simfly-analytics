@@ -22,6 +22,7 @@ type LayerState = {
   airports: boolean;
   aircraft: boolean;
   licenses: boolean;
+  inflight: boolean;
 };
 
 const DEFAULT_LAYERS: LayerState = {
@@ -29,6 +30,7 @@ const DEFAULT_LAYERS: LayerState = {
   airports: true,
   aircraft: false,
   licenses: false,
+  inflight: true,
 };
 
 function formatRemaining(rawMins: number) {
