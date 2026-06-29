@@ -379,7 +379,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routes, hubIcaos, geoQuery.data, aircraftPositions, licensePositions]);
+  }, [routes, hubIcaos, geoQuery.data, aircraftPositions, licensePositions, liveFlights]);
 
   // Cheap toggle: add/remove existing layer groups without rebuilding
   useEffect(() => {
