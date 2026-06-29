@@ -23,6 +23,7 @@ import type {
   VisitorHistoryPayload,
   XpByAsset,
 } from "./types";
+import { computeEta, uuidV7Ms } from "./aircraft-specs";
 
 /**
  * SimFly.io public API wrapper. Every endpoint we hit is unauthenticated.
@@ -1559,12 +1560,17 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
     );
     const seen = new Map<string, MyLiveFlight>();
     const me = username.toLowerCase();
+    const geo = await loadGeo().catch(() => new Map());
     for (const { icao, list } of results) {
       for (const f of list) {
         const isMine = f.username?.toLowerCase() === me;
         const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
         if (!isMine && !isMyPlane) continue;
         if (seen.has(f.id)) continue;
+        const departureMs = uuidV7Ms(f.id) ?? undefined;
+        const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
+        const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
+        const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO }) : null;
         seen.set(f.id, {
           id: f.id,
           aircraftICAO: f.aircraftICAO,
@@ -1576,6 +1582,9 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
           observedAt: icao,
           licenceCode: f.licence || undefined,
           pilotUsername: f.username,
+          departureMs,
+          etaMs: eta?.etaMs,
+          distanceNm: eta?.distanceNm,
         });
       }
     }
@@ -1595,6 +1604,7 @@ export const getMyHubsIncomingTraffic = createServerFn({ method: "GET" })
     const { username } = identity({ username: data.username });
     const me = username.toLowerCase();
     const icaos = (data.icaos ?? []).filter(Boolean).slice(0, 24);
+    const geo = await loadGeo().catch(() => new Map());
     const results = await Promise.all(
       icaos.map(async (icao) => {
         const res = await fetchJSON<{ data: RawLiveFlight[] }>(
@@ -1603,18 +1613,27 @@ export const getMyHubsIncomingTraffic = createServerFn({ method: "GET" })
         const list = (res?.data ?? [])
           .filter((f) => f.username?.toLowerCase() !== me)
           .filter((f) => f.destinationICAO === icao || f.originICAO === icao)
-          .map<AirportLiveVisitor>((f) => ({
-            id: f.id,
-            username: f.username,
-            usernonce: f.usernonce,
-            userAvatar: f.userAvatar,
-            aircraftName: f.aircraftName,
-            aircraftICAO: f.aircraftICAO,
-            origin: f.originICAO,
-            destination: f.destinationICAO,
-            sim: f.simKind,
-            tailNumber: f.tailNumber,
-          }));
+          .map<AirportLiveVisitor>((f) => {
+            const departureMs = uuidV7Ms(f.id) ?? undefined;
+            const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
+            const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
+            const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO }) : null;
+            return {
+              id: f.id,
+              username: f.username,
+              usernonce: f.usernonce,
+              userAvatar: f.userAvatar,
+              aircraftName: f.aircraftName,
+              aircraftICAO: f.aircraftICAO,
+              origin: f.originICAO,
+              destination: f.destinationICAO,
+              sim: f.simKind,
+              tailNumber: f.tailNumber,
+              departureMs,
+              etaMs: eta?.etaMs,
+              distanceNm: eta?.distanceNm,
+            };
+          });
         // De-dupe by flight id (same flight can appear on both endpoints).
         const seen = new Map<string, AirportLiveVisitor>();
         for (const v of list) if (!seen.has(v.id)) seen.set(v.id, v);
