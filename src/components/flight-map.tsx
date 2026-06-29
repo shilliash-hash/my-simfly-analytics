@@ -269,10 +269,10 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           marker.bindTooltip(
             `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
               <div style="font-weight:600">${esc(r.p.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.p.tailNumber || r.p.icao)}</div>
-              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
-              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
-              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#E2E8F0;font-weight:600">${esc(r.p.tailNumber || r.p.icao)}</div>
+              <div style="margin-top:3px"><span style="color:#E2E8F0;font-weight:600">Location:</span> ${esc(where)}</div>
+              <div><span style="color:#E2E8F0;font-weight:600">Status:</span> ${esc(status.label)}</div>
+              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
             { direction: "top", offset: L.point(0, -6) },
           );
@@ -306,10 +306,10 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           marker.bindTooltip(
             `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
               <div style="font-weight:600">${esc(r.l.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.l.code)} · Level ${r.l.level}</div>
-              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
-              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
-              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#E2E8F0;font-weight:600">${esc(r.l.code)} · Level ${r.l.level}</div>
+              <div style="margin-top:3px"><span style="color:#E2E8F0;font-weight:600">Location:</span> ${esc(where)}</div>
+              <div><span style="color:#E2E8F0;font-weight:600">Status:</span> ${esc(status.label)}</div>
+              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
             { direction: "top", offset: L.point(0, -6) },
           );
