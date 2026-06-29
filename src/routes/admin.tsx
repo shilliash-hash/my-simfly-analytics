@@ -192,6 +192,11 @@ function AdminTable({ token }: { token: string }) {
           {selected.size} selected
         </span>
         <BulkBtn label="Retry" disabled={!selected.size} onClick={() => runAction("retry", selectedList)} />
+        <BulkBtn
+          label="Retry @ current"
+          disabled={!selected.size}
+          onClick={() => runAction("retry_current", selectedList)}
+        />
         <BulkBtn label="Reset" disabled={!selected.size} onClick={() => runAction("reset", selectedList)} />
         <BulkBtn label="Cancel" disabled={!selected.size} onClick={() => runAction("cancel", selectedList)} />
         <BulkBtn
@@ -278,8 +283,14 @@ function AdminTable({ token }: { token: string }) {
                 <td className="px-3 py-2">
                   <div className="flex justify-end gap-1">
                     <RowBtn label="Retry" onClick={() => runAction("retry", [r.username])} />
+                    {(r.status === "stalled" || r.status === "failed" || r.status === "running") && (
+                      <RowBtn
+                        label="Retry @ current"
+                        onClick={() => runAction("retry_current", [r.username])}
+                      />
+                    )}
                     <RowBtn label="Reset" onClick={() => runAction("reset", [r.username])} />
-                    {r.status === "running" && (
+                    {(r.status === "running" || r.status === "stalled") && (
                       <RowBtn label="Cancel" onClick={() => runAction("cancel", [r.username])} />
                     )}
                     <RowBtn
@@ -297,6 +308,7 @@ function AdminTable({ token }: { token: string }) {
 
       <p className="text-[11px] text-muted-foreground">
         <strong>Retry</strong>: marks the job as running so the importer picks it up on the next tick.{" "}
+        <strong>Retry @ current</strong>: resumes a stalled job at the exact page that was being attempted, without resetting progress or imported flights.{" "}
         <strong>Reset</strong>: clears progress to page 0 (keeps imported flights).{" "}
         <strong>Cancel</strong>: flips a running job to failed so it stops being ticked.{" "}
         <strong>Delete</strong>: removes the progress record and (with confirmation) the imported historical flights.

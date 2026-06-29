@@ -44,7 +44,7 @@ export const listBackfills = createServerFn({ method: "POST" })
     return (rows ?? []) as unknown as BackfillStatusRow[];
   });
 
-export type AdminAction = "retry" | "reset" | "cancel" | "delete";
+export type AdminAction = "retry" | "retry_current" | "reset" | "cancel" | "delete";
 
 export const adminBackfillAction = createServerFn({ method: "POST" })
   .inputValidator(
@@ -114,6 +114,21 @@ export const adminBackfillAction = createServerFn({ method: "POST" })
           status: "running",
           error_message: null,
           started_at: cur.started_at ?? nowIso,
+          updated_at: nowIso,
+        };
+      }
+      if (data.action === "retry_current") {
+        // Resume at the exact page being attempted when the job stalled.
+        // current_page = last completed page, so the importer naturally
+        // picks up at current_page + 1 on the next tick. We bump
+        // last_page_at to give the stall detector a fresh window so the
+        // row doesn't immediately flip back to "stalled".
+        return {
+          ...cur,
+          status: "running",
+          error_message: null,
+          started_at: cur.started_at ?? nowIso,
+          last_page_at: nowIso,
           updated_at: nowIso,
         };
       }
