@@ -972,26 +972,30 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const VISITOR_PAGES = 25;
 
     const [visitorPerAirport, aircraftPerPlane] = await Promise.all([
-      Promise.all(
-        airports.map(async (ap) => {
-          const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-          );
-          const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
-          const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
-          for (const r of pages) {
-            if (!r) continue;
-            for (const f of r.flights ?? []) {
-              const n = normaliseHistFlight(f, ap.icao, username);
-              if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+      memo(`visitors-by-hub:${username}`, HEAVY_CACHE_TTL_MS, () =>
+        Promise.all(
+          airports.map(async (ap) => {
+            const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
+              `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
+            );
+            const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
+            const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+            for (const r of pages) {
+              if (!r) continue;
+              for (const f of r.flights ?? []) {
+                const n = normaliseHistFlight(f, ap.icao, username);
+                if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+              }
             }
-          }
-          return items;
-        }),
+            return items;
+          }),
+        ),
       ),
       // 3+ month aircraft backfill: any external flight on one of my airplanes
       // must be recovered even when neither airport is mine.
-      fetchAircraftOwnedVisitorBackfill(airplanes, username),
+      memo(`aircraft-backfill:${username}`, HEAVY_CACHE_TTL_MS, () =>
+        fetchAircraftOwnedVisitorBackfill(airplanes, username),
+      ),
     ]);
 
     const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.items];
