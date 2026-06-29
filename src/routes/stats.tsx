@@ -61,9 +61,13 @@ function Stats() {
               <XAxis dataKey="label" stroke="var(--muted-foreground)" fontSize={10} interval={0} angle={-20} textAnchor="end" height={60} />
               <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
               <Tooltip
-                contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                formatter={(v: number) => formatNumber(v) + " PAX"}
+                cursor={{ fill: "rgba(251,191,36,0.08)" }}
+                contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12, padding: "8px 12px" }}
+                labelStyle={{ color: "#FBBF24", fontWeight: 700, marginBottom: 4 }}
+                itemStyle={{ color: "#22D3EE", fontWeight: 600 }}
+                formatter={(v: number) => [formatNumber(v) + " PAX", "PAX"]}
               />
+
               <Bar dataKey="pax" radius={[4, 4, 0, 0]}>
                 {data.paxByAsset.map((d, i) => (
                   <Cell key={i} fill={d.kind === "hub" ? "var(--runway)" : d.kind === "aircraft" ? "var(--instrument)" : "var(--tier-platinum)"} />
