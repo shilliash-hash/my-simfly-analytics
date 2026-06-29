@@ -283,8 +283,14 @@ function AdminTable({ token }: { token: string }) {
                 <td className="px-3 py-2">
                   <div className="flex justify-end gap-1">
                     <RowBtn label="Retry" onClick={() => runAction("retry", [r.username])} />
+                    {(r.status === "stalled" || r.status === "failed" || r.status === "running") && (
+                      <RowBtn
+                        label="Retry @ current"
+                        onClick={() => runAction("retry_current", [r.username])}
+                      />
+                    )}
                     <RowBtn label="Reset" onClick={() => runAction("reset", [r.username])} />
-                    {r.status === "running" && (
+                    {(r.status === "running" || r.status === "stalled") && (
                       <RowBtn label="Cancel" onClick={() => runAction("cancel", [r.username])} />
                     )}
                     <RowBtn
