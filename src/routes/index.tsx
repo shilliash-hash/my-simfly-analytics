@@ -459,6 +459,8 @@ type FlightSnapshot = {
   tail?: string;
   licence?: string;
   sim?: string;
+  etaMs?: number;
+  distanceNm?: number;
 };
 
 function snapshotFromLive(f: MyLiveFlight): FlightSnapshot {
@@ -470,6 +472,8 @@ function snapshotFromLive(f: MyLiveFlight): FlightSnapshot {
     tail: f.tailNumber,
     licence: f.licenceCode,
     sim: f.sim,
+    etaMs: f.etaMs,
+    distanceNm: f.distanceNm,
   };
 }
 
