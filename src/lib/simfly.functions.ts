@@ -877,31 +877,36 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { flightToRow, rowToRawFlight, sanitiseFlightRowForDb } = await import("./backfill.functions");
 
-    const { data: cachedRows } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("*")
-      .eq("username", username)
-      .order("mission_start_ts", { ascending: false })
-      .limit(50000);
+    const { data: cachedRows } = await memo(
+      `db-flights:${username}`,
+      HEAVY_CACHE_TTL_MS,
+      () =>
+        supabaseAdmin
+          .from("simfly_flights")
+          .select("*")
+          .eq("username", username)
+          .order("mission_start_ts", { ascending: false })
+          .limit(20000),
+    );
 
     const cachedFlights: RawFlightLite[] = ((cachedRows ?? []) as Record<string, unknown>[]).map(
       rowToRawFlight,
     );
 
-    // Upsert page-1 freshness into the cache (non-blocking on errors).
+    // Upsert page-1 freshness into the cache. Fire-and-forget — never block
+    // the dashboard response on a Postgres round-trip.
     if (p1?.flights?.length) {
       const total = p1.flights.length;
       const fresh = p1.flights.map((f, index) =>
         sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username),
       );
-      try {
-        await supabaseAdmin
-          .from("simfly_flights")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true });
-      } catch (err) {
-        console.warn("[simfly] page-1 upsert failed", err);
-      }
+      void supabaseAdmin
+        .from("simfly_flights")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true })
+        .then(({ error }) => {
+          if (error) console.warn("[simfly] page-1 upsert failed", error);
+        });
     }
 
     const flights: RawFlightLite[] = Array.from(
