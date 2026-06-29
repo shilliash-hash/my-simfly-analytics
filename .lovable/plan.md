@@ -1,86 +1,46 @@
-## Goal
+## Why it's slow now
 
-Make the SimFly historical import (a) actually reach the very last logbook page for every pilot, (b) survive page refreshes / reconnects without restarting, and (c) show real live progress + ETA from a single source of truth.
+`getSimflyPayload` (the function backing the Overview page and most charts) runs a lot of work on every call:
 
-Today the import runs inline inside `getSimflyPayload` — every refresh re-fetches all pages from scratch, and if the serverless request hits its time budget it returns whatever it has, which is exactly why your graph and activity feed cut off around 23.06.2026.
+- For each owned airport: 25 sequential pages of `/airport/{icao}/flights`.
+- For each owned plane: up to ~180 pages of `/airplane/{id}/flights`, planes scanned 2 at a time.
+- A 50,000-row read from `simfly_flights`.
+- A page-1 upsert back into Postgres.
 
-## What changes
+On top of that, `BackfillIndicator` polls every 2s and, on every tick, invalidates `["simfly", keyTag]` whenever the imported-flight count changes — which during an active backfill means the whole heavy payload is re-fetched constantly. That's the main reason the site feels much slower than before the backfill work landed.
 
-### 1. Enable Lovable Cloud (required)
+## Fix
 
-We need durable storage for two things: the imported flights and the per-pilot backfill progress row. A stateless Cloudflare Worker cannot do "resume from page N" without it. Cloud also gives us the room to run the importer as a background job instead of inside the page request.
+Trade a little freshness on the visitor/aircraft scans for big speedups, and stop the refetch storm.
 
-### 2. New tables (public schema, RLS + GRANTs)
+1. **Server-side cache for the heavy scans** (`src/lib/simfly.functions.ts`)
+   - Add an in-process cache keyed by `username` for:
+     - the per-airport visitor pages result
+     - the `fetchAircraftOwnedVisitorBackfill` result
+     - the `simfly_flights` DB read
+   - TTL ~90s. On cache hit, skip the SimFly HTTP pages and the 50k-row DB read entirely.
+   - Live page-1 of the logbook (`/user/flights?fpage=1`) keeps being fetched every call so brand-new flights still appear immediately and are merged on top of cached history.
+   - Cache is per Worker isolate (no DB writes), so it self-evicts and doesn't need invalidation plumbing.
 
-```text
-backfill_progress
-  username (pk)         total_pages           current_page
-  flights_imported      flights_total_est     status (running|completed|failed|paused)
-  last_page_at          started_at            updated_at
-  error_message
+2. **Stop the tick-driven invalidation storm** (`src/components/backfill-progress.tsx`)
+   - Remove the `qc.invalidateQueries({ queryKey: ["simfly", keyTag] })` that fires on every tick when `flights_imported` changes.
+   - Instead, invalidate at most once every 60s while a backfill is running, and once when the backfill transitions to `completed`. That still surfaces new historical flights, just not 20–30× per minute.
 
-simfly_flights
-  username + flight_id (composite pk, dedupe across re-runs)
-  + all RawFlightLite columns we already consume
-  mission_start_ts indexed
-```
+3. **Lower the per-call work even on cache miss**
+   - Drop the `simfly_flights` select from `limit(50000)` to `limit(20000)` and only select the columns `rowToRawFlight` actually reads. (The cap is only hit by very heavy pilots and the extra rows aren't used for the 30-day chart.)
+   - Make the page-1 upsert fire-and-forget (don't `await`) so it never adds to user-visible latency.
 
-Both tables get `GRANT SELECT, INSERT, UPDATE ON ... TO authenticated` plus `GRANT ALL ... TO service_role`. RLS scopes rows to the viewer's username via a small `viewed_username` claim/header check — reads are public-by-username for the dashboard.
+4. **Client-side: longer `staleTime` on the main payload query**
+   - In the Overview/Activity/Stats query options for `["simfly", keyTag]`, set `staleTime: 60_000` so route remounts and tab focus don't trigger a full refetch within a minute.
 
-### 3. Background importer (server route)
+## Out of scope
 
-`POST /api/public/backfill/start` (signature-free, username in body) and `GET /api/public/backfill/status?username=`:
+- No schema changes, no new tables, no new cron.
+- No change to what data is shown — only how often it's re-fetched.
+- The persistent historical backfill keeps running exactly as today; only its UI-side side-effects on the dashboard change.
 
-- `start` upserts `backfill_progress` to `running`, discovers `totalPages` from `/user/flights?page=1`, and kicks off processing with `ctx.waitUntil(...)` so the Worker keeps draining pages after the HTTP response returns `202 Accepted`.
-- Pages are fetched in small concurrent batches (6 at a time). After each batch:
-  - new flights `upsert` into `simfly_flights` with `onConflict: username,flight_id, ignoreDuplicates:true`
-  - `current_page`, `flights_imported`, `last_page_at` are written to `backfill_progress`
-- On any caught error the row flips to `failed` with `error_message`; the next `start` call resumes from `current_page + 1` instead of page 1.
-- `status` returns the row as-is.
+## Expected outcome
 
-This is the exact "long job + waitUntil + DB-backed progress + client polls" pattern from the Lovable knowledge base.
-
-### 4. Reads come from the DB, not the live API
-
-`getSimflyPayload` stops paginating the logbook itself. It still calls the fast SimFly endpoints (profile, stats, assets, available PAX, live flights), but the historical `flights` array is loaded from `simfly_flights` for the viewed username. If the row is missing or older than ~5 minutes, the server fn fires `start` once (fire-and-forget) so a fresh visitor automatically triggers the backfill.
-
-Graphs, activity, payout matrix, aircraft analytics, airport analytics — all of them already consume `data.flights`, so they pick up the full history with no per-page changes.
-
-### 5. Live progress UI
-
-`BackfillProgress` is rewritten around a `useQuery` that polls `getBackfillStatus` every 2s while `status === "running"`. It shows the persisted fields exactly:
-
-```text
-Backfill Progress: Page 87 / 203
-Flights Imported: 696
-Progress: 43%
-ETA: ~3m 20s   (derived from pages/sec since started_at)
-```
-
-When `status === "completed"`, the indicator disappears on next refresh; the suspense fallback only blocks the very first load (before any rows exist). After that, refreshes return instantly from the DB even mid-import.
-
-### 6. Resume behaviour
-
-- Page refresh: status query immediately reads the persisted row, UI keeps counting from where it was; importer is still running in the worker.
-- Worker eviction / 502: next `status` poll sees `last_page_at` is stale (>30s) and `status === "running"` → client calls `start` again, server picks `current_page + 1` and continues.
-- "Force re-import" button on `/consistency` for manual full rebuild (sets `current_page = 0`, truncates `simfly_flights` for that username).
-
-## Technical notes
-
-- All new server logic uses TanStack `createServerFn` + one server route under `/api/public/backfill/*`. The route is public-by-design (no PII written, username is the only key).
-- Supabase access uses `requireSupabaseAuth` for the dashboard reads when signed in, and the server publishable client for the public-by-username reads used by the "view as pilot" feature.
-- `fetchAircraftOwnedVisitorBackfill` (aircraft visitor history) is migrated to the same job row so its progress contributes to the same percent.
-- No client-side `localStorage` for progress — the DB row is the only source of truth, matching the "survives browser restarts" requirement.
-
-## Files touched
-
-- new migration: `backfill_progress`, `simfly_flights` (+ GRANTs + RLS)
-- new: `src/routes/api/public/backfill/start.ts`, `src/routes/api/public/backfill/status.ts`
-- new: `src/lib/backfill.functions.ts` (`getBackfillStatus`, `triggerBackfill`)
-- edit: `src/lib/simfly.functions.ts` — drop inline pagination, read from DB, auto-trigger
-- edit: `src/components/backfill-progress.tsx` — real polling + persisted fields
-- edit: `src/routes/__root.tsx` — fallback only blocks first-ever load
-
-## Open question
-
-Do you want **one shared cache** (anyone viewing `@luigi` reuses the same imported rows — fastest, lowest API load) or **per-viewer isolation** (every dashboard user re-imports for themselves)? Shared is the right default for a public dashboard, but say the word if you'd rather scope rows by viewer.
+- First dashboard load: similar to today on cold cache, noticeably faster on warm cache (no 25×hubs + aircraft sweep).
+- Subsequent loads within ~90s: near-instant — just page-1 of the live logbook.
+- During an active backfill: dashboard stays responsive instead of re-running the heavy payload every couple of seconds.
