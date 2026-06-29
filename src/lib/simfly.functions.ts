@@ -426,18 +426,23 @@ function mapAirport(a: RawAssetAirport, flights: RawFlightLite[]): AirportExt {
   const now = Date.now();
   const wkAgo = now - 7 * 86_400_000;
   const moAgo = now - 30 * 86_400_000;
+  // Owner only earns their share of each flight's PAX through this airport.
+  // `percToUser` is the configured airport-owner cut (0–100). Fall back to a
+  // conservative default if the API omits it so we never over-report.
+  const shareRaw = a.percToUser ?? 0;
+  const share = shareRaw > 1 ? shareRaw / 100 : shareRaw; // tolerate 0–1 or 0–100
   let pax7d = 0;
   let pax30d = 0;
   let flights7d = 0;
   for (const f of flights) {
     if (f.departure_icao !== a.icao && f.destination_icao !== a.icao) continue;
     const ts = new Date(f.mission_start_ts).getTime();
-    if (Number.isFinite(ts)) {
-      if (ts >= moAgo) pax30d += f.pax || 0;
-      if (ts >= wkAgo) {
-        pax7d += f.pax || 0;
-        flights7d += 1;
-      }
+    if (!Number.isFinite(ts)) continue;
+    const ownerPax = (f.pax || 0) * share;
+    if (ts >= moAgo) pax30d += ownerPax;
+    if (ts >= wkAgo) {
+      pax7d += ownerPax;
+      flights7d += 1;
     }
   }
   const { tier, label } = tierFor(a.category);
@@ -463,6 +468,7 @@ function mapAirport(a: RawAssetAirport, flights: RawFlightLite[]): AirportExt {
     flights7d,
   };
 }
+
 
 function mapAirplane(a: RawAssetAirplane, flights: RawFlightLite[]): AircraftExt {
   const now = Date.now();
