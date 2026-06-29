@@ -277,7 +277,69 @@ async function upsertProgress(
   if (error) throw new Error(error.message ?? "Unable to update backfill progress.");
 }
 
-function flightToRow(username: string, f: RawFlightLite): Record<string, unknown> {
+const NON_NUMERIC_PLACEHOLDERS = new Set([
+  "",
+  "n/a",
+  "na",
+  "—",
+  "-",
+  "--",
+  "unknown",
+  "null",
+  "none",
+  "nan",
+]);
+
+/**
+ * Safely coerce arbitrary scraped values into a number or null.
+ * `invalid` is true when the value looked like it _should_ have been numeric
+ * but couldn't be parsed — the caller logs a structured diagnostic so we
+ * never crash a whole batch on a single "N/A" cell.
+ */
+function safeNumeric(raw: unknown): { value: number | null; invalid: boolean } {
+  if (raw === null || raw === undefined) return { value: null, invalid: false };
+  if (typeof raw === "number") {
+    return Number.isFinite(raw) ? { value: raw, invalid: false } : { value: null, invalid: true };
+  }
+  if (typeof raw === "boolean") return { value: raw ? 1 : 0, invalid: false };
+  const s = String(raw).trim();
+  if (NON_NUMERIC_PLACEHOLDERS.has(s.toLowerCase())) return { value: null, invalid: false };
+  const cleaned = s.replace(/,/g, "").replace(/[^0-9eE+\-.]/g, "").trim();
+  if (cleaned === "" || cleaned === "-" || cleaned === "+" || cleaned === ".") {
+    return { value: null, invalid: true };
+  }
+  const n = Number(cleaned);
+  return Number.isFinite(n) ? { value: n, invalid: false } : { value: null, invalid: true };
+}
+
+type FlightConvertCtx = { page: number; index: number; total: number };
+
+function flightToRow(
+  username: string,
+  f: RawFlightLite,
+  ctx?: FlightConvertCtx,
+): Record<string, unknown> {
+  const NUMERIC_COLS: Array<[string, unknown]> = [
+    ["landing_rate", f.landing_rate],
+    ["total_distance", f.total_distance],
+    ["total_reward", f.total_reward],
+    ["pax", f.pax],
+    ["xp", f.xp],
+    ["licence_rank", f.licence_rank],
+  ];
+  const numeric: Record<string, number | null> = {};
+  for (const [col, raw] of NUMERIC_COLS) {
+    const { value, invalid } = safeNumeric(raw);
+    if (invalid) {
+      const where = ctx
+        ? `mission=${f.id ?? "?"} page=${ctx.page} flight=${ctx.index + 1}/${ctx.total}`
+        : `mission=${f.id ?? "?"}`;
+      console.warn(
+        `[backfill:${username}] invalid numeric — ${where} column=${col} value=${JSON.stringify(raw)} → storing NULL`,
+      );
+    }
+    numeric[col] = value;
+  }
   return {
     username,
     flight_id: f.id,
@@ -288,17 +350,12 @@ function flightToRow(username: string, f: RawFlightLite): Record<string, unknown
     aircraft_tail_number: f.aircraft_tailNumber ?? null,
     departure_icao: f.departure_icao ?? null,
     destination_icao: f.destination_icao ?? null,
-    landing_rate: f.landing_rate ?? null,
-    total_distance: f.total_distance ?? null,
     flight_time: f.flight_time ?? null,
-    total_reward: f.total_reward ?? null,
-    pax: f.pax ?? null,
-    xp: f.xp ?? null,
     licence: f.licence ?? null,
-    licence_rank: f.licence_rank ?? null,
     licence_rank_name: f.licence_rankName ?? null,
     origin_name: f.origin?.name ?? null,
     destination_name: f.destination?.name ?? null,
+    ...numeric,
     raw: JSON.parse(JSON.stringify(f)),
   };
 }
