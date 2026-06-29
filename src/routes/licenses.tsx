@@ -5,6 +5,18 @@ import { getSimflyPayload } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import type { LicenseTimer } from "@/lib/types";
+import { ShieldCheck } from "lucide-react";
+
+function LevelBadge({ level }: { level: number }) {
+  return (
+    <div className="relative grid h-12 w-12 shrink-0 place-items-center rounded-md border border-runway/30 bg-gradient-to-br from-runway/15 to-instrument/10 text-runway shadow-[0_0_0_1px_rgba(34,211,238,0.08)_inset]">
+      <ShieldCheck className="h-6 w-6" strokeWidth={1.5} />
+      <span className="mono absolute -bottom-1 -right-1 grid h-5 min-w-5 place-items-center rounded-full border border-border bg-background px-1 text-[10px] font-bold text-instrument">
+        {level}
+      </span>
+    </div>
+  );
+}
 
 export const Route = createFileRoute("/licenses")({
   component: LicensesPage,
@@ -54,17 +66,7 @@ function LicensesPage() {
             className="panel group block rounded-xl p-5 transition-colors hover:bg-secondary/40"
           >
             <div className="flex items-start gap-3">
-              {l.imageSrc && (
-                <img
-                  src={
-                    l.imageSrc.startsWith("http")
-                      ? l.imageSrc
-                      : `https://simfly.io${l.imageSrc}`
-                  }
-                  alt=""
-                  className="h-12 w-12 shrink-0 rounded-md object-cover"
-                />
-              )}
+              <LevelBadge level={l.level} />
               <div className="min-w-0 flex-1">
                 <div className="font-display truncate text-base font-semibold">{l.name}</div>
                 <div className="mono text-[11px] uppercase tracking-widest text-muted-foreground">
