@@ -345,11 +345,16 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           dashArray: "4 6",
           interactive: false,
         }).addTo(inflightLayer);
+        const etaLine = f.etaMs
+          ? `<div style="margin-top:4px"><span style="color:#FFFFFF;font-weight:600">Estimated Arrival:</span> <span style="color:#FACC15;font-weight:800">${esc(formatEtaUtc(f.etaMs))}</span></div>
+             <div style="color:#7DD3FC;font-weight:700">${esc(formatRemainingFromNow(f.etaMs))}</div>`
+          : "";
         const tipHtml = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
           <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">${esc(f.tailNumber || f.aircraftICAO)}</div>
           <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(f.aircraftName)}</div>
           <div style="margin-top:4px"><span style="color:#FFFFFF;font-weight:600">Route:</span> <span style="color:#7DD3FC;font-weight:700">${esc(f.origin)} → ${esc(f.destination)}</span></div>
           ${f.pilotUsername ? `<div><span style="color:#FFFFFF;font-weight:600">Pilot:</span> <span style="color:#7DD3FC;font-weight:700">@${esc(f.pilotUsername)}</span></div>` : ""}
+          ${etaLine}
         </div>`;
         const oM = L.marker([o.lat, o.lon], { icon: makePlaneIcon(takeoffSvg), zIndexOffset: 500 });
         oM.bindTooltip(tipHtml, { direction: "top", offset: L.point(0, -10), className: "simfly-tip" });
