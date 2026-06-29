@@ -31,30 +31,36 @@ const DEFAULT_LAYERS: LayerState = {
   licenses: false,
 };
 
+function formatRemaining(rawMins: number) {
+  const mins = Math.max(0, Math.floor(rawMins));
+  if (mins <= 0) return "Ready shortly";
+  if (mins < 60) return `Ready in ${mins} min`;
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return `Ready in ${h}h ${m}m`;
+}
+
 function aircraftStatus(p: AircraftExt, live?: MyLiveFlight) {
-  if (live) return { label: "Active Flight", color: "text-runway", remaining: "" };
+  if (live) return { label: "Active Flight", remaining: "" };
   if (p.inGroundOperation) {
     let remaining = "";
     if (p.groundedUntil) {
-      const mins = Math.max(0, Math.round((new Date(p.groundedUntil).getTime() - Date.now()) / 60000));
-      remaining = mins > 0 ? `Ready in ${mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`}` : "Ready shortly";
+      const mins = (new Date(p.groundedUntil).getTime() - Date.now()) / 60000;
+      remaining = formatRemaining(mins);
     }
-    return { label: "Ground Operations", color: "text-instrument", remaining };
+    return { label: "Ground Operations", remaining };
   }
-  return { label: "Ready", color: "text-runway", remaining: "" };
+  return { label: "Ready", remaining: "" };
 }
 
 function licenseStatus(l: LicenseExt, live?: MyLiveFlight) {
-  if (live) return { label: "Active Flight", color: "text-runway", remaining: "" };
+  if (live) return { label: "Active Flight", remaining: "" };
   const pending = l.timers.filter((t) => t.minutesAvailable < t.minutesCap);
-  if (pending.length === 0) return { label: "Ready", color: "text-runway", remaining: "" };
+  if (pending.length === 0) return { label: "Ready", remaining: "" };
   const soonest = pending.reduce((a, b) => (a.minsUntilNextRestore < b.minsUntilNextRestore ? a : b));
-  const mins = soonest.minsUntilNextRestore;
-  const remaining = mins > 0
-    ? `Ready in ${mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`}`
-    : "Ready shortly";
+  const remaining = formatRemaining(soonest.minsUntilNextRestore);
   const allEmpty = l.timers.every((t) => t.minutesAvailable === 0);
-  return { label: allEmpty ? "Cooldown" : "Ready", color: allEmpty ? "text-instrument" : "text-runway", remaining };
+  return { label: allEmpty ? "Cooldown" : "Ready", remaining };
 }
 
 const esc = (s: string) =>
@@ -261,12 +267,12 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
             fillOpacity: 0.95,
           });
           marker.bindTooltip(
-            `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
-              <div style="font-weight:600">${esc(r.p.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.p.tailNumber || r.p.icao)}</div>
-              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
-              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
-              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;color:#F8FAFC">
+              <div style="font-weight:700;font-size:13px">${esc(r.p.name)}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#22D3EE;font-weight:600">${esc(r.p.tailNumber || r.p.icao)}</div>
+              <div style="margin-top:4px"><span style="color:#CBD5E1">Location:</span> <span style="color:#FFFFFF;font-weight:600">${esc(where)}</span></div>
+              <div><span style="color:#CBD5E1">Status:</span> <span style="color:#FFFFFF;font-weight:600">${esc(status.label)}</span></div>
+              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
             { direction: "top", offset: L.point(0, -6) },
           );
@@ -298,12 +304,12 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
           });
           const marker = L.marker([g.lat + offset, g.lon + offset], { icon });
           marker.bindTooltip(
-            `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
-              <div style="font-weight:600">${esc(r.l.name)}</div>
-              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.l.code)} · Level ${r.l.level}</div>
-              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
-              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
-              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+            `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;color:#F8FAFC">
+              <div style="font-weight:700;font-size:13px">${esc(r.l.name)}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#FACC15;font-weight:600">${esc(r.l.code)} · Level ${r.l.level}</div>
+              <div style="margin-top:4px"><span style="color:#CBD5E1">Location:</span> <span style="color:#FFFFFF;font-weight:600">${esc(where)}</span></div>
+              <div><span style="color:#CBD5E1">Status:</span> <span style="color:#FFFFFF;font-weight:600">${esc(status.label)}</span></div>
+              ${status.remaining ? `<div style="color:#FBBF24;font-weight:700">${esc(status.remaining)}</div>` : ""}
             </div>`,
             { direction: "top", offset: L.point(0, -6) },
           );
