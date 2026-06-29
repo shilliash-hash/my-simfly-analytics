@@ -86,7 +86,12 @@ function Overview() {
       />
 
 
-      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+      <CurrentFlightHero
+        live={myFlights[0] ?? null}
+        lastFlight={data.flights[0] ?? null}
+      />
+
+      <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Available PAX"
           value={formatNumber(Math.round(data.availablePax))}
@@ -104,12 +109,6 @@ function Overview() {
           value={formatNumber(data.paxLast30d)}
           hint="Earned this month"
           icon={Coins}
-        />
-        <StatCard
-          label="Pilot level"
-          value={`L${data.level}`}
-          hint={`${formatNumber(data.xp)} XP`}
-          icon={Trophy}
         />
         <StatCard
           label="Aircraft"
