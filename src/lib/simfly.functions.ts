@@ -861,7 +861,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // Page 1 of the live logbook is always merged on top so brand-new flights
     // appear immediately, and is upserted into the cache for the next visit.
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { rowToRawFlight } = await import("./backfill.functions");
+    const { flightToRow, rowToRawFlight } = await import("./backfill.functions");
 
     const { data: cachedRows } = await supabaseAdmin
       .from("simfly_flights")
@@ -876,29 +876,8 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     // Upsert page-1 freshness into the cache (non-blocking on errors).
     if (p1?.flights?.length) {
-      const fresh = p1.flights.map((f) => ({
-        username,
-        flight_id: f.id,
-        mission_start_ts: f.mission_start_ts || null,
-        aircraft: f.aircraft ?? null,
-        aircraft_icao: f.aircraft_icao ?? null,
-        aircraft_id: f.aircraftId ?? null,
-        aircraft_tail_number: f.aircraft_tailNumber ?? null,
-        departure_icao: f.departure_icao ?? null,
-        destination_icao: f.destination_icao ?? null,
-        landing_rate: f.landing_rate ?? null,
-        total_distance: f.total_distance ?? null,
-        flight_time: f.flight_time ?? null,
-        total_reward: f.total_reward ?? null,
-        pax: f.pax ?? null,
-        xp: f.xp ?? null,
-        licence: f.licence ?? null,
-        licence_rank: f.licence_rank ?? null,
-        licence_rank_name: f.licence_rankName ?? null,
-        origin_name: f.origin?.name ?? null,
-        destination_name: f.destination?.name ?? null,
-        raw: JSON.parse(JSON.stringify(f)),
-      }));
+      const total = p1.flights.length;
+      const fresh = p1.flights.map((f, index) => flightToRow(username, f, { page: 1, index, total }));
       try {
         await supabaseAdmin
           .from("simfly_flights")
