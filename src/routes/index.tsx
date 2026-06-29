@@ -438,61 +438,68 @@ function IncomingTraffic({
   );
 }
 
+type FlightSnapshot = {
+  id: string;
+  origin: string;
+  destination: string;
+  aircraft: string;
+  tail?: string;
+  licence?: string;
+  sim?: string;
+};
+
+function snapshotFromLive(f: MyLiveFlight): FlightSnapshot {
+  return {
+    id: f.id,
+    origin: f.origin,
+    destination: f.destination,
+    aircraft: f.aircraftICAO,
+    tail: f.tailNumber,
+    licence: f.licenceCode,
+    sim: f.sim,
+  };
+}
+
 function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; lastFlight: FlightLog | null }) {
-  const isLive = !!live;
+  // Snapshot of the currently-displayed mission. We freeze it on first sight
+  // (so a mid-flight aircraft/registration swap in SimFly's live feed cannot
+  // mutate the card) and only replace it when a NEW mission id is detected.
+  const [snapshot, setSnapshot] = useState<FlightSnapshot | null>(() =>
+    live ? snapshotFromLive(live) : null,
+  );
   const [expanded, setExpanded] = useState(false);
-  if (!live && !lastFlight) return null;
 
-  const origin = live?.origin ?? lastFlight?.departure ?? "—";
-  const destination = live?.destination ?? lastFlight?.destination ?? "—";
-  const aircraft = live?.aircraftICAO ?? lastFlight?.aircraftName ?? "—";
-  const tail = live?.tailNumber ?? lastFlight?.tailNumber;
-  const licence = live?.licenceCode ?? lastFlight?.licenceCode;
+  useEffect(() => {
+    if (live && live.id !== snapshot?.id) {
+      // New mission started → swap snapshot (and reset expand state).
+      setSnapshot(snapshotFromLive(live));
+      setExpanded(false);
+    }
+  }, [live, snapshot?.id]);
 
-  // Live flight: keep the expanded banner with progress.
-  if (isLive) {
-    return (
-      <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-runway">
-            <Plane className="h-3.5 w-3.5" />
-            Current flight
-          </div>
-          <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-runway shadow-[0_0_8px_var(--runway)]" />
-            <span className="text-runway">Live</span>
-          </div>
-        </div>
-
-        <div className="mt-2 flex items-center gap-3">
-          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{origin}</div>
-          <div className="relative flex-1">
-            <div className="h-px w-full bg-gradient-to-r from-runway/40 via-runway/30 to-instrument/40" />
-            <Plane
-              className="absolute top-1/2 h-4 w-4 text-runway"
-              style={{ left: "50%", transform: "translate(-50%, -50%)" }}
-            />
-          </div>
-          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{destination}</div>
-        </div>
-
-        <div className="mono mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-muted-foreground">
-          <span className="text-foreground">{aircraft}</span>
-          {tail && <span>· {tail}</span>}
-          {licence && (
-            <span className="inline-flex items-center gap-1">
-              · <IdCard className="h-3 w-3" /> {licence}
-            </span>
-          )}
-          {live?.sim && <span>· {live.sim}</span>}
-          <span className="ml-auto text-runway/80">En route</span>
-        </div>
-      </section>
-    );
+  // Phase 1: live mission, snapshot matches → "EN ROUTE" expanded banner.
+  if (live && snapshot && live.id === snapshot.id) {
+    return <ExpandedBanner snap={snapshot} status="enroute" />;
   }
 
-  // Completed flight: compact single-row banner, click to expand.
+  // Phase 2: live exists but snapshot just rotated (rare, between renders).
+  if (live) {
+    return <ExpandedBanner snap={snapshotFromLive(live)} status="enroute" />;
+  }
+
+  // Phase 3: no live, but we have a snapshot from the last observed mission.
+  // Keep it frozen as "ARRIVED" until a brand-new mission appears.
+  if (snapshot) {
+    return <ExpandedBanner snap={snapshot} status="arrived" />;
+  }
+
+  // Phase 4: cold start with no live and no prior snapshot → compact last-flight row.
   if (!lastFlight) return null;
+  const origin = lastFlight.departure;
+  const destination = lastFlight.destination;
+  const aircraft = lastFlight.aircraftName;
+  const tail = lastFlight.tailNumber;
+  const licence = lastFlight.licenceCode;
   return (
     <section className="panel mb-4 overflow-hidden rounded-xl">
       <button
@@ -544,6 +551,56 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enroute" | "arrived" }) {
+  const isLive = status === "enroute";
+  return (
+    <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className={`mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest ${isLive ? "text-runway" : "text-instrument"}`}>
+          <Plane className="h-3.5 w-3.5" />
+          {isLive ? "Current flight" : "Last flight"}
+        </div>
+        <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${
+              isLive
+                ? "animate-pulse bg-runway shadow-[0_0_8px_var(--runway)]"
+                : "bg-instrument shadow-[0_0_8px_var(--instrument)]"
+            }`}
+          />
+          <span className={isLive ? "text-runway" : "text-instrument"}>{isLive ? "Live" : "Arrived"}</span>
+        </div>
+      </div>
+
+      <div className="mt-2 flex items-center gap-3">
+        <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.origin}</div>
+        <div className="relative flex-1">
+          <div className={`h-px w-full ${isLive ? "bg-gradient-to-r from-runway/40 via-runway/30 to-instrument/40" : "bg-gradient-to-r from-instrument/30 via-instrument/20 to-instrument/30"}`} />
+          <Plane
+            className={`absolute top-1/2 h-4 w-4 ${isLive ? "text-runway" : "text-instrument"}`}
+            style={{ left: isLive ? "50%" : "100%", transform: "translate(-50%, -50%)" }}
+          />
+        </div>
+        <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.destination}</div>
+      </div>
+
+      <div className="mono mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+        <span className="text-foreground">{snap.aircraft}</span>
+        {snap.tail && <span>· {snap.tail}</span>}
+        {snap.licence && (
+          <span className="inline-flex items-center gap-1">
+            · <IdCard className="h-3 w-3" /> {snap.licence}
+          </span>
+        )}
+        {snap.sim && <span>· {snap.sim}</span>}
+        <span className={`ml-auto ${isLive ? "text-runway/80" : "text-instrument/80"}`}>
+          {isLive ? "En route" : "Arrived"}
+        </span>
+      </div>
     </section>
   );
 }
