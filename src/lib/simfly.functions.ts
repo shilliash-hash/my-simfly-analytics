@@ -1560,12 +1560,17 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
     );
     const seen = new Map<string, MyLiveFlight>();
     const me = username.toLowerCase();
+    const geo = await loadGeo().catch(() => new Map());
     for (const { icao, list } of results) {
       for (const f of list) {
         const isMine = f.username?.toLowerCase() === me;
         const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
         if (!isMine && !isMyPlane) continue;
         if (seen.has(f.id)) continue;
+        const departureMs = uuidV7Ms(f.id) ?? undefined;
+        const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
+        const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
+        const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO }) : null;
         seen.set(f.id, {
           id: f.id,
           aircraftICAO: f.aircraftICAO,
@@ -1577,6 +1582,9 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
           observedAt: icao,
           licenceCode: f.licence || undefined,
           pilotUsername: f.username,
+          departureMs,
+          etaMs: eta?.etaMs,
+          distanceNm: eta?.distanceNm,
         });
       }
     }
