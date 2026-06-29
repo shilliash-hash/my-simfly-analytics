@@ -630,6 +630,14 @@ function CurrentFlightHero({
 
 function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enroute" | "arrived" }) {
   const isLive = status === "enroute";
+  // Tick once a minute so "remaining" stays fresh while en route.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!isLive || !snap.etaMs) return;
+    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    return () => clearInterval(t);
+  }, [isLive, snap.etaMs]);
+  const showEta = isLive && !!snap.etaMs;
   return (
     <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3">
       <div className="flex items-center justify-between gap-3">
@@ -674,6 +682,21 @@ function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enrou
           {isLive ? "En route" : "Arrived"}
         </span>
       </div>
+
+      {showEta && (
+        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2 text-xs">
+          <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">ETA</span>
+          <span className="font-display text-sm font-semibold text-runway">{formatEtaUtc(snap.etaMs!)}</span>
+          <span className="mono text-[11px] uppercase tracking-widest text-foreground">
+            {formatRemainingFromNow(snap.etaMs!)}
+          </span>
+          {snap.distanceNm && (
+            <span className="mono ml-auto text-[10px] uppercase tracking-widest text-muted-foreground">
+              {Math.round(snap.distanceNm)} NM
+            </span>
+          )}
+        </div>
+      )}
     </section>
   );
 }
