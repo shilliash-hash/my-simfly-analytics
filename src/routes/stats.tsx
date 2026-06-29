@@ -153,7 +153,7 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
               Visitor PAX
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--foreground)]" />
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ background: "#FBBF24" }} />
               Total PAX
             </span>
           </div>
