@@ -552,43 +552,118 @@ export const tickBackfill = createServerFn({ method: "POST" })
     const startPage = row.current_page + 1;
     const endPage = Math.min(row.total_pages, startPage + PAGES_PER_TICK - 1);
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
-    const urls = Array.from(
-      { length: endPage - startPage + 1 },
-      (_, i) => `${SIMFLY_BASE}/user/flights?${qs}&fpage=${startPage + i}`,
-    );
 
-    let pages: (RawFlightsPage | null)[] = [];
-    try {
-      pages = await fetchPages<RawFlightsPage>(urls, TICK_CONCURRENCY);
-    } catch (err) {
-      const failed = {
-        ...row,
-        status: "failed" as const,
-        error_message: err instanceof Error ? err.message : String(err),
-        updated_at: new Date().toISOString(),
-      };
-      await upsertProgress(db, failed);
-      return failed;
+    logImport(username, `Tick start — pages ${startPage}..${endPage} of ${row.total_pages}`, {
+      current_page: row.current_page,
+      flights_imported: row.flights_imported,
+    });
+
+    // Per-page fetch with detailed logging. We still parallelise via a
+    // concurrency-bounded pool, but log start/download/parse/process for each.
+    type PageOutcome =
+      | { ok: true; page: number; data: RawFlightsPage }
+      | { ok: false; page: number; reason: string; elapsedMs: number; missionId?: string };
+
+    const outcomes: PageOutcome[] = [];
+    let pageCursor = 0;
+    const pageNumbers = Array.from({ length: endPage - startPage + 1 }, (_, i) => startPage + i);
+
+    async function processOnePage(pageNum: number): Promise<PageOutcome> {
+      const url = `${SIMFLY_BASE}/user/flights?${qs}&fpage=${pageNum}`;
+      const t0 = Date.now();
+      logImport(username, `Starting page ${pageNum}`);
+      logImport(username, `Downloading page ${pageNum}...`);
+      try {
+        const data = await fetchJSONWithRetry<RawFlightsPage>(url, 5);
+        if (!data || !Array.isArray(data.flights)) {
+          const elapsedMs = Date.now() - t0;
+          logImport(username, `Page ${pageNum} FAILED to download after ${elapsedMs}ms`);
+          return { ok: false, page: pageNum, reason: "fetch-failed-or-empty", elapsedMs };
+        }
+        logImport(username, `Downloaded page ${pageNum} successfully (${Date.now() - t0}ms)`);
+        logImport(username, `Found ${data.flights.length} flights on page ${pageNum}`);
+        for (let i = 0; i < data.flights.length; i++) {
+          const f = data.flights[i];
+          logImport(
+            username,
+            `Processing flight ${i + 1}/${data.flights.length} on page ${pageNum} (id=${f.id})`,
+          );
+        }
+        return { ok: true, page: pageNum, data };
+      } catch (err) {
+        const elapsedMs = Date.now() - t0;
+        const stack = err instanceof Error ? err.stack : String(err);
+        console.error(
+          `[backfill:${username}] EXCEPTION on page ${pageNum} after ${elapsedMs}ms during fetch/parse`,
+          { stack, url },
+        );
+        return {
+          ok: false,
+          page: pageNum,
+          reason: err instanceof Error ? err.message : String(err),
+          elapsedMs,
+        };
+      }
     }
 
-    const failedPage = pages.findIndex((p) => !p || !Array.isArray(p.flights));
-    if (failedPage >= 0) {
+    await Promise.all(
+      Array.from({ length: Math.min(TICK_CONCURRENCY, pageNumbers.length) }, async () => {
+        while (pageCursor < pageNumbers.length) {
+          const idx = pageCursor++;
+          const r = await processOnePage(pageNumbers[idx]);
+          outcomes.push(r);
+        }
+      }),
+    );
+
+    outcomes.sort((a, b) => a.page - b.page);
+    const firstFailure = outcomes.find((o) => !o.ok) as Extract<PageOutcome, { ok: false }> | undefined;
+    if (firstFailure) {
+      logImport(username, `Page ${firstFailure.page} failed — not advancing progress`, {
+        reason: firstFailure.reason,
+        elapsedMs: firstFailure.elapsedMs,
+      });
       const retrying: BackfillStatusRow = {
         ...row,
         status: "running",
-        error_message: `Temporary SimFly fetch failure around page ${startPage + failedPage}; retrying without advancing progress.`,
+        error_message: `Page ${firstFailure.page} failed (${firstFailure.reason}) after ${firstFailure.elapsedMs}ms; retrying on next tick.`,
         updated_at: new Date().toISOString(),
       };
       await upsertProgress(db, retrying);
-      return retrying;
+      return decorate(retrying);
     }
 
-    const rowsToInsert = pages
-      .flatMap((p) => p?.flights ?? [])
-      .map((f) => flightToRow(username, f));
+    const rowsToInsert: Record<string, unknown>[] = [];
+    for (const o of outcomes) {
+      if (!o.ok) continue;
+      for (const f of o.data.flights) rowsToInsert.push(flightToRow(username, f));
+    }
 
     if (rowsToInsert.length) {
-      await upsertFlightRows(db, rowsToInsert);
+      logImport(username, `Writing ${rowsToInsert.length} flight rows for pages ${startPage}..${endPage} to database`);
+      const tDb = Date.now();
+      try {
+        await upsertFlightRows(db, rowsToInsert);
+      } catch (err) {
+        const stack = err instanceof Error ? err.stack : String(err);
+        console.error(
+          `[backfill:${username}] EXCEPTION writing pages ${startPage}..${endPage} to DB after ${Date.now() - tDb}ms`,
+          { stack, operation: "upsert simfly_flights", rowCount: rowsToInsert.length },
+        );
+        const failed: BackfillStatusRow = {
+          ...row,
+          status: "failed",
+          error_message: `DB write failed for pages ${startPage}..${endPage}: ${err instanceof Error ? err.message : String(err)}`,
+          updated_at: new Date().toISOString(),
+        };
+        await upsertProgress(db, failed);
+        return decorate(failed);
+      }
+      logImport(username, `DB write OK (${Date.now() - tDb}ms)`);
+    }
+
+    for (const o of outcomes) {
+      if (o.ok) logImport(username, `Page ${o.page} completed`);
     }
 
     const newImported = await countCachedFlights(db, username);
@@ -611,8 +686,13 @@ export const tickBackfill = createServerFn({ method: "POST" })
       next.current_page = 0;
       next.last_page_at = null;
     }
+    logImport(username, `Tick end — advanced to page ${advanced}${done ? " (done)" : `, moving to page ${advanced + 1}`}`, {
+      imported: newImported,
+      status: next.status,
+    });
     await upsertProgress(db, next);
-    return next;
+    return decorate(next);
+  });
   });
 
 /**
