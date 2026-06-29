@@ -192,6 +192,11 @@ function AdminTable({ token }: { token: string }) {
           {selected.size} selected
         </span>
         <BulkBtn label="Retry" disabled={!selected.size} onClick={() => runAction("retry", selectedList)} />
+        <BulkBtn
+          label="Retry @ current"
+          disabled={!selected.size}
+          onClick={() => runAction("retry_current", selectedList)}
+        />
         <BulkBtn label="Reset" disabled={!selected.size} onClick={() => runAction("reset", selectedList)} />
         <BulkBtn label="Cancel" disabled={!selected.size} onClick={() => runAction("cancel", selectedList)} />
         <BulkBtn
