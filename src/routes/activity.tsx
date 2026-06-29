@@ -64,14 +64,6 @@ function ActivityFeed() {
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
-  const { keyTag, payload } = useSimflyArgs();
-  const { data } = useSuspenseQuery(
-    queryOptions({
-      queryKey: ["simfly", keyTag],
-      queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30_000,
-    }),
-  );
   const [filter, setFilter] = useState<"all" | "visitors" | ActivityKind>("all");
   const [page, setPage] = useState(0);
   const [hydrated, setHydrated] = useState(false);
