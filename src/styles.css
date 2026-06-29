@@ -138,3 +138,21 @@
     background-image: linear-gradient(90deg, transparent, rgba(34, 211, 238, 0.4), transparent);
   }
 }
+
+/* Leaflet tooltip — dark grey popup for SimFly map */
+.leaflet-tooltip.simfly-tip {
+  background: #1F2937;
+  color: #F8FAFC;
+  border: 1px solid rgba(250, 204, 21, 0.35);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px -8px rgba(0, 0, 0, 0.6);
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+.leaflet-tooltip.simfly-tip::before {
+  border-top-color: #1F2937 !important;
+  border-bottom-color: #1F2937 !important;
+  border-left-color: #1F2937 !important;
+  border-right-color: #1F2937 !important;
+}
+
