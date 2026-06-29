@@ -44,7 +44,7 @@ export const listBackfills = createServerFn({ method: "POST" })
     return (rows ?? []) as unknown as BackfillStatusRow[];
   });
 
-export type AdminAction = "retry" | "reset" | "cancel" | "delete";
+export type AdminAction = "retry" | "retry_current" | "reset" | "cancel" | "delete";
 
 export const adminBackfillAction = createServerFn({ method: "POST" })
   .inputValidator(
