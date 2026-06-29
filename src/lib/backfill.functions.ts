@@ -515,14 +515,17 @@ async function lookupNonceFromSkyRank(username: string): Promise<string | null> 
       success?: boolean;
       content?: { ranks?: { username?: string; usernonce?: number }[] };
     }>(url, 4);
+    // SimFly usernames are case-sensitive — require an EXACT match so
+    // `Shill` and `shill` are not silently aliased to the same pilot.
     const hit = (data?.content?.ranks ?? []).find(
-      (r) => (r.username ?? "").toLowerCase() === username.toLowerCase(),
+      (r) => (r.username ?? "") === username,
     );
     const n = hit?.usernonce;
     if (typeof n === "number" && Number.isFinite(n) && n > 0) return String(n);
   }
   return null;
 }
+
 
 async function resolvePilotNonce(username: string): Promise<string | null> {
   if (username.toLowerCase() === DEFAULT_USERNAME.toLowerCase()) return DEFAULT_NONCE;
@@ -580,32 +583,53 @@ export const tickBackfill = createServerFn({ method: "POST" })
 
     let row = (existing as BackfillStatusRow | null) ?? null;
 
+    const NOT_FOUND_MESSAGE =
+      "SimFly user not found. Please verify the username, including uppercase and lowercase characters. Usernames are case-sensitive.";
+
+    // PRE-VALIDATION: never write to the database for an unverified pilot.
+    // If the username can't be resolved on SimFly (wrong case, doesn't
+    // exist, no public logbook) we return a synthetic "failed" row that is
+    // NOT persisted. No backfill_progress row, no flights, no placeholder
+    // data is created.
     if (!nonce) {
-      const failed: BackfillStatusRow = {
-        ...(row ?? emptyRow(username)),
-        username,
+      if (row) {
+        // An existing record (from a previous successful import) is left
+        // alone — only the live response signals the validation failure.
+        return decorate({
+          ...row,
+          status: "failed",
+          error_message: NOT_FOUND_MESSAGE,
+        });
+      }
+      return decorate({
+        ...emptyRow(username),
         status: "failed",
-        error_message: `Could not resolve a public logbook for @${username}. The SimFly Sky Ranking has no entry for this pilot — check the username spelling.`,
-        updated_at: new Date().toISOString(),
-      };
-      await upsertProgress(db, failed);
-      return failed;
+        error_message: NOT_FOUND_MESSAGE,
+      });
     }
 
-    // First tick (or row missing) — discover totals.
+    // First tick (or row missing) — discover totals. The public logbook
+    // must be reachable BEFORE we create any persistent records.
     if (!row || row.total_pages <= 0) {
       const disc = await discoverTotalPages(username, nonce);
-      if (disc.totalPages <= 0) {
-        const failed: BackfillStatusRow = {
+      if (disc.totalPages <= 0 || !disc.firstPage) {
+        // Public logbook is unreachable → treat as "user not found".
+        // Critically: do NOT persist a backfill_progress row.
+        if (row) {
+          return decorate({
+            ...row,
+            status: "failed",
+            error_message: NOT_FOUND_MESSAGE,
+          });
+        }
+        return decorate({
           ...emptyRow(username),
           status: "failed",
-          error_message: `Unable to reach SimFly logbook for @${username} (resolved nonce ${nonce}). The pilot may have no public flights yet.`,
-        };
-        await upsertProgress(db, failed);
-        return failed;
+          error_message: NOT_FOUND_MESSAGE,
+        });
       }
 
-      // Persist page 1 immediately.
+      // Validation passed — now (and only now) write data.
       if (disc.firstPage?.flights?.length) {
         const total = disc.firstPage.flights.length;
         await upsertFlightRows(
@@ -632,6 +656,7 @@ export const tickBackfill = createServerFn({ method: "POST" })
       await upsertProgress(db, row);
       return row;
     }
+
 
     // Already done — mark complete and stop. Append-only: never rewind
     // current_page back to 0 because of count drift; new flights are
