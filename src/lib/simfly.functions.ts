@@ -46,6 +46,20 @@ const AIRCRAFT_BACKFILL_DAYS = 100;
 const AIRCRAFT_BACKFILL_PAGE_LIMIT = 180;
 const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
 
+// ---- Per-isolate in-memory cache for heavy SimFly scans.
+// Survives within a single Cloudflare Worker isolate so repeated dashboard
+// loads / route remounts within the TTL skip the 25×hubs + aircraft sweep
+// and the 20k-row DB read entirely. Self-evicts when the isolate recycles.
+const HEAVY_CACHE_TTL_MS = 90_000;
+const heavyCache = new Map<string, { at: number; value: unknown }>();
+async function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const hit = heavyCache.get(key);
+  if (hit && Date.now() - hit.at < ttlMs) return hit.value as T;
+  const value = await fn();
+  heavyCache.set(key, { at: Date.now(), value });
+  return value;
+}
+
 function defaultUsername() {
   return process.env.SIMFLY_USERNAME || DEFAULT_USERNAME;
 }
@@ -863,31 +877,38 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { flightToRow, rowToRawFlight, sanitiseFlightRowForDb } = await import("./backfill.functions");
 
-    const { data: cachedRows } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("*")
-      .eq("username", username)
-      .order("mission_start_ts", { ascending: false })
-      .limit(50000);
+    const cachedRows = await memo(
+      `db-flights:${username}`,
+      HEAVY_CACHE_TTL_MS,
+      async () => {
+        const { data } = await supabaseAdmin
+          .from("simfly_flights")
+          .select("*")
+          .eq("username", username)
+          .order("mission_start_ts", { ascending: false })
+          .limit(20000);
+        return data ?? [];
+      },
+    );
 
     const cachedFlights: RawFlightLite[] = ((cachedRows ?? []) as Record<string, unknown>[]).map(
       rowToRawFlight,
     );
 
-    // Upsert page-1 freshness into the cache (non-blocking on errors).
+    // Upsert page-1 freshness into the cache. Fire-and-forget — never block
+    // the dashboard response on a Postgres round-trip.
     if (p1?.flights?.length) {
       const total = p1.flights.length;
       const fresh = p1.flights.map((f, index) =>
         sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username),
       );
-      try {
-        await supabaseAdmin
-          .from("simfly_flights")
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true });
-      } catch (err) {
-        console.warn("[simfly] page-1 upsert failed", err);
-      }
+      void supabaseAdmin
+        .from("simfly_flights")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true })
+        .then(({ error }) => {
+          if (error) console.warn("[simfly] page-1 upsert failed", error);
+        });
     }
 
     const flights: RawFlightLite[] = Array.from(
@@ -951,26 +972,30 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const VISITOR_PAGES = 25;
 
     const [visitorPerAirport, aircraftPerPlane] = await Promise.all([
-      Promise.all(
-        airports.map(async (ap) => {
-          const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
-            `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-          );
-          const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
-          const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
-          for (const r of pages) {
-            if (!r) continue;
-            for (const f of r.flights ?? []) {
-              const n = normaliseHistFlight(f, ap.icao, username);
-              if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+      memo(`visitors-by-hub:${username}`, HEAVY_CACHE_TTL_MS, () =>
+        Promise.all(
+          airports.map(async (ap) => {
+            const urls = Array.from({ length: VISITOR_PAGES }, (_, i) =>
+              `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(ap.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
+            );
+            const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
+            const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+            for (const r of pages) {
+              if (!r) continue;
+              for (const f of r.flights ?? []) {
+                const n = normaliseHistFlight(f, ap.icao, username);
+                if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+              }
             }
-          }
-          return items;
-        }),
+            return items;
+          }),
+        ),
       ),
       // 3+ month aircraft backfill: any external flight on one of my airplanes
       // must be recovered even when neither airport is mine.
-      fetchAircraftOwnedVisitorBackfill(airplanes, username),
+      memo(`aircraft-backfill:${username}`, HEAVY_CACHE_TTL_MS, () =>
+        fetchAircraftOwnedVisitorBackfill(airplanes, username),
+      ),
     ]);
 
     const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.items];
