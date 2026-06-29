@@ -140,9 +140,15 @@ export const adminBackfillAction = createServerFn({ method: "POST" })
       };
     });
 
+    const sanitised = patches.map((p) => {
+      const { seconds_since_progress: _s, next_page: _n, ...rest } = p;
+      void _s;
+      void _n;
+      return rest;
+    });
     const { error: upErr } = await supabaseAdmin
       .from("backfill_progress")
-      .upsert(patches, { onConflict: "username" });
+      .upsert(sanitised, { onConflict: "username" });
     if (upErr) throw new Error(upErr.message);
 
     return { ok: true as const, affected: targets.length };
