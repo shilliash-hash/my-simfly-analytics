@@ -34,6 +34,8 @@ export function BackfillIndicator() {
   const qc = useQueryClient();
   const { keyTag, payload, username } = useSimflyArgs();
   const ticking = useRef(false);
+  const lastInvalidatedAt = useRef(0);
+  const wasRunning = useRef(false);
   const [dismissed, setDismissed] = useState(false);
 
   const { data: row } = useQuery({
@@ -49,7 +51,15 @@ export function BackfillIndicator() {
   // Drive ticks while running. Each tick advances ~20 pages.
   useEffect(() => {
     if (!row) return;
-    if (row.status === "completed" || row.status === "failed") return;
+    if (row.status === "completed" || row.status === "failed") {
+      // Surface freshly-imported history once when the job finishes.
+      if (wasRunning.current) {
+        wasRunning.current = false;
+        qc.invalidateQueries({ queryKey: ["simfly", keyTag] });
+      }
+      return;
+    }
+    if (row.status === "running") wasRunning.current = true;
     if (ticking.current) return;
     ticking.current = true;
     (async () => {
@@ -57,9 +67,13 @@ export function BackfillIndicator() {
         const tickPayload = payload ?? (username ? { username } : undefined);
         const next = await tickFn(tickPayload ? { data: tickPayload } : undefined);
         qc.setQueryData(["backfill", "status", keyTag], next);
-        // If we just imported new flights, the main payload's cached "flights"
-        // is stale — invalidate so graphs/activity pick them up.
-        if (next.flights_imported !== row.flights_imported) {
+        // Throttle dashboard refetch to at most once per 60s while running,
+        // otherwise the heavy SimFly payload re-runs on every tick.
+        if (
+          next.flights_imported !== row.flights_imported &&
+          Date.now() - lastInvalidatedAt.current > 60_000
+        ) {
+          lastInvalidatedAt.current = Date.now();
           qc.invalidateQueries({ queryKey: ["simfly", keyTag] });
         }
       } finally {
