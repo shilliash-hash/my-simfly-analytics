@@ -1,27 +1,125 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
-import type { AirportExt, FlightLog } from "@/lib/types";
+import type {
+  AirportExt,
+  AircraftExt,
+  FlightLog,
+  LicenseExt,
+  MyLiveFlight,
+} from "@/lib/types";
 
 type Props = {
   hubs: AirportExt[];
   flights: FlightLog[];
+  airplanes?: AircraftExt[];
+  licenses?: LicenseExt[];
+  liveFlights?: MyLiveFlight[];
 };
 
-export function FlightMap({ hubs, flights }: Props) {
+type LayerState = {
+  routes: boolean;
+  airports: boolean;
+  aircraft: boolean;
+  licenses: boolean;
+};
+
+const DEFAULT_LAYERS: LayerState = {
+  routes: true,
+  airports: true,
+  aircraft: false,
+  licenses: false,
+};
+
+function aircraftStatus(p: AircraftExt, live?: MyLiveFlight) {
+  if (live) return { label: "Active Flight", color: "text-runway", remaining: "" };
+  if (p.inGroundOperation) {
+    let remaining = "";
+    if (p.groundedUntil) {
+      const mins = Math.max(0, Math.round((new Date(p.groundedUntil).getTime() - Date.now()) / 60000));
+      remaining = mins > 0 ? `Ready in ${mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`}` : "Ready shortly";
+    }
+    return { label: "Ground Operations", color: "text-instrument", remaining };
+  }
+  return { label: "Ready", color: "text-runway", remaining: "" };
+}
+
+function licenseStatus(l: LicenseExt, live?: MyLiveFlight) {
+  if (live) return { label: "Active Flight", color: "text-runway", remaining: "" };
+  const pending = l.timers.filter((t) => t.minutesAvailable < t.minutesCap);
+  if (pending.length === 0) return { label: "Ready", color: "text-runway", remaining: "" };
+  const soonest = pending.reduce((a, b) => (a.minsUntilNextRestore < b.minsUntilNextRestore ? a : b));
+  const mins = soonest.minsUntilNextRestore;
+  const remaining = mins > 0
+    ? `Ready in ${mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`}`
+    : "Ready shortly";
+  const allEmpty = l.timers.every((t) => t.minutesAvailable === 0);
+  return { label: allEmpty ? "Cooldown" : "Ready", color: allEmpty ? "text-instrument" : "text-runway", remaining };
+}
+
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+
+export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFlights = [] }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
-  const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const layersRef = useRef<Record<keyof LayerState, import("leaflet").LayerGroup | null>>({
+    routes: null,
+    airports: null,
+    aircraft: null,
+    licenses: null,
+  });
+  const fittedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
+  const [layers, setLayers] = useState<LayerState>(DEFAULT_LAYERS);
 
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  useEffect(() => setMounted(true), []);
 
   const hubIcaos = useMemo(
     () => new Set(hubs.map((h) => h.icao.toUpperCase())),
     [hubs],
   );
+
+  // Resolve live flight by tail / licence code
+  const liveByTail = useMemo(() => {
+    const m = new Map<string, MyLiveFlight>();
+    for (const f of liveFlights) if (f.tailNumber) m.set(f.tailNumber.toLowerCase(), f);
+    return m;
+  }, [liveFlights]);
+
+  const liveByLicence = useMemo(() => {
+    const m = new Map<string, MyLiveFlight>();
+    for (const f of liveFlights) if (f.licenceCode) m.set(f.licenceCode.toLowerCase(), f);
+    return m;
+  }, [liveFlights]);
+
+  // Resolve license "last known location" from latest matching flight
+  const lastIcaoByLicence = useMemo(() => {
+    const m = new Map<string, string>();
+    // flights are sorted newest-first by convention; pick first match
+    for (const f of flights) {
+      if (!f.licenceCode) continue;
+      const k = f.licenceCode.toLowerCase();
+      if (!m.has(k) && f.destination) m.set(k, f.destination.toUpperCase());
+    }
+    return m;
+  }, [flights]);
+
+  const aircraftPositions = useMemo(() => {
+    return airplanes.map((p) => {
+      const live = p.tailNumber ? liveByTail.get(p.tailNumber.toLowerCase()) : undefined;
+      const icao = (live?.destination || p.currentIcao || "").toUpperCase();
+      return { p, live, icao };
+    }).filter((r) => r.icao);
+  }, [airplanes, liveByTail]);
+
+  const licensePositions = useMemo(() => {
+    return licenses.map((l) => {
+      const live = liveByLicence.get(l.code.toLowerCase());
+      const icao = (live?.destination || lastIcaoByLicence.get(l.code.toLowerCase()) || "").toUpperCase();
+      return { l, live, icao };
+    }).filter((r) => r.icao);
+  }, [licenses, liveByLicence, lastIcaoByLicence]);
 
   const allIcaos = useMemo(() => {
     const s = new Set<string>();
@@ -30,8 +128,10 @@ export function FlightMap({ hubs, flights }: Props) {
       if (f.departure) s.add(f.departure.toUpperCase());
       if (f.destination) s.add(f.destination.toUpperCase());
     });
+    aircraftPositions.forEach((r) => s.add(r.icao));
+    licensePositions.forEach((r) => s.add(r.icao));
     return Array.from(s);
-  }, [hubs, flights]);
+  }, [hubs, flights, aircraftPositions, licensePositions]);
 
   const geoQuery = useQuery({
     queryKey: ["airport-geo", allIcaos.sort().join(",")],
@@ -40,7 +140,6 @@ export function FlightMap({ hubs, flights }: Props) {
     staleTime: 60 * 60 * 1000,
   });
 
-  // Aggregate route weights (how many times we flew that pair).
   const routes = useMemo(() => {
     const m = new Map<string, { from: string; to: string; count: number }>();
     for (const f of flights) {
@@ -55,17 +154,17 @@ export function FlightMap({ hubs, flights }: Props) {
     return Array.from(m.values());
   }, [flights]);
 
+  // Build / rebuild layers whenever data changes
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       if (!containerRef.current) return;
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-      let mapInstance = mapRef.current;
-      if (!mapInstance) {
-        mapInstance = L.map(containerRef.current, {
+      let map = mapRef.current;
+      if (!map) {
+        map = L.map(containerRef.current, {
           zoomControl: true,
           attributionControl: false,
           worldCopyJump: true,
@@ -73,69 +172,181 @@ export function FlightMap({ hubs, flights }: Props) {
         L.tileLayer(
           "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
           { maxZoom: 18, subdomains: "abcd" },
-        ).addTo(mapInstance);
-        mapRef.current = mapInstance;
+        ).addTo(map);
+        mapRef.current = map;
       }
 
-      if (layerRef.current) {
-        layerRef.current.remove();
-        layerRef.current = null;
-      }
-      const layerGroup = L.layerGroup().addTo(mapInstance);
-      layerRef.current = layerGroup;
+      // Drop previous layer groups
+      (Object.keys(layersRef.current) as (keyof LayerState)[]).forEach((k) => {
+        layersRef.current[k]?.remove();
+        layersRef.current[k] = null;
+      });
 
       const geo: AirportGeo[] = geoQuery.data ?? [];
       const byIcao = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
 
+      // Routes layer (polylines + non-hub airport endpoint markers)
+      const routesLayer = L.layerGroup();
       const bounds: [number, number][] = [];
       for (const r of routes) {
         const a = byIcao.get(r.from);
         const b = byIcao.get(r.to);
         if (!a || !b) continue;
-        L.polyline(
-          [
-            [a.lat, a.lon],
-            [b.lat, b.lon],
-          ],
-          {
-            color: "#475569",
-            weight: Math.min(2.5, 0.6 + r.count * 0.25),
-            opacity: 0.55,
-            interactive: false,
-          },
-        ).addTo(layerGroup);
+        L.polyline([[a.lat, a.lon], [b.lat, b.lon]], {
+          color: "#A78BFA",
+          weight: Math.min(2.5, 0.6 + r.count * 0.25),
+          opacity: 0.55,
+          interactive: false,
+        }).addTo(routesLayer);
         bounds.push([a.lat, a.lon], [b.lat, b.lon]);
       }
-
       for (const g of geo) {
-        const isHub = hubIcaos.has(g.icao.toUpperCase());
+        if (hubIcaos.has(g.icao.toUpperCase())) continue;
         const marker = L.circleMarker([g.lat, g.lon], {
-          radius: isHub ? 8 : 4,
-          color: isHub ? "#22D3EE" : "#F59E0B",
-          weight: isHub ? 2 : 1,
-          fillColor: isHub ? "#22D3EE" : "#F59E0B",
-          fillOpacity: isHub ? 0.55 : 0.7,
-        }).addTo(layerGroup);
+          radius: 4,
+          color: "#A78BFA",
+          weight: 1,
+          fillColor: "#A78BFA",
+          fillOpacity: 0.6,
+        });
         marker.bindTooltip(
-          `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em">${g.icao}</span> ${g.name}`,
+          `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em">${esc(g.icao)}</span> ${esc(g.name)}`,
           { direction: "top", offset: L.point(0, -6) },
         );
+        marker.addTo(routesLayer);
+      }
+      layersRef.current.routes = routesLayer;
+
+      // Hubs (airports) layer
+      const airportsLayer = L.layerGroup();
+      for (const g of geo) {
+        if (!hubIcaos.has(g.icao.toUpperCase())) continue;
+        const marker = L.circleMarker([g.lat, g.lon], {
+          radius: 8,
+          color: "#22D3EE",
+          weight: 2,
+          fillColor: "#22D3EE",
+          fillOpacity: 0.6,
+        });
+        marker.bindTooltip(
+          `<span style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.08em">${esc(g.icao)}</span> ${esc(g.name)}`,
+          { direction: "top", offset: L.point(0, -6) },
+        );
+        marker.addTo(airportsLayer);
         bounds.push([g.lat, g.lon]);
       }
+      layersRef.current.airports = airportsLayer;
 
-      if (bounds.length > 1) {
-        mapInstance.fitBounds(bounds, { padding: [24, 24], maxZoom: 6 });
-      } else if (bounds.length === 1) {
-        mapInstance.setView(bounds[0], 5);
+      // Aircraft layer (green)
+      const aircraftLayer = L.layerGroup();
+      // Group by icao to apply small offsets when multiple share location
+      const acByIcao = new Map<string, typeof aircraftPositions>();
+      for (const r of aircraftPositions) {
+        const arr = acByIcao.get(r.icao) ?? [];
+        arr.push(r);
+        acByIcao.set(r.icao, arr);
+      }
+      for (const [icao, arr] of acByIcao) {
+        const g = byIcao.get(icao);
+        if (!g) continue;
+        arr.forEach((r, i) => {
+          const offset = i * 0.18;
+          const status = aircraftStatus(r.p, r.live);
+          const where = r.live ? "In Flight" : icao;
+          const marker = L.circleMarker([g.lat + offset, g.lon + offset], {
+            radius: 6,
+            color: "#0A0F1C",
+            weight: 1.5,
+            fillColor: "#22C55E",
+            fillOpacity: 0.95,
+          });
+          marker.bindTooltip(
+            `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
+              <div style="font-weight:600">${esc(r.p.name)}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.p.tailNumber || r.p.icao)}</div>
+              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
+              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
+              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+            </div>`,
+            { direction: "top", offset: L.point(0, -6) },
+          );
+          marker.addTo(aircraftLayer);
+        });
+      }
+      layersRef.current.aircraft = aircraftLayer;
+
+      // License layer (yellow diamonds via divIcon)
+      const licenseLayer = L.layerGroup();
+      const lcByIcao = new Map<string, typeof licensePositions>();
+      for (const r of licensePositions) {
+        const arr = lcByIcao.get(r.icao) ?? [];
+        arr.push(r);
+        lcByIcao.set(r.icao, arr);
+      }
+      for (const [icao, arr] of lcByIcao) {
+        const g = byIcao.get(icao);
+        if (!g) continue;
+        arr.forEach((r, i) => {
+          const offset = -0.22 - i * 0.18;
+          const status = licenseStatus(r.l, r.live);
+          const where = r.live ? "In Flight" : icao;
+          const icon = L.divIcon({
+            className: "",
+            html: `<div style="width:12px;height:12px;background:#FACC15;border:1.5px solid #0A0F1C;transform:rotate(45deg);box-shadow:0 0 0 1px rgba(250,204,21,.35)"></div>`,
+            iconSize: [12, 12],
+            iconAnchor: [6, 6],
+          });
+          const marker = L.marker([g.lat + offset, g.lon + offset], { icon });
+          marker.bindTooltip(
+            `<div style="font-family:Inter,sans-serif;font-size:11px;line-height:1.4">
+              <div style="font-weight:600">${esc(r.l.name)}</div>
+              <div style="font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.06em;color:#94A3B8">${esc(r.l.code)} · Level ${r.l.level}</div>
+              <div style="margin-top:3px"><span style="color:#94A3B8">Location:</span> ${esc(where)}</div>
+              <div><span style="color:#94A3B8">Status:</span> ${esc(status.label)}</div>
+              ${status.remaining ? `<div style="color:#F59E0B">${esc(status.remaining)}</div>` : ""}
+            </div>`,
+            { direction: "top", offset: L.point(0, -6) },
+          );
+          marker.addTo(licenseLayer);
+        });
+      }
+      layersRef.current.licenses = licenseLayer;
+
+      // Apply current toggle state
+      (Object.keys(layers) as (keyof LayerState)[]).forEach((k) => {
+        const grp = layersRef.current[k];
+        if (!grp) return;
+        if (layers[k]) grp.addTo(map!);
+      });
+
+      if (!fittedRef.current && bounds.length > 1) {
+        map.fitBounds(bounds, { padding: [24, 24], maxZoom: 6 });
+        fittedRef.current = true;
+      } else if (!fittedRef.current && bounds.length === 1) {
+        map.setView(bounds[0], 5);
+        fittedRef.current = true;
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [routes, hubIcaos, geoQuery.data]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routes, hubIcaos, geoQuery.data, aircraftPositions, licensePositions]);
 
-  // Tear down on unmount.
+  // Cheap toggle: add/remove existing layer groups without rebuilding
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    (Object.keys(layers) as (keyof LayerState)[]).forEach((k) => {
+      const grp = layersRef.current[k];
+      if (!grp) return;
+      const has = map.hasLayer(grp);
+      if (layers[k] && !has) grp.addTo(map);
+      else if (!layers[k] && has) grp.remove();
+    });
+  }, [layers]);
+
   useEffect(() => {
     return () => {
       if (mapRef.current) {
@@ -145,26 +356,35 @@ export function FlightMap({ hubs, flights }: Props) {
     };
   }, []);
 
+  const Toggle = ({ k, label, dot }: { k: keyof LayerState; label: string; dot: string }) => (
+    <label className="mono flex cursor-pointer select-none items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground">
+      <input
+        type="checkbox"
+        checked={layers[k]}
+        onChange={(e) => setLayers((s) => ({ ...s, [k]: e.target.checked }))}
+        className="h-3 w-3 accent-runway"
+      />
+      <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ background: dot }} />
+      {label}
+    </label>
+  );
+
   return (
     <div className="panel overflow-hidden rounded-xl">
-      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Flight Map
           </div>
           <h2 className="text-sm font-semibold text-foreground">
-            Hubs & routes flown
+            Hubs, routes, aircraft & licenses
           </h2>
         </div>
-        <div className="mono flex items-center gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2.5 w-2.5 rounded-full bg-runway" />
-            My hubs
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block h-2 w-2 rounded-full bg-instrument" />
-            Other airports
-          </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Toggle k="routes" label="Routes" dot="#A78BFA" />
+          <Toggle k="airports" label="My airports" dot="#22D3EE" />
+          <Toggle k="aircraft" label="My aircraft" dot="#22C55E" />
+          <Toggle k="licenses" label="My licenses" dot="#FACC15" />
         </div>
       </div>
       <div
