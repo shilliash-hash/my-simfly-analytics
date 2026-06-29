@@ -393,6 +393,11 @@ function IncomingTraffic({
                       <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                         {f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}
                       </div>
+                      {f.etaMs && (
+                        <div className="mono mt-0.5 text-[10px] uppercase tracking-widest" style={{ color: "var(--instrument)" }}>
+                          ETA {formatEtaUtc(f.etaMs)} · {formatRemainingFromNow(f.etaMs)}
+                        </div>
+                      )}
                     </div>
                     <PlaneLanding className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
@@ -405,6 +410,11 @@ function IncomingTraffic({
                       <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                         {f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}
                       </div>
+                      {f.etaMs && (
+                        <div className="mono mt-0.5 text-[10px] uppercase tracking-widest" style={{ color: "var(--instrument)" }}>
+                          ETA {formatEtaUtc(f.etaMs)} · {formatRemainingFromNow(f.etaMs)}
+                        </div>
+                      )}
                     </div>
                     <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
