@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
@@ -501,16 +501,51 @@ function CurrentFlightHero({
 
   // Decide ARRIVED with two explicit signals (whichever fires first):
   //   1. PRIMARY — snapshot mission id is no longer reported anywhere in the
-  //      live hub feeds (incoming traffic + my live flights). SimFly drops
-  //      missions from these feeds within ~5s of completion.
+  //      live hub feeds for a sustained grace period (debounces brief drops
+  //      caused by SimFly feed jitter, refetch gaps, or network blips).
   //   2. FALLBACK — snapshot mission id appears in the completed flights /
   //      activities feed (server payload refresh, typically 60–90s later).
-  const snapStillLive =
+  const GRACE_MS = 25_000;
+  const snapPresentNow =
     !!snapshot &&
     (liveMissionIds ? liveMissionIds.has(snapshot.id) : !!live && live.id === snapshot.id);
   const snapCompleted = !!snapshot && !!completedIds && completedIds.has(snapshot.id);
 
-  // Phase 1: snapshot still present in live feeds → "EN ROUTE" expanded banner.
+  // Track the last time the snapshot was observed in any live feed.
+  const lastSeenRef = useRef<{ id: string; at: number } | null>(null);
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (!snapshot) {
+      lastSeenRef.current = null;
+      return;
+    }
+    if (snapPresentNow) {
+      lastSeenRef.current = { id: snapshot.id, at: Date.now() };
+      return;
+    }
+    if (lastSeenRef.current?.id !== snapshot.id) {
+      // First time we see this snapshot id missing → seed the timer now so
+      // the grace window starts from this observation, not from epoch.
+      lastSeenRef.current = { id: snapshot.id, at: Date.now() };
+    }
+    // Schedule a re-render when the grace window elapses so we transition.
+    const elapsed = Date.now() - (lastSeenRef.current?.at ?? Date.now());
+    const remaining = Math.max(0, GRACE_MS - elapsed);
+    const t = setTimeout(() => force((n) => n + 1), remaining + 50);
+    return () => clearTimeout(t);
+  }, [snapshot, snapPresentNow]);
+
+  const withinGrace =
+    !!snapshot &&
+    !snapPresentNow &&
+    !snapCompleted &&
+    !!lastSeenRef.current &&
+    lastSeenRef.current.id === snapshot.id &&
+    Date.now() - lastSeenRef.current.at < GRACE_MS;
+
+  const snapStillLive = snapPresentNow || withinGrace;
+
+  // Phase 1: snapshot still present in live feeds (or within grace) → "EN ROUTE".
   if (snapshot && snapStillLive && !snapCompleted) {
     return <ExpandedBanner snap={snapshot} status="enroute" />;
   }
