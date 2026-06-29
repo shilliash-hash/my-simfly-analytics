@@ -38,6 +38,7 @@ function Overview() {
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
       staleTime: 30_000,
+      refetchInterval: 60_000,
     }),
   );
 
@@ -47,19 +48,21 @@ function Overview() {
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
+  // Poll the live feeds aggressively so the EN ROUTE → ARRIVED swap happens
+  // within a few seconds of SimFly dropping the mission from its hub feeds.
   const { data: hubTraffic = [] } = useQuery({
     queryKey: ["simfly", "hubTraffic", keyTag, icaos],
     queryFn: () => trafficFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
   const { data: myFlights = [] } = useQuery({
     queryKey: ["simfly", "myLiveFlights", keyTag, icaos],
     queryFn: () => myFlightsFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0,
-    refetchInterval: 60_000,
-    staleTime: 30_000,
+    refetchInterval: 15_000,
+    staleTime: 10_000,
   });
 
 
@@ -91,6 +94,15 @@ function Overview() {
           const completedIds = new Set(data.flights.map((f) => f.id));
           return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
         })()}
+        liveMissionIds={useMemo(() => {
+          // Mission IDs SimFly still reports anywhere in our hub feeds.
+          // Primary trigger: when our snapshot id leaves this set, mark ARRIVED.
+          const ids = new Set<string>();
+          for (const f of myFlights) ids.add(f.id);
+          for (const h of hubTraffic) for (const v of h.visitors) ids.add(v.id);
+          return ids;
+        }, [myFlights, hubTraffic])}
+        completedIds={useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights])}
         lastFlight={data.flights[0] ?? null}
       />
 
@@ -460,7 +472,17 @@ function snapshotFromLive(f: MyLiveFlight): FlightSnapshot {
   };
 }
 
-function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; lastFlight: FlightLog | null }) {
+function CurrentFlightHero({
+  live,
+  liveMissionIds,
+  completedIds,
+  lastFlight,
+}: {
+  live: MyLiveFlight | null;
+  liveMissionIds?: Set<string>;
+  completedIds?: Set<string>;
+  lastFlight: FlightLog | null;
+}) {
   // Snapshot of the currently-displayed mission. We freeze it on first sight
   // (so a mid-flight aircraft/registration swap in SimFly's live feed cannot
   // mutate the card) and only replace it when a NEW mission id is detected.
@@ -477,18 +499,29 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
     }
   }, [live, snapshot?.id]);
 
-  // Phase 1: live mission, snapshot matches → "EN ROUTE" expanded banner.
-  if (live && snapshot && live.id === snapshot.id) {
+  // Decide ARRIVED with two explicit signals (whichever fires first):
+  //   1. PRIMARY — snapshot mission id is no longer reported anywhere in the
+  //      live hub feeds (incoming traffic + my live flights). SimFly drops
+  //      missions from these feeds within ~5s of completion.
+  //   2. FALLBACK — snapshot mission id appears in the completed flights /
+  //      activities feed (server payload refresh, typically 60–90s later).
+  const snapStillLive =
+    !!snapshot &&
+    (liveMissionIds ? liveMissionIds.has(snapshot.id) : !!live && live.id === snapshot.id);
+  const snapCompleted = !!snapshot && !!completedIds && completedIds.has(snapshot.id);
+
+  // Phase 1: snapshot still present in live feeds → "EN ROUTE" expanded banner.
+  if (snapshot && snapStillLive && !snapCompleted) {
     return <ExpandedBanner snap={snapshot} status="enroute" />;
   }
 
-  // Phase 2: live exists but snapshot just rotated (rare, between renders).
-  if (live) {
+  // Phase 2: no snapshot yet but a live flight just appeared (between renders).
+  if (live && !snapshot) {
     return <ExpandedBanner snap={snapshotFromLive(live)} status="enroute" />;
   }
 
-  // Phase 3: no live, but we have a snapshot from the last observed mission.
-  // Keep it frozen as "ARRIVED" until a brand-new mission appears.
+  // Phase 3: snapshot dropped from live feeds OR is now in completed flights →
+  // freeze as "ARRIVED" until a brand-new mission appears.
   if (snapshot) {
     return <ExpandedBanner snap={snapshot} status="arrived" />;
   }
