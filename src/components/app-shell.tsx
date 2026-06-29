@@ -32,7 +32,7 @@ const NAV = [
   { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
-  { to: "/admin",       label: "Admin",       icon: Wrench, adminOnly: true },
+  { to: "/admin",       label: "Admin",       icon: Wrench },
 ] as const;
 
 
