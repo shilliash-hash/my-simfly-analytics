@@ -76,6 +76,7 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
     airports: null,
     aircraft: null,
     licenses: null,
+    inflight: null,
   });
   const fittedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
