@@ -435,6 +435,100 @@ function IncomingTraffic({
   );
 }
 
+function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; lastFlight: FlightLog | null }) {
+  const isLive = !!live;
+  if (!live && !lastFlight) return null;
+
+  const origin = live?.origin ?? lastFlight?.departure ?? "—";
+  const destination = live?.destination ?? lastFlight?.destination ?? "—";
+  const aircraft = live?.aircraftICAO ?? lastFlight?.aircraftName ?? "—";
+  const tail = live?.tailNumber ?? lastFlight?.tailNumber;
+  const licence = live?.licenceCode ?? lastFlight?.licenceCode;
+
+  return (
+    <section className="panel relative mb-6 overflow-hidden rounded-xl p-5">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background:
+            "radial-gradient(120% 60% at 0% 0%, color-mix(in oklab, var(--runway) 12%, transparent), transparent 60%)",
+        }}
+      />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <div className="mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-runway">
+            <Plane className="h-3.5 w-3.5" />
+            {isLive ? "My current flight" : "Last flight"}
+          </div>
+          <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+            {isLive ? (
+              <>
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-runway shadow-[0_0_8px_var(--runway)]" />
+                <span className="text-runway">Live</span>
+              </>
+            ) : lastFlight ? (
+              <span>{relativeTime(lastFlight.ts)}</span>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="mt-5 flex items-center gap-4">
+          <div className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{origin}</div>
+          <div className="relative flex-1">
+            <div className="h-px w-full bg-gradient-to-r from-runway/40 via-runway/30 to-instrument/40" />
+            <Plane
+              className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-runway"
+              style={{ left: isLive ? "50%" : "100%", transform: "translate(-50%, -50%)" }}
+            />
+          </div>
+          <div className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{destination}</div>
+        </div>
+
+        <div className="mono mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+          <span className="text-foreground">{aircraft}</span>
+          {tail && <span>· {tail}</span>}
+          {licence && (
+            <span className="inline-flex items-center gap-1">
+              · <IdCard className="h-3 w-3" /> {licence}
+            </span>
+          )}
+          {live?.sim && <span>· {live.sim}</span>}
+        </div>
+
+        {!isLive && lastFlight && (
+          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-4 text-xs">
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Distance</div>
+              <div className="font-display mt-0.5 text-base font-semibold">{formatNumber(Math.round(lastFlight.distance))} NM</div>
+            </div>
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Flight time</div>
+              <div className="font-display mt-0.5 text-base font-semibold">{lastFlight.flightTime}</div>
+            </div>
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">PAX earned</div>
+              <div className="font-display mt-0.5 text-base font-semibold text-runway">+{lastFlight.pax.toFixed(2)}</div>
+            </div>
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Reward</div>
+              <div className="font-display mt-0.5 text-base font-semibold" style={{ color: "var(--instrument)" }}>
+                +{formatNumber(Math.round(lastFlight.totalReward))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isLive && (
+          <div className="mono mt-4 border-t border-border pt-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+            En route · Economic impact will be credited on landing
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 function PilotSwitcher({ current }: { current: string | null }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(current ?? "");
