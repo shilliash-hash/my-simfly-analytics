@@ -877,16 +877,18 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { flightToRow, rowToRawFlight, sanitiseFlightRowForDb } = await import("./backfill.functions");
 
-    const { data: cachedRows } = await memo(
+    const cachedRows = await memo(
       `db-flights:${username}`,
       HEAVY_CACHE_TTL_MS,
-      () =>
-        supabaseAdmin
+      async () => {
+        const { data } = await supabaseAdmin
           .from("simfly_flights")
           .select("*")
           .eq("username", username)
           .order("mission_start_ts", { ascending: false })
-          .limit(20000),
+          .limit(20000);
+        return data ?? [];
+      },
     );
 
     const cachedFlights: RawFlightLite[] = ((cachedRows ?? []) as Record<string, unknown>[]).map(
