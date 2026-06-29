@@ -51,6 +51,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 }
 
 function Sidebar() {
+  const isAdmin = !!useAdminToken();
+  const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
   return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0">
       <div className="panel flex items-center gap-3 rounded-xl px-4 py-3">
