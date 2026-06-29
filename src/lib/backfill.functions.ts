@@ -250,7 +250,7 @@ async function repairIfPrematurelyCompleted(
     started_at: row.started_at ?? new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
-  const { error } = await supabaseAdmin.from("backfill_progress").upsert(repaired);
+  const { error } = await supabaseAdmin.from("backfill_progress").upsert(persistable(repaired));
   if (error) throw new Error(error.message ?? "Unable to repair backfill progress.");
   return repaired;
 }
@@ -273,7 +273,7 @@ async function upsertProgress(
   supabaseAdmin: SupabaseLike,
   row: BackfillStatusRow,
 ): Promise<void> {
-  const { error } = await supabaseAdmin.from("backfill_progress").upsert(row);
+  const { error } = await supabaseAdmin.from("backfill_progress").upsert(persistable(row));
   if (error) throw new Error(error.message ?? "Unable to update backfill progress.");
 }
 
