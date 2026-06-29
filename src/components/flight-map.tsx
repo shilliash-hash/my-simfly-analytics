@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
+import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import type {
   AirportExt,
   AircraftExt,
