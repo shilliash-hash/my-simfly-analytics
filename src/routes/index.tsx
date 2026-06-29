@@ -517,12 +517,6 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
               <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">PAX earned</div>
               <div className="font-display mt-0.5 text-base font-semibold text-runway">+{lastFlight.pax.toFixed(2)}</div>
             </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Reward</div>
-              <div className="font-display mt-0.5 text-base font-semibold" style={{ color: "var(--instrument)" }}>
-                +{formatNumber(Math.round(lastFlight.totalReward))}
-              </div>
-            </div>
           </div>
         )}
 
