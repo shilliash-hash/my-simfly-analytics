@@ -1921,3 +1921,47 @@ export const getBackfillEstimate = createServerFn({ method: "GET" })
       fetchedAt: new Date().toISOString(),
     };
   });
+
+// ===== Compare-hubs: lookup any airport in SimFly by ICAO =====
+
+/** Suggest airports by ICAO prefix or name substring from the OpenFlights geo dataset. */
+export const searchAirports = createServerFn({ method: "GET" })
+  .inputValidator((d: { query: string; limit?: number }) => d)
+  .handler(async ({ data }): Promise<{ icao: string; name: string }[]> => {
+    const q = (data.query ?? "").trim().toUpperCase();
+    if (q.length < 1) return [];
+    const limit = Math.min(Math.max(data.limit ?? 8, 1), 25);
+    const map = await loadGeo();
+    const prefix: { icao: string; name: string }[] = [];
+    const contains: { icao: string; name: string }[] = [];
+    for (const g of map.values()) {
+      const icao = g.icao.toUpperCase();
+      if (icao.startsWith(q)) prefix.push({ icao, name: g.name });
+      else if (icao.includes(q) || g.name.toUpperCase().includes(q))
+        contains.push({ icao, name: g.name });
+      if (prefix.length >= limit) break;
+    }
+    return [...prefix, ...contains].slice(0, limit);
+  });
+
+/** Fetch any SimFly airport (owned or not) and return an AirportExt shell.
+ * 7d/30d roll-ups are zero because they require the viewer's per-flight log. */
+export const getAirportSummary = createServerFn({ method: "GET" })
+  .inputValidator((d: { icao: string }) => d)
+  .handler(async ({ data }): Promise<AirportExt | null> => {
+    const icao = (data.icao ?? "").trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(icao)) return null;
+    const url = `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`SimFly airport lookup failed (${res.status})`);
+    const text = await res.text();
+    let raw: RawAssetAirport;
+    try {
+      raw = JSON.parse(text) as RawAssetAirport;
+    } catch {
+      return null;
+    }
+    if (!raw || raw.type !== "Airport" || !raw.icao) return null;
+    return mapAirport(raw, []);
+  });
