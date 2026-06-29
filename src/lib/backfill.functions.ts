@@ -258,6 +258,7 @@ async function repairIfPrematurelyCompleted(
 async function upsertFlightRows(
   supabaseAdmin: SupabaseLike,
   rows: Record<string, unknown>[],
+  username?: string,
 ): Promise<void> {
   for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = rows.slice(i, i + UPSERT_CHUNK_SIZE);
@@ -265,7 +266,23 @@ async function upsertFlightRows(
       onConflict: "username,flight_id",
       ignoreDuplicates: true,
     });
-    if (error) throw new Error(error.message ?? "Unable to import flight rows.");
+    if (!error) continue;
+    // Chunk failed — retry one row at a time so one bad flight can't poison
+    // an entire batch. Log + skip the offender, keep going.
+    const tag = username ? `[backfill:${username}]` : "[backfill]";
+    console.warn(`${tag} chunk upsert failed (${error.message}); retrying ${chunk.length} rows individually`);
+    for (const row of chunk) {
+      const { error: rowErr } = await supabaseAdmin.from("simfly_flights").upsert([row], {
+        onConflict: "username,flight_id",
+        ignoreDuplicates: true,
+      });
+      if (rowErr) {
+        console.error(
+          `${tag} SKIPPED flight_id=${String(row.flight_id ?? "?")} — ${rowErr.message ?? "unknown error"}`,
+          { row },
+        );
+      }
+    }
   }
 }
 
