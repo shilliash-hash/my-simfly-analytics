@@ -44,6 +44,26 @@ const COLORS: Record<ActivityKind, string> = {
 
 function ActivityFeed() {
   const fn = useServerFn(getSimflyPayload);
+  const { keyTag, payload, username } = useSimflyArgs();
+  const { data } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ["simfly", keyTag],
+      queryFn: () => fn(payload ? { data: payload } : undefined),
+      staleTime: 30_000,
+    }),
+  );
+  const liveFn = useServerFn(getMyLiveFlights);
+  const icaos = useMemo(
+    () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
+    [data.airports],
+  );
+  const { data: liveFlights = [] } = useQuery({
+    queryKey: ["simfly", "myLive", keyTag, icaos],
+    queryFn: () => liveFn({ data: { icaos, ...(username ? { username } : {}) } }),
+    enabled: icaos.length > 0,
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+  });
   const { keyTag, payload } = useSimflyArgs();
   const { data } = useSuspenseQuery(
     queryOptions({
