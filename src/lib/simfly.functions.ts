@@ -917,11 +917,47 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       ).values(),
     );
 
+    // For airport pax7d/pax30d we want flights from *any* pilot that touched
+    // the viewed user's owned airports — visitors count as airport income.
+    // Pull a 30d slice of cached flights touching those ICAOs across all
+    // usernames, so pax7d/30d render for other pilots even without their own
+    // backfill.
+    const ownedIcaos = (assets?.items ?? [])
+      .filter((it) => it.type === "Airport")
+      .map((it) => (it as RawAssetAirport).icao);
+    let airportFlights: RawFlightLite[] = flights;
+    if (ownedIcaos.length > 0) {
+      const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+      const visitorRows = await memo(
+        `db-airport-visitors:${ownedIcaos.slice().sort().join(",")}`,
+        HEAVY_CACHE_TTL_MS,
+        async () => {
+          const { data } = await supabaseAdmin
+            .from("simfly_flights")
+            .select("*")
+            .or(
+              `departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`,
+            )
+            .gte("mission_start_ts", sinceIso)
+            .limit(5000);
+          return data ?? [];
+        },
+      );
+      const visitorFlights = ((visitorRows ?? []) as Record<string, unknown>[]).map(
+        rowToRawFlight,
+      );
+      airportFlights = Array.from(
+        new Map(
+          [...flights, ...visitorFlights].map((flight) => [flight.id, flight]),
+        ).values(),
+      );
+    }
+
     const airports: AirportExt[] = [];
     const airplanes: AircraftExt[] = [];
     const licenses: LicenseExt[] = [];
     for (const it of assets?.items ?? []) {
-      if (it.type === "Airport") airports.push(mapAirport(it, flights));
+      if (it.type === "Airport") airports.push(mapAirport(it, airportFlights));
       else if (it.type === "Airplane") airplanes.push(mapAirplane(it, flights));
       else if (it.type === "Pilot License") licenses.push(mapLicence(it, flights));
     }
