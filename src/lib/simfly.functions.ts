@@ -23,6 +23,7 @@ import type {
   VisitorHistoryPayload,
   XpByAsset,
 } from "./types";
+import { computeEta, uuidV7Ms } from "./aircraft-specs";
 
 /**
  * SimFly.io public API wrapper. Every endpoint we hit is unauthenticated.
