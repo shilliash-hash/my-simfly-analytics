@@ -444,6 +444,7 @@ function IncomingTraffic({
 
 function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; lastFlight: FlightLog | null }) {
   const isLive = !!live;
+  const [expanded, setExpanded] = useState(false);
   if (!live && !lastFlight) return null;
 
   const origin = live?.origin ?? lastFlight?.departure ?? "—";
@@ -452,47 +453,34 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
   const tail = live?.tailNumber ?? lastFlight?.tailNumber;
   const licence = live?.licenceCode ?? lastFlight?.licenceCode;
 
-  return (
-    <section className="panel relative mb-6 overflow-hidden rounded-xl p-5">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 opacity-60"
-        style={{
-          background:
-            "radial-gradient(120% 60% at 0% 0%, color-mix(in oklab, var(--runway) 12%, transparent), transparent 60%)",
-        }}
-      />
-      <div className="relative">
+  // Live flight: keep the expanded banner with progress.
+  if (isLive) {
+    return (
+      <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3">
         <div className="flex items-center justify-between gap-3">
           <div className="mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest text-runway">
             <Plane className="h-3.5 w-3.5" />
-            {isLive ? "My current flight" : "Last flight"}
+            Current flight
           </div>
-          <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-            {isLive ? (
-              <>
-                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-runway shadow-[0_0_8px_var(--runway)]" />
-                <span className="text-runway">Live</span>
-              </>
-            ) : lastFlight ? (
-              <span>{relativeTime(lastFlight.ts)}</span>
-            ) : null}
+          <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-runway shadow-[0_0_8px_var(--runway)]" />
+            <span className="text-runway">Live</span>
           </div>
         </div>
 
-        <div className="mt-5 flex items-center gap-4">
-          <div className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{origin}</div>
+        <div className="mt-2 flex items-center gap-3">
+          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{origin}</div>
           <div className="relative flex-1">
             <div className="h-px w-full bg-gradient-to-r from-runway/40 via-runway/30 to-instrument/40" />
             <Plane
-              className="absolute top-1/2 h-4 w-4 -translate-y-1/2 text-runway"
-              style={{ left: isLive ? "50%" : "100%", transform: "translate(-50%, -50%)" }}
+              className="absolute top-1/2 h-4 w-4 text-runway"
+              style={{ left: "50%", transform: "translate(-50%, -50%)" }}
             />
           </div>
-          <div className="font-display text-2xl font-semibold tracking-tight md:text-3xl">{destination}</div>
+          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{destination}</div>
         </div>
 
-        <div className="mono mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+        <div className="mono mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-muted-foreground">
           <span className="text-foreground">{aircraft}</span>
           {tail && <span>· {tail}</span>}
           {licence && (
@@ -501,34 +489,69 @@ function CurrentFlightHero({ live, lastFlight }: { live: MyLiveFlight | null; la
             </span>
           )}
           {live?.sim && <span>· {live.sim}</span>}
+          <span className="ml-auto text-runway/80">En route</span>
         </div>
+      </section>
+    );
+  }
 
-        {!isLive && lastFlight && (
-          <div className="mt-4 flex flex-wrap items-center gap-x-6 gap-y-2 border-t border-border pt-4 text-xs">
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Distance</div>
-              <div className="font-display mt-0.5 text-base font-semibold">{formatNumber(Math.round(lastFlight.distance))} NM</div>
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Flight time</div>
-              <div className="font-display mt-0.5 text-base font-semibold">{lastFlight.flightTime}</div>
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">PAX earned</div>
-              <div className="font-display mt-0.5 text-base font-semibold text-runway">+{lastFlight.pax.toFixed(2)}</div>
-            </div>
+  // Completed flight: compact single-row banner, click to expand.
+  if (!lastFlight) return null;
+  return (
+    <section className="panel mb-4 overflow-hidden rounded-xl">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition hover:bg-muted/30"
+      >
+        <span className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <Plane className="h-3 w-3" /> Last flight
+        </span>
+        <span className="font-display text-sm font-semibold tracking-tight md:text-base">
+          {origin} <span className="text-muted-foreground">→</span> {destination}
+        </span>
+        <span className="mono hidden text-[11px] uppercase tracking-widest text-muted-foreground sm:inline">
+          · {aircraft}
+          {tail && ` · ${tail}`}
+        </span>
+        <span className="mono hidden text-[11px] uppercase tracking-widest text-muted-foreground md:inline">
+          · {formatNumber(Math.round(lastFlight.distance))} NM · {lastFlight.flightTime}
+        </span>
+        <span className="ml-auto font-display text-sm font-semibold text-runway">
+          +{lastFlight.pax.toFixed(2)} PAX
+        </span>
+        <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          {relativeTime(lastFlight.ts)}
+        </span>
+      </button>
+      {expanded && (
+        <div className="grid grid-cols-2 gap-3 border-t border-border px-4 py-3 text-xs sm:grid-cols-4">
+          <div>
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Aircraft</div>
+            <div className="font-display mt-0.5 text-sm font-semibold">{aircraft}{tail ? ` · ${tail}` : ""}</div>
           </div>
-        )}
-
-        {isLive && (
-          <div className="mono mt-4 border-t border-border pt-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-            En route · Economic impact will be credited on landing
+          {licence && (
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">License</div>
+              <div className="font-display mt-0.5 inline-flex items-center gap-1 text-sm font-semibold">
+                <IdCard className="h-3 w-3" /> {licence}
+              </div>
+            </div>
+          )}
+          <div>
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Distance</div>
+            <div className="font-display mt-0.5 text-sm font-semibold">{formatNumber(Math.round(lastFlight.distance))} NM</div>
           </div>
-        )}
-      </div>
+          <div>
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">Flight time</div>
+            <div className="font-display mt-0.5 text-sm font-semibold">{lastFlight.flightTime}</div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
+
 
 function PilotSwitcher({ current }: { current: string | null }) {
   const [open, setOpen] = useState(false);
