@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
+import { useAdminToken } from "@/lib/admin-token";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
