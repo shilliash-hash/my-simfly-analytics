@@ -8,7 +8,8 @@ import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
 } from "@/components/app-shell";
-import { Coins, Trophy, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee } from "lucide-react";
+import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard } from "lucide-react";
+import type { FlightLog } from "@/lib/types";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
