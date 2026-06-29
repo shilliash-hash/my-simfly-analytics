@@ -565,9 +565,11 @@ export const tickBackfill = createServerFn({ method: "POST" })
 
       // Persist page 1 immediately.
       if (disc.firstPage?.flights?.length) {
+        const total = disc.firstPage.flights.length;
         await upsertFlightRows(
           db,
-          disc.firstPage.flights.map((f) => flightToRow(username, f)),
+          disc.firstPage.flights.map((f, index) => flightToRow(username, f, { page: 1, index, total })),
+          username,
         );
       }
 
