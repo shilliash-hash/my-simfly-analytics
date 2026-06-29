@@ -70,9 +70,9 @@ export type BackfillStatusRow = {
   started_at: string | null;
   last_page_at: string | null;
   updated_at: string;
-  /** Computed server-side: seconds since last_page_at when status === "running". */
+  /** Computed server-side: seconds since last_page_at when status === "running". Not persisted. */
   seconds_since_progress?: number;
-  /** Computed: the page number the importer is currently trying to fetch. */
+  /** Computed: the page number the importer will try next. Not persisted. */
   next_page?: number;
 };
 
@@ -85,6 +85,36 @@ function logImport(username: string, msg: string, extra?: Record<string, unknown
   } else {
     console.log(`${tag} ${msg}`);
   }
+}
+
+/**
+ * Strip computed-only fields before persisting. Supabase's typed upsert
+ * rejects properties that don't exist as table columns.
+ */
+function persistable(row: BackfillStatusRow): Omit<BackfillStatusRow, "seconds_since_progress" | "next_page"> {
+  const { seconds_since_progress: _s, next_page: _n, ...rest } = row;
+  void _s;
+  void _n;
+  return rest;
+}
+
+/** Decorate a freshly-read row with computed UI fields (stall info, next page). */
+function decorate(row: BackfillStatusRow): BackfillStatusRow {
+  const next_page = row.current_page + 1;
+  let seconds_since_progress: number | undefined;
+  let status: BackfillStatusRow["status"] = row.status;
+  let error_message: string | null = row.error_message;
+  if (row.status === "running" && row.last_page_at) {
+    const elapsed = Math.floor((Date.now() - new Date(row.last_page_at).getTime()) / 1000);
+    seconds_since_progress = elapsed;
+    if (elapsed > STALL_THRESHOLD_SEC) {
+      status = "stalled";
+      error_message =
+        error_message ??
+        `No progress for ${elapsed}s. Last completed page: ${row.current_page}. Currently attempting page ${next_page}.`;
+    }
+  }
+  return { ...row, status, error_message, seconds_since_progress, next_page };
 }
 
 function sanitiseNonce(raw?: string | null): string {
