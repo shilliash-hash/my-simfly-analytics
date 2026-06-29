@@ -61,7 +61,7 @@ type RawFlightsPage = {
 
 export type BackfillStatusRow = {
   username: string;
-  status: "idle" | "running" | "completed" | "failed";
+  status: "idle" | "running" | "completed" | "failed" | "stalled";
   total_pages: number;
   current_page: number;
   flights_imported: number;
@@ -70,7 +70,22 @@ export type BackfillStatusRow = {
   started_at: string | null;
   last_page_at: string | null;
   updated_at: string;
+  /** Computed server-side: seconds since last_page_at when status === "running". */
+  seconds_since_progress?: number;
+  /** Computed: the page number the importer is currently trying to fetch. */
+  next_page?: number;
 };
+
+const STALL_THRESHOLD_SEC = 60;
+
+function logImport(username: string, msg: string, extra?: Record<string, unknown>) {
+  const tag = `[backfill:${username}]`;
+  if (extra && Object.keys(extra).length > 0) {
+    console.log(`${tag} ${msg}`, extra);
+  } else {
+    console.log(`${tag} ${msg}`);
+  }
+}
 
 function sanitiseNonce(raw?: string | null): string {
   if (!raw) return "";
