@@ -199,6 +199,8 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
             <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
             <Tooltip
               contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
+              itemStyle={{ color: "#FBBF24", fontWeight: 600 }}
+              labelStyle={{ color: "var(--foreground)", fontWeight: 600 }}
               formatter={(v: number, name) => {
                 const label =
                   name === "paxVisitors" ? "Visitor PAX" : name === "paxTotal" ? "Total PAX" : "Your PAX";
