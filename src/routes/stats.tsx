@@ -143,7 +143,7 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
           <span className="mono text-[11px] text-muted-foreground">{rangeLabel}</span>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-4 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-4 text-[11px] font-medium text-foreground">
             <span className="flex items-center gap-1.5">
               <span className="inline-block h-2 w-2 rounded-sm bg-[var(--runway)]" />
               Your PAX
@@ -153,7 +153,7 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
               Visitor PAX
             </span>
             <span className="flex items-center gap-1.5">
-              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--foreground)] opacity-60" />
+              <span className="inline-block h-2 w-2 rounded-sm bg-[var(--foreground)]" />
               Total PAX
             </span>
           </div>
