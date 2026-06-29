@@ -97,7 +97,13 @@ function ActivityFeed() {
       />
 
       <div className="mb-6">
-        <FlightMap hubs={data.airports} flights={data.flights} />
+        <FlightMap
+          hubs={data.airports}
+          flights={data.flights}
+          airplanes={data.airplanes}
+          licenses={data.licenses}
+          liveFlights={liveFlights}
+        />
       </div>
 
       <div className="mb-4 flex flex-wrap gap-1 rounded-lg border border-border bg-background/50 p-1">
