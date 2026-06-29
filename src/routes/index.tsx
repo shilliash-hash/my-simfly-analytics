@@ -427,6 +427,11 @@ function IncomingTraffic({
                         <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                           {v.aircraftICAO} · {v.origin ?? "—"} → {v.destination ?? "—"}
                         </div>
+                        {v.etaMs && (
+                          <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
+                            ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
+                          </div>
+                        )}
                       </div>
                       {arriving ? (
                         <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
