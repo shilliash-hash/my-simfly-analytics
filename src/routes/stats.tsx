@@ -199,15 +199,26 @@ function EarningsChart({ series }: { series: { date: string; pax: number; paxVis
             <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
             <Tooltip
               contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-              itemStyle={{ color: "#FBBF24", fontWeight: 600 }}
-              labelStyle={{ color: "var(--foreground)", fontWeight: 600 }}
-              formatter={(v: number, name) => {
-                const label =
-                  name === "paxVisitors" ? "Visitor PAX" : name === "paxTotal" ? "Total PAX" : "Your PAX";
-                return [formatNumber(v) + " PAX", label];
+              labelStyle={{ color: "var(--foreground)", fontWeight: 700 }}
+              content={({ active, payload, label }) => {
+                if (!active || !payload?.length) return null;
+                const colorFor = (n: string) =>
+                  n === "paxVisitors" ? "#FB923C" : n === "paxTotal" ? "#FBBF24" : "#22D3EE";
+                const labelFor = (n: string) =>
+                  n === "paxVisitors" ? "Visitor PAX" : n === "paxTotal" ? "Total PAX" : "Your PAX";
+                return (
+                  <div style={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, padding: "8px 10px", fontSize: 12 }}>
+                    <div style={{ color: "var(--foreground)", fontWeight: 700, marginBottom: 4 }}>{label}</div>
+                    {payload.map((p) => (
+                      <div key={p.dataKey as string} style={{ color: colorFor(p.dataKey as string), fontWeight: 600 }}>
+                        {labelFor(p.dataKey as string)} : {formatNumber(Number(p.value))} PAX
+                      </div>
+                    ))}
+                  </div>
+                );
               }}
             />
-            <Bar dataKey="paxTotal" name="paxTotal" fill="rgba(226,232,240,0.35)" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="paxTotal" name="paxTotal" fill="#FBBF24" fillOpacity={0.55} radius={[3, 3, 0, 0]} />
             <Area type="monotone" dataKey="pax" name="pax" stroke="var(--runway)" strokeWidth={2} fill="url(#gPax)" />
             <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gVisitors)" />
           </ComposedChart>
