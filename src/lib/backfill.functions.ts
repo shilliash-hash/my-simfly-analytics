@@ -340,7 +340,8 @@ export const getBackfillStatus = createServerFn({ method: "GET" })
       .eq("username", username)
       .maybeSingle();
     const current = (row as BackfillStatusRow | null) ?? emptyRow(username);
-    return repairIfPrematurelyCompleted(db, current);
+    const repaired = await repairIfPrematurelyCompleted(db, current);
+    return decorate(repaired);
   });
 
 export const getFlightsForUser = createServerFn({ method: "GET" })
