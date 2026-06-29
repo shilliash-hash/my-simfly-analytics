@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useState } from "react";
-import { getSimflyPayload } from "@/lib/simfly.functions";
+import { useEffect, useMemo, useState } from "react";
+import { getSimflyPayload, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber, relativeTime } from "@/components/app-shell";
 import { FlightMap } from "@/components/flight-map";
