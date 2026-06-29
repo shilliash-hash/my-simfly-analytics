@@ -94,6 +94,15 @@ function Overview() {
           const completedIds = new Set(data.flights.map((f) => f.id));
           return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
         })()}
+        liveMissionIds={useMemo(() => {
+          // Mission IDs SimFly still reports anywhere in our hub feeds.
+          // Primary trigger: when our snapshot id leaves this set, mark ARRIVED.
+          const ids = new Set<string>();
+          for (const f of myFlights) ids.add(f.id);
+          for (const h of hubTraffic) for (const v of h.visitors) ids.add(v.id);
+          return ids;
+        }, [myFlights, hubTraffic])}
+        completedIds={useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights])}
         lastFlight={data.flights[0] ?? null}
       />
 
