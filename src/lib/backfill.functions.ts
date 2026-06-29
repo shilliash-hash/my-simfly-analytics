@@ -693,7 +693,6 @@ export const tickBackfill = createServerFn({ method: "POST" })
     await upsertProgress(db, next);
     return decorate(next);
   });
-  });
 
 /**
  * Manual reset — wipes flights + progress for the username so the next tick
