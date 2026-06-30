@@ -62,6 +62,20 @@ const SPECS: AircraftSpec[] = [
   { icao: "B789", model: "Boeing 787-9",          category: 6, cruiseKt: 487, rangeNm: 7635, pax: 290 },
   { icao: "B78X", model: "Boeing 787-10",         category: 6, cruiseKt: 487, rangeNm: 6430, pax: 330 },
   { icao: "B748", model: "Boeing 747-8",          category: 6, cruiseKt: 493, rangeNm: 7730, pax: 410 },
+
+  // Personal/light jets
+  { icao: "SF50", model: "Cirrus Vision SF50",    category: 3, cruiseKt: 311, rangeNm: 1200, pax: 6 },
+  { icao: "E50P", model: "Embraer Phenom 100",    category: 3, cruiseKt: 390, rangeNm: 1178, pax: 7 },
+  { icao: "E55P", model: "Embraer Phenom 300",    category: 3, cruiseKt: 453, rangeNm: 2010, pax: 9 },
+  { icao: "HDJT", model: "HondaJet HA-420",       category: 3, cruiseKt: 422, rangeNm: 1223, pax: 7 },
+
+  // Helicopters / rotorcraft
+  { icao: "R44",  model: "Robinson R44",          category: 1, cruiseKt: 110, rangeNm: 300,  pax: 3 },
+  { icao: "R66",  model: "Robinson R66",          category: 1, cruiseKt: 115, rangeNm: 350,  pax: 4 },
+  { icao: "B06",  model: "Bell 206 JetRanger",    category: 1, cruiseKt: 117, rangeNm: 374,  pax: 4 },
+  { icao: "H125", model: "Airbus H125",           category: 2, cruiseKt: 140, rangeNm: 340,  pax: 5 },
+  { icao: "EC35", model: "Airbus H135",           category: 2, cruiseKt: 137, rangeNm: 343,  pax: 6 },
+  { icao: "EC45", model: "Airbus H145",           category: 2, cruiseKt: 137, rangeNm: 351,  pax: 9 },
 ];
 
 const BY_ICAO = new Map(SPECS.map((s) => [s.icao.toUpperCase(), s]));
