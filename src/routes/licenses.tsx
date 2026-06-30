@@ -6,6 +6,7 @@ import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import type { LicenseTimer } from "@/lib/types";
 import { ShieldCheck } from "lucide-react";
+import { RouteChecker } from "@/components/route-checker";
 
 function LevelBadge({ level }: { level: number }) {
   return (
@@ -57,7 +58,10 @@ function LicensesPage() {
         />
       </div>
 
+      <RouteChecker licenses={rows} />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+
         {rows.map((l) => (
           <Link
             key={l.sku + l.code}
