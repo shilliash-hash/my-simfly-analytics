@@ -2239,6 +2239,8 @@ export type UpgradeAdvisorRow = {
   arrivalsPerDay: number;
   avgBasePaxPerFlight: number;
   currentDailyPax: number;
+  /** Extra daily PAX from the Weekly Cycle First-Movement ×3 bonus (assumed 1/week per airport). */
+  bonusDailyPax: number;
   dailyIncrease: number;
   annualIncrease: number;
   upgradeCost: number;
