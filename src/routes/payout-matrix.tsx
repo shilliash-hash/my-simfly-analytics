@@ -97,7 +97,7 @@ function MatrixCard({ icao, pages }: { icao: string; pages: number }) {
   const fn = useServerFn(getAirportPayoutMatrix);
   const { keyTag, payload } = useSimflyArgs();
   const { data, isFetching, isError, refetch } = useQuery({
-    queryKey: ["payout-matrix", keyTag, icao, pages],
+    queryKey: ["payout-matrix", "airport-credit-v2", keyTag, icao, pages],
     queryFn: () => fn({ data: { icao, pages, username: payload?.username } }),
     staleTime: 15 * 60_000,
   });
