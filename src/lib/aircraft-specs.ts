@@ -136,14 +136,19 @@ export interface EtaResult {
   matched: boolean;
 }
 
-/** Distance/cruise-speed ETA. Returns null when geo is missing. */
+/** Fixed operational allowance (ms) added to cruise time to approximate
+ *  taxi, takeoff, climb, descent, approach and landing. Phase 1: flat 20m. */
+export const OPERATIONAL_ALLOWANCE_MS = 20 * 60 * 1000;
+
+/** Distance/cruise-speed ETA + fixed operational allowance. Returns null when geo is missing. */
 export function computeEta(inputs: EtaInputs): EtaResult | null {
   if (!inputs.origin || !inputs.destination) return null;
   if (!Number.isFinite(inputs.departureMs)) return null;
   const distanceNm = haversineNm(inputs.origin, inputs.destination);
   const { spec, matched } = lookupAircraftSpec(inputs.aircraftICAO);
   const cruiseKt = spec.cruiseKt;
-  const durationMs = (distanceNm / cruiseKt) * 3600 * 1000;
+  const cruiseMs = (distanceNm / cruiseKt) * 3600 * 1000;
+  const durationMs = cruiseMs + OPERATIONAL_ALLOWANCE_MS;
   const etaMs = inputs.departureMs + durationMs;
   if (inputs.debug) {
     const hh = Math.floor(durationMs / 3600000);
@@ -153,11 +158,13 @@ export function computeEta(inputs: EtaInputs): EtaResult | null {
       `[ETA] flight=${inputs.flightId ?? "?"} icao=${inputs.aircraftICAO ?? "?"} ` +
         `model="${spec.model}"${matched ? "" : " (FALLBACK)"} ` +
         `cruise=${cruiseKt}kt distance=${distanceNm.toFixed(1)}NM ` +
-        `duration=${hh}h ${mm}m eta=${formatEtaUtc(etaMs)}`,
+        `cruiseTime=${Math.round(cruiseMs / 60000)}m +allowance=${OPERATIONAL_ALLOWANCE_MS / 60000}m ` +
+        `total=${hh}h ${mm}m eta=${formatEtaUtc(etaMs)}`,
     );
   }
   return { distanceNm, cruiseKt, durationMs, etaMs, model: spec.model, matched };
 }
+
 
 /** UUIDv7 → unix ms (SimFly mission ids are v7). */
 export function uuidV7Ms(id?: string | null): number | null {
