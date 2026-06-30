@@ -2204,6 +2204,8 @@ export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
         pilot: (r.username as string) ?? username,
         pax: r.pax as number | null,
         xp: r.xp as number | null,
+        departure: (r.departure_icao as string | null) ?? null,
+        arrival: (r.destination_icao as string | null) ?? null,
       });
     }
     return {
