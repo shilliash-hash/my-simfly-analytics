@@ -2058,3 +2058,83 @@ export const getAirportSummary = createServerFn({ method: "GET" })
     if (!raw || raw.type !== "Airport" || !raw.icao) return null;
     return mapAirport(raw, []);
   });
+
+// ---- Weekly License Route Checker ------------------------------------------
+// SimFly weekly cycle is Monday 00:00 UTC → Sunday 23:59:59 UTC.
+export function currentSimflyWeekRangeUtc(now: Date = new Date()): { startIso: string; endIso: string } {
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  // getUTCDay: Sun=0..Sat=6 → days since Monday
+  const dow = start.getUTCDay();
+  const daysSinceMonday = (dow + 6) % 7;
+  start.setUTCDate(start.getUTCDate() - daysSinceMonday);
+  const end = new Date(start);
+  end.setUTCDate(end.getUTCDate() + 7);
+  end.setUTCMilliseconds(end.getUTCMilliseconds() - 1);
+  return { startIso: start.toISOString(), endIso: end.toISOString() };
+}
+
+export type LicenceRouteCheckMatch = {
+  flightId: string;
+  completedAt: string;
+  aircraft: string | null;
+  aircraftTail: string | null;
+  pilot: string;
+  pax: number | null;
+  xp: number | null;
+};
+
+export type LicenceRouteCheckResult = {
+  weekStart: string;
+  weekEnd: string;
+  licence: string;
+  departure: string;
+  arrival: string;
+  matches: LicenceRouteCheckMatch[];
+};
+
+export const checkLicenceRoute = createServerFn({ method: "GET" })
+  .inputValidator((d: { licence: string; departure: string; arrival: string; username?: string }) => d)
+  .handler(async ({ data }): Promise<LicenceRouteCheckResult> => {
+    const username = (data.username || defaultUsername()).trim();
+    const licence = (data.licence || "").trim().toUpperCase();
+    const departure = (data.departure || "").trim().toUpperCase();
+    const arrival = (data.arrival || "").trim().toUpperCase();
+    const { startIso, endIso } = currentSimflyWeekRangeUtc();
+    const empty: LicenceRouteCheckResult = {
+      weekStart: startIso,
+      weekEnd: endIso,
+      licence,
+      departure,
+      arrival,
+      matches: [],
+    };
+    if (!licence || !/^[A-Z0-9]{4}$/.test(departure) || !/^[A-Z0-9]{4}$/.test(arrival)) return empty;
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("flight_id,mission_start_ts,aircraft,aircraft_tail_number,username,pax,xp,licence")
+      .eq("username", username)
+      .eq("licence", licence)
+      .eq("departure_icao", departure)
+      .eq("destination_icao", arrival)
+      .gte("mission_start_ts", startIso)
+      .lte("mission_start_ts", endIso)
+      .order("mission_start_ts", { ascending: false })
+      .limit(50);
+    if (error) {
+      console.warn("[simfly] checkLicenceRoute failed", error);
+      return empty;
+    }
+    return {
+      ...empty,
+      matches: (rows ?? []).map((r) => ({
+        flightId: r.flight_id as string,
+        completedAt: (r.mission_start_ts as string) ?? "",
+        aircraft: (r.aircraft as string | null) ?? null,
+        aircraftTail: (r.aircraft_tail_number as string | null) ?? null,
+        pilot: (r.username as string) ?? username,
+        pax: r.pax as number | null,
+        xp: r.xp as number | null,
+      })),
+    };
+  });
