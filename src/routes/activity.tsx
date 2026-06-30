@@ -63,7 +63,7 @@ function ActivityFeed() {
   );
   const { data: liveFlights = [] } = useQuery({
     queryKey: ["simfly", "myLive", keyTag, icaos, tails, "withUnmatched"],
-    queryFn: () => liveFn({ data: { icaos, tails, includeUnmatched: true, ...(username ? { username } : {}) } }),
+    queryFn: () => liveFn({ data: { icaos, tails, includeUnmatched: false, ...(username ? { username } : {}) } }),
     enabled: icaos.length > 0,
     refetchInterval: 60_000,
     staleTime: 30_000,
