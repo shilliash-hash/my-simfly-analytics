@@ -218,6 +218,11 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           <div className="text-foreground/40">
             {row.flightsSampled} flights · {row.arrivalsPerDay.toFixed(1)}/day
           </div>
+          {row.bonusDailyPax > 0 && (
+            <div className="text-instrument/80">
+              incl. ×3 bonus +{row.bonusDailyPax.toFixed(2)}/day
+            </div>
+          )}
         </div>
       </footer>
     </article>
