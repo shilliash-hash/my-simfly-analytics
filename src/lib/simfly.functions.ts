@@ -2237,10 +2237,9 @@ export type UpgradeAdvisorRow = {
   windowDays: number;
   flightsSampled: number;
   arrivalsPerDay: number;
-  avgBasePaxPerFlight: number;
+  /** Mean TOTAL PAX credited to this airport per flight (Base + Weekly 3× bonus). */
+  avgTotalPaxPerFlight: number;
   currentDailyPax: number;
-  /** Extra daily PAX from the Weekly Cycle First-Movement ×3 bonus (assumed 1/week per airport). */
-  bonusDailyPax: number;
   dailyIncrease: number;
   annualIncrease: number;
   upgradeCost: number;
@@ -2266,73 +2265,67 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<UpgradeAdvisorResult> => {
     const { airportUpgradeCost, ratingForPaybackDays, PAYOUT_LEVEL_GROWTH } =
       await import("./airport-upgrade-costs");
-    const username = (data.username || defaultUsername()).trim();
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
-    const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
-    const icaos = Array.from(
-      new Set((data.airports ?? []).map((a) => (a.icao || "").toUpperCase()).filter(Boolean)),
-    );
+    const sinceMs = Date.now() - windowDays * 86_400_000;
     const empty: UpgradeAdvisorResult = {
       windowDays,
       generatedAt: new Date().toISOString(),
       rows: [],
     };
-    if (icaos.length === 0) return empty;
+    if (!data.airports?.length) return empty;
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: rows, error } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("departure_icao,destination_icao,pax,mission_start_ts")
-      .eq("username", username)
-      .gte("mission_start_ts", since)
-      .or(
-        `departure_icao.in.(${icaos.join(",")}),destination_icao.in.(${icaos.join(",")})`,
-      );
-    if (error) {
-      console.warn("[simfly] getUpgradeAdvisor query failed", error);
-    }
+    const { username, nonce } = await resolveIdentity({ username: data.username });
 
-    // Bucket pax-per-flight per airport (raw, share applied later per airport).
-    const buckets = new Map<string, number[]>();
-    for (const r of rows ?? []) {
-      const pax = Number(r.pax) || 0;
-      if (pax <= 0) continue;
-      const dep = ((r.departure_icao as string) || "").toUpperCase();
-      const dst = ((r.destination_icao as string) || "").toUpperCase();
-      for (const icao of [dep, dst]) {
-        if (!icao || !icaos.includes(icao)) continue;
-        const arr = buckets.get(icao) ?? [];
-        arr.push(pax);
-        buckets.set(icao, arr);
-      }
-    }
+    // Reuse the same public airport history endpoint that powers the Payout
+    // Matrix. Sample a few pages per airport — TOTAL is the airport-side
+    // credit (earnedPax + bonusPax) so the Weekly Cycle ×3 bonus is naturally
+    // included, matching what actually hits the wallet.
+    const PAGES_PER_AIRPORT = 5;
+    const perAirport = await Promise.all(
+      data.airports.map(async (a) => {
+        const icao = (a.icao || "").toUpperCase();
+        if (!icao) return { icao, totals: [] as number[] };
+        const urls = Array.from({ length: PAGES_PER_AIRPORT }, (_, i) =>
+          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
+        );
+        const responses = await fetchJSONPages<RawAirportHistPage>(urls, 3);
+        const totals: number[] = [];
+        let consecutiveEmpty = 0;
+        for (const r of responses) {
+          if (!r?.flights?.length) {
+            consecutiveEmpty++;
+            if (consecutiveEmpty >= 2) break;
+            continue;
+          }
+          consecutiveEmpty = 0;
+          for (const f of r.flights as RawAirportHistFlight[]) {
+            const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime;
+            const tMs = ts ? Date.parse(ts) : NaN;
+            if (Number.isFinite(tMs) && tMs < sinceMs) continue;
+            const isOrigin = f.origin?.icao === icao;
+            const side = isOrigin ? f.origin : f.destination;
+            if (!side) continue;
+            const earned = side.earnedPax ?? 0;
+            const bonus = side.bonusPax ?? 0;
+            const total = side.totalEarnedPax ?? earned + bonus;
+            if (total <= 0) continue;
+            totals.push(total);
+          }
+        }
+        return { icao, totals };
+      }),
+    );
 
-    const trimmedMean = (vals: number[], dropTopPct = 0.15) => {
-      if (vals.length === 0) return 0;
-      if (vals.length < 4) {
-        return vals.reduce((s, v) => s + v, 0) / vals.length;
-      }
-      const sorted = [...vals].sort((a, b) => a - b);
-      const keep = Math.max(1, Math.floor(sorted.length * (1 - dropTopPct)));
-      const kept = sorted.slice(0, keep);
-      return kept.reduce((s, v) => s + v, 0) / kept.length;
-    };
+    const totalsByIcao = new Map(perAirport.map((p) => [p.icao, p.totals]));
 
     const out: UpgradeAdvisorRow[] = data.airports.map((a) => {
       const icao = (a.icao || "").toUpperCase();
-      const shareRaw = a.percToUser ?? 0;
-      const share = shareRaw > 1 ? shareRaw / 100 : shareRaw;
-      const samples = buckets.get(icao) ?? [];
-      const avgRawPax = trimmedMean(samples);
-      const avgBasePaxPerFlight = avgRawPax * share;
-      const arrivalsPerDay = samples.length / windowDays;
-      const currentDailyPax = arrivalsPerDay * avgBasePaxPerFlight;
-      // Weekly Cycle First-Movement bonus: one flight per week receives ×3 payout
-      // (i.e. +2× base extra). Spread that extra across 7 days as a sustainable
-      // daily average. Only counted if the airport actually sees traffic.
-      const bonusDailyPax = samples.length > 0 ? (avgBasePaxPerFlight * 2) / 7 : 0;
-      const projectedDailyPax = currentDailyPax + bonusDailyPax;
-      const dailyIncrease = projectedDailyPax * PAYOUT_LEVEL_GROWTH;
+      const totals = totalsByIcao.get(icao) ?? [];
+      const avgTotalPaxPerFlight =
+        totals.length > 0 ? totals.reduce((s, v) => s + v, 0) / totals.length : 0;
+      const arrivalsPerDay = totals.length / windowDays;
+      const currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight;
+      const dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH;
       const annualIncrease = dailyIncrease * 365;
       const upgradeCost = airportUpgradeCost(a.tier, a.level + 1);
       const paybackDays = dailyIncrease > 0 ? upgradeCost / dailyIncrease : -1;
@@ -2344,11 +2337,10 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
         level: a.level,
         nextLevel: a.level + 1,
         windowDays,
-        flightsSampled: samples.length,
+        flightsSampled: totals.length,
         arrivalsPerDay,
-        avgBasePaxPerFlight,
+        avgTotalPaxPerFlight,
         currentDailyPax,
-        bonusDailyPax,
         dailyIncrease,
         annualIncrease,
         upgradeCost,
@@ -2360,4 +2352,5 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
 
     return { windowDays, generatedAt: new Date().toISOString(), rows: out };
   });
+
 
