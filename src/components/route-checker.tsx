@@ -1,10 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
-import { checkLicenceRoute, searchAirports } from "@/lib/simfly.functions";
+import { evaluateRouteForAllLicences, searchAirports } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import type { LicenseExt } from "@/lib/types";
-import type { LicenceRouteCheckResult } from "@/lib/simfly.functions";
 import { CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 
 type AirportFieldProps = {
@@ -76,41 +75,33 @@ function AirportField({ label, value, onChange }: AirportFieldProps) {
 }
 
 export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
-  const fn = useServerFn(checkLicenceRoute);
-  const { username } = useSimflyArgs();
-  const options = useMemo(
-    () => licenses.filter((l) => l.code).sort((a, b) => a.name.localeCompare(b.name)),
+  const fn = useServerFn(evaluateRouteForAllLicences);
+  const { username, keyTag } = useSimflyArgs();
+  const codes = useMemo(
+    () => Array.from(new Set(licenses.map((l) => l.code).filter(Boolean))) as string[],
     [licenses],
   );
-  const [licence, setLicence] = useState(options[0]?.code ?? "");
+  const nameByCode = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of licenses) if (l.code) m.set(l.code, l.name);
+    return m;
+  }, [licenses]);
+
   const [departure, setDeparture] = useState("");
   const [arrival, setArrival] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [result, setResult] = useState<LicenceRouteCheckResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const ready = /^[A-Z0-9]{4}$/.test(departure) && /^[A-Z0-9]{4}$/.test(arrival) && codes.length > 0;
 
-  const canSubmit =
-    licence.length > 0 && /^[A-Z0-9]{4}$/.test(departure) && /^[A-Z0-9]{4}$/.test(arrival) && !busy;
+  const q = useQuery({
+    queryKey: ["route-licence-eval", keyTag, departure, arrival, codes.join(",")],
+    queryFn: () =>
+      fn({ data: { departure, arrival, licences: codes, ...(username ? { username } : {}) } }),
+    enabled: ready,
+    staleTime: 30_000,
+  });
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!canSubmit) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fn({
-        data: { licence, departure, arrival, ...(username ? { username } : {}) },
-      });
-      setResult(res);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Check failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const selectedLicence = options.find((l) => l.code === licence);
-  const matched = result && result.matches.length > 0 ? result.matches[0] : null;
+  const result = q.data;
+  const eligibleCount = result ? result.licences.filter((l) => !l.used).length : 0;
+  const usedCount = result ? result.licences.filter((l) => l.used).length : 0;
 
   return (
     <section className="panel mb-6 rounded-xl p-5">
@@ -121,89 +112,84 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
         </span>
       </div>
 
-      <form onSubmit={onSubmit} className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_auto]">
-        <div>
-          <label className="mono mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
-            License
-          </label>
-          <select
-            value={licence}
-            onChange={(e) => setLicence(e.target.value)}
-            className="mono h-[34px] w-full rounded-md border border-border bg-background/60 px-2 text-sm outline-none"
-          >
-            {options.length === 0 && <option value="">No licenses</option>}
-            {options.map((l) => (
-              <option key={l.sku + l.code} value={l.code}>
-                {l.code} — {l.name}
-              </option>
-            ))}
-          </select>
-        </div>
+      <div className="grid gap-3 md:grid-cols-2">
         <AirportField label="Departure" value={departure} onChange={setDeparture} />
         <AirportField label="Arrival" value={arrival} onChange={setArrival} />
-        <div className="flex items-end">
-          <button
-            type="submit"
-            disabled={!canSubmit}
-            className="mono inline-flex h-[34px] items-center gap-2 rounded-md bg-primary px-4 text-[11px] uppercase tracking-widest text-primary-foreground disabled:opacity-30"
-          >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            Check Route
-          </button>
-        </div>
-      </form>
+      </div>
 
-      {error && (
-        <div className="mt-3 text-xs text-destructive">{error}</div>
-      )}
-
-      {result && !matched && (
-        <div className="mt-4 flex items-start gap-3 rounded-lg border border-runway/30 bg-runway/10 p-3">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-runway" />
-          <div className="text-sm">
-            <div className="font-display font-semibold text-runway">Route available</div>
-            <div className="mt-1 text-muted-foreground">
-              No completed flight using <span className="mono text-foreground">{result.licence}</span>{" "}
-              was found for <span className="mono text-foreground">{result.departure} → {result.arrival}</span> during the current SimFly week.
-              You are still eligible for the first-arrival weekly ×3 bonus on this route.
-            </div>
-          </div>
+      {!ready && (
+        <div className="mono mt-4 text-[11px] uppercase tracking-widest text-muted-foreground">
+          Enter both ICAO codes — all {codes.length} licenses will be evaluated automatically.
         </div>
       )}
 
-      {result && matched && (
-        <div className="mt-4 flex items-start gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-3">
-          <XCircle className="mt-0.5 h-5 w-5 shrink-0 text-destructive" />
-          <div className="min-w-0 flex-1 text-sm">
-            <div className="font-display font-semibold text-destructive">Already used this week</div>
-            <dl className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2">
-              <KV label="License" value={`${result.licence}${selectedLicence ? ` — ${selectedLicence.name}` : ""}`} />
-              <KV label="Route" value={`${result.departure} → ${result.arrival}`} />
-              <KV label="Completed" value={formatUtc(matched.completedAt)} />
-              <KV label="Mission" value={`#${matched.flightId.slice(0, 8)}…`} mono />
-              <KV label="Aircraft" value={matched.aircraft ? `${matched.aircraft}${matched.aircraftTail ? ` (${matched.aircraftTail})` : ""}` : "—"} />
-              <KV label="Pilot" value={`@${matched.pilot}`} />
-            </dl>
-            {result.matches.length > 1 && (
-              <div className="mono mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-                +{result.matches.length - 1} more match{result.matches.length - 1 === 1 ? "" : "es"} this week
-              </div>
-            )}
-          </div>
+      {ready && q.isLoading && (
+        <div className="mono mt-4 flex items-center gap-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking {codes.length} licenses…
         </div>
+      )}
+
+      {ready && q.error && (
+        <div className="mt-4 text-xs text-destructive">
+          {q.error instanceof Error ? q.error.message : "Check failed."}
+        </div>
+      )}
+
+      {ready && result && (
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+            <span className="mono uppercase tracking-widest text-muted-foreground">
+              {result.departure} → {result.arrival}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-runway/30 bg-runway/10 px-2 py-0.5 text-runway">
+              <CheckCircle2 className="h-3.5 w-3.5" /> {eligibleCount} eligible
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
+              <XCircle className="h-3.5 w-3.5" /> {usedCount} used
+            </span>
+          </div>
+
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {result.licences.map((l) => {
+              const name = nameByCode.get(l.licence) ?? "";
+              if (l.used) {
+                return (
+                  <li
+                    key={l.licence}
+                    className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5"
+                    title={l.match?.completedAt ? `Last used ${formatUtc(l.match.completedAt)}` : ""}
+                  >
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <div className="min-w-0 flex-1">
+                      <div className="mono text-xs font-semibold text-destructive">{l.licence}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{name}</div>
+                      {l.match?.completedAt && (
+                        <div className="mono mt-0.5 text-[10px] text-muted-foreground">
+                          Used {formatUtc(l.match.completedAt)}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li
+                  key={l.licence}
+                  className="flex items-start gap-2 rounded-md border border-runway/30 bg-runway/10 p-2.5"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-runway" />
+                  <div className="min-w-0 flex-1">
+                    <div className="mono text-xs font-semibold text-runway">{l.licence}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{name}</div>
+                    <div className="mono mt-0.5 text-[10px] text-muted-foreground">×3 bonus available</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
     </section>
-  );
-}
-
-function KV({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
-  return (
-    <div className="flex gap-2">
-      <dt className="mono w-24 shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
-        {label}
-      </dt>
-      <dd className={`min-w-0 truncate ${mono ? "mono" : ""}`}>{value}</dd>
-    </div>
   );
 }
 

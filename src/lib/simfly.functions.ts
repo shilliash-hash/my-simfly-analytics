@@ -2138,3 +2138,75 @@ export const checkLicenceRoute = createServerFn({ method: "GET" })
       })),
     };
   });
+
+export type LicenceRouteStatus = {
+  licence: string;
+  used: boolean;
+  match: LicenceRouteCheckMatch | null;
+};
+
+export type RouteLicenceEvaluation = {
+  weekStart: string;
+  weekEnd: string;
+  departure: string;
+  arrival: string;
+  licences: LicenceRouteStatus[];
+};
+
+export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
+  .inputValidator((d: { departure: string; arrival: string; licences: string[]; username?: string }) => d)
+  .handler(async ({ data }): Promise<RouteLicenceEvaluation> => {
+    const username = (data.username || defaultUsername()).trim();
+    const departure = (data.departure || "").trim().toUpperCase();
+    const arrival = (data.arrival || "").trim().toUpperCase();
+    const codes = Array.from(
+      new Set((data.licences || []).map((c) => (c || "").trim().toUpperCase()).filter(Boolean)),
+    );
+    const { startIso, endIso } = currentSimflyWeekRangeUtc();
+    const base: RouteLicenceEvaluation = {
+      weekStart: startIso,
+      weekEnd: endIso,
+      departure,
+      arrival,
+      licences: codes.map((c) => ({ licence: c, used: false, match: null })),
+    };
+    if (!/^[A-Z0-9]{4}$/.test(departure) || !/^[A-Z0-9]{4}$/.test(arrival) || codes.length === 0) {
+      return base;
+    }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("flight_id,mission_start_ts,aircraft,aircraft_tail_number,username,pax,xp,licence")
+      .eq("username", username)
+      .in("licence", codes)
+      .eq("departure_icao", departure)
+      .eq("destination_icao", arrival)
+      .gte("mission_start_ts", startIso)
+      .lte("mission_start_ts", endIso)
+      .order("mission_start_ts", { ascending: false });
+    if (error) {
+      console.warn("[simfly] evaluateRouteForAllLicences failed", error);
+      return base;
+    }
+    const latest = new Map<string, LicenceRouteCheckMatch>();
+    for (const r of rows ?? []) {
+      const code = ((r.licence as string) || "").toUpperCase();
+      if (!code || latest.has(code)) continue;
+      latest.set(code, {
+        flightId: r.flight_id as string,
+        completedAt: (r.mission_start_ts as string) ?? "",
+        aircraft: (r.aircraft as string | null) ?? null,
+        aircraftTail: (r.aircraft_tail_number as string | null) ?? null,
+        pilot: (r.username as string) ?? username,
+        pax: r.pax as number | null,
+        xp: r.xp as number | null,
+      });
+    }
+    return {
+      ...base,
+      licences: codes.map((c) => {
+        const m = latest.get(c) ?? null;
+        return { licence: c, used: !!m, match: m };
+      }),
+    };
+  });
