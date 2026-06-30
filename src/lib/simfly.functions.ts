@@ -2239,6 +2239,8 @@ export type UpgradeAdvisorRow = {
   arrivalsPerDay: number;
   avgBasePaxPerFlight: number;
   currentDailyPax: number;
+  /** Extra daily PAX from the Weekly Cycle First-Movement ×3 bonus (assumed 1/week per airport). */
+  bonusDailyPax: number;
   dailyIncrease: number;
   annualIncrease: number;
   upgradeCost: number;
@@ -2325,7 +2327,12 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
       const avgBasePaxPerFlight = avgRawPax * share;
       const arrivalsPerDay = samples.length / windowDays;
       const currentDailyPax = arrivalsPerDay * avgBasePaxPerFlight;
-      const dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH;
+      // Weekly Cycle First-Movement bonus: one flight per week receives ×3 payout
+      // (i.e. +2× base extra). Spread that extra across 7 days as a sustainable
+      // daily average. Only counted if the airport actually sees traffic.
+      const bonusDailyPax = samples.length > 0 ? (avgBasePaxPerFlight * 2) / 7 : 0;
+      const projectedDailyPax = currentDailyPax + bonusDailyPax;
+      const dailyIncrease = projectedDailyPax * PAYOUT_LEVEL_GROWTH;
       const annualIncrease = dailyIncrease * 365;
       const upgradeCost = airportUpgradeCost(a.tier, a.level + 1);
       const paybackDays = dailyIncrease > 0 ? upgradeCost / dailyIncrease : -1;
@@ -2341,6 +2348,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
         arrivalsPerDay,
         avgBasePaxPerFlight,
         currentDailyPax,
+        bonusDailyPax,
         dailyIncrease,
         annualIncrease,
         upgradeCost,

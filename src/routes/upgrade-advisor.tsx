@@ -90,7 +90,7 @@ function UpgradeAdvisorPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Upgrade Advisor"
-        description="Estimate how quickly each next airport upgrade pays for itself, using your real flight history (Weekly ×3 bonuses excluded). This is advisory only — no game data is changed."
+        description="Estimate how quickly each next airport upgrade pays for itself, using your real flight history plus an estimated Weekly Cycle ×3 first-movement bonus. Advisory only — no game data is changed."
       />
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -156,10 +156,11 @@ function UpgradeAdvisorPage() {
         Methodology: the long-term base payout per arrival is derived from your last{" "}
         {advisor?.windowDays ?? windowDays} days of flights touching each airport,
         applying your owner share and dropping the top 15% of values to remove
-        Weekly Cycle First-Movement (×3) and similar temporary bonuses. Per-level
-        payout growth is assumed at ~10%. Upgrade cost uses a tunable Tier × Level
-        table in <code>src/lib/airport-upgrade-costs.ts</code>. Income, Activity and
-        Stats continue to show real payouts including bonuses.
+        temporary multipliers from the baseline. We then add an estimated Weekly
+        Cycle First-Movement ×3 bonus of one flight per airport per week (extra
+        2× base ÷ 7 days) so projections reflect what the Payout Matrix actually
+        shows. Per-level payout growth is assumed at ~10%. Upgrade cost uses a
+        tunable Tier × Level table in <code>src/lib/airport-upgrade-costs.ts</code>.
       </p>
     </AppShell>
   );
@@ -217,6 +218,11 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           <div className="text-foreground/40">
             {row.flightsSampled} flights · {row.arrivalsPerDay.toFixed(1)}/day
           </div>
+          {row.bonusDailyPax > 0 && (
+            <div className="text-instrument/80">
+              incl. ×3 bonus +{row.bonusDailyPax.toFixed(2)}/day
+            </div>
+          )}
         </div>
       </footer>
     </article>
