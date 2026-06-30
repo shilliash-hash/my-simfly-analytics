@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Grid3x3,
   Wrench,
+  TrendingUp,
 
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -29,6 +30,7 @@ const NAV = [
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
+  { to: "/upgrade-advisor", label: "Upgrade Advisor", icon: TrendingUp },
   { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },

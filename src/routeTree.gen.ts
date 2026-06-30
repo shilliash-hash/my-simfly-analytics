@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as UpgradeAdvisorRouteImport } from './routes/upgrade-advisor'
 import { Route as StatsRouteImport } from './routes/stats'
 import { Route as RankingsRouteImport } from './routes/rankings'
 import { Route as PayoutMatrixRouteImport } from './routes/payout-matrix'
@@ -26,6 +27,11 @@ import { Route as LicensesSlugRouteImport } from './routes/licenses.$slug'
 import { Route as AirportsIdRouteImport } from './routes/airports.$id'
 import { Route as AircraftIdRouteImport } from './routes/aircraft.$id'
 
+const UpgradeAdvisorRoute = UpgradeAdvisorRouteImport.update({
+  id: '/upgrade-advisor',
+  path: '/upgrade-advisor',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const StatsRoute = StatsRouteImport.update({
   id: '/stats',
   path: '/stats',
@@ -120,6 +126,7 @@ export interface FileRoutesByFullPath {
   '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
+  '/upgrade-advisor': typeof UpgradeAdvisorRoute
   '/aircraft/$id': typeof AircraftIdRoute
   '/airports/$id': typeof AirportsIdRoute
   '/licenses/$slug': typeof LicensesSlugRoute
@@ -138,6 +145,7 @@ export interface FileRoutesByTo {
   '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
+  '/upgrade-advisor': typeof UpgradeAdvisorRoute
   '/aircraft/$id': typeof AircraftIdRoute
   '/airports/$id': typeof AirportsIdRoute
   '/licenses/$slug': typeof LicensesSlugRoute
@@ -157,6 +165,7 @@ export interface FileRoutesById {
   '/payout-matrix': typeof PayoutMatrixRoute
   '/rankings': typeof RankingsRoute
   '/stats': typeof StatsRoute
+  '/upgrade-advisor': typeof UpgradeAdvisorRoute
   '/aircraft/$id': typeof AircraftIdRoute
   '/airports/$id': typeof AirportsIdRoute
   '/licenses/$slug': typeof LicensesSlugRoute
@@ -177,6 +186,7 @@ export interface FileRouteTypes {
     | '/payout-matrix'
     | '/rankings'
     | '/stats'
+    | '/upgrade-advisor'
     | '/aircraft/$id'
     | '/airports/$id'
     | '/licenses/$slug'
@@ -195,6 +205,7 @@ export interface FileRouteTypes {
     | '/payout-matrix'
     | '/rankings'
     | '/stats'
+    | '/upgrade-advisor'
     | '/aircraft/$id'
     | '/airports/$id'
     | '/licenses/$slug'
@@ -213,6 +224,7 @@ export interface FileRouteTypes {
     | '/payout-matrix'
     | '/rankings'
     | '/stats'
+    | '/upgrade-advisor'
     | '/aircraft/$id'
     | '/airports/$id'
     | '/licenses/$slug'
@@ -232,11 +244,19 @@ export interface RootRouteChildren {
   PayoutMatrixRoute: typeof PayoutMatrixRoute
   RankingsRoute: typeof RankingsRoute
   StatsRoute: typeof StatsRoute
+  UpgradeAdvisorRoute: typeof UpgradeAdvisorRoute
   PlayersHandleRoute: typeof PlayersHandleRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/upgrade-advisor': {
+      id: '/upgrade-advisor'
+      path: '/upgrade-advisor'
+      fullPath: '/upgrade-advisor'
+      preLoaderRoute: typeof UpgradeAdvisorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/stats': {
       id: '/stats'
       path: '/stats'
@@ -401,6 +421,7 @@ const rootRouteChildren: RootRouteChildren = {
   PayoutMatrixRoute: PayoutMatrixRoute,
   RankingsRoute: RankingsRoute,
   StatsRoute: StatsRoute,
+  UpgradeAdvisorRoute: UpgradeAdvisorRoute,
   PlayersHandleRoute: PlayersHandleRoute,
 }
 export const routeTree = rootRouteImport
