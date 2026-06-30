@@ -337,9 +337,14 @@ function CellDetailsDialog({
                     </th>
                     <th className="text-left px-3 py-2">Aircraft</th>
                     <th className="text-left px-3 py-2">Pilot</th>
-                    <th className="text-right px-3 py-2">Base</th>
-                    <th className="text-right px-3 py-2">Bonus</th>
-                    <th className="text-right px-3 py-2">Total</th>
+                    <th className="text-right px-3 py-2 text-foreground/40">Base</th>
+                    <th className="text-right px-3 py-2 text-foreground/40">Bonus</th>
+                    <th
+                      className="text-right px-3 py-2 text-runway"
+                      title="Actual PAX credited to this airport on landing (Base + Bonus)"
+                    >
+                      Total ★
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
