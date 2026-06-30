@@ -6,6 +6,7 @@ import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import type { LicenseTimer } from "@/lib/types";
 import { ShieldCheck } from "lucide-react";
+import { RouteChecker } from "@/components/route-checker";
 
 function LevelBadge({ level }: { level: number }) {
   return (
