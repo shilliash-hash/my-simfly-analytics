@@ -66,11 +66,13 @@ const SPECS: AircraftSpec[] = [
 
 const BY_ICAO = new Map(SPECS.map((s) => [s.icao.toUpperCase(), s]));
 
+// Mach 0.75 at typical cruise altitude ≈ 430 kt TAS. Used whenever an
+// aircraft type is not present in the specs table so ETA still renders.
 const DEFAULT_SPEC: AircraftSpec = {
-  icao: "DFLT",
-  model: "Generic",
+  icao: "UNKN",
+  model: "Unknown",
   category: 0,
-  cruiseKt: 280, // reasonable mid-spectrum fallback
+  cruiseKt: 430, // Mach 0.75 default
   rangeNm: 1500,
   pax: 50,
 };

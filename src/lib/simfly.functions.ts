@@ -1541,11 +1541,12 @@ export const getAirportVisitors = createServerFn({ method: "GET" })
 // in parallel and filters where the flying username matches me. A flight is
 // reported once even if it appears on both origin and destination feeds.
 export const getMyLiveFlights = createServerFn({ method: "GET" })
-  .inputValidator((d: { icaos: string[]; username?: string; tails?: string[] }) => d)
+  .inputValidator((d: { icaos: string[]; username?: string; tails?: string[]; includeUnmatched?: boolean }) => d)
   .handler(async ({ data }): Promise<MyLiveFlight[]> => {
     const { username } = identity({ username: data.username });
     const icaos = (data.icaos ?? []).filter(Boolean).slice(0, 24);
     const myTails = new Set((data.tails ?? []).filter(Boolean).map((t) => t.toLowerCase()));
+    const includeUnmatched = !!data.includeUnmatched;
     const results = await Promise.all(
       icaos.map(async (icao) => {
         try {
@@ -1565,7 +1566,7 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
       for (const f of list) {
         const isMine = f.username?.toLowerCase() === me;
         const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
-        if (!isMine && !isMyPlane) continue;
+        if (!isMine && !isMyPlane && !includeUnmatched) continue;
         if (seen.has(f.id)) continue;
         const departureMs = uuidV7Ms(f.id) ?? undefined;
         const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
