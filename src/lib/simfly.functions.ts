@@ -2319,9 +2319,15 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
             if (!side) continue;
             const earned = side.earnedPax ?? 0;
             const bonus = side.bonusPax ?? 0;
-            const total = side.totalEarnedPax ?? earned + bonus;
-            if (total <= 0) continue;
-            totals.push(total);
+            const pilotTotal = side.totalEarnedPax ?? earned + bonus;
+            if (pilotTotal <= 0) continue;
+            const rawShare = side.percToUser ?? 0;
+            const ownerShare = rawShare > 1 ? rawShare / 100 : rawShare;
+            const pilotShare = 1 - ownerShare;
+            const ownerCredit = pilotShare > 0 ? pilotTotal * (ownerShare / pilotShare) : 0;
+            if (ownerCredit <= 0) continue;
+            totals.push(ownerCredit);
+
           }
         }
         return { icao, totals };
