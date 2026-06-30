@@ -385,6 +385,8 @@ type RawLiveFlight = {
   flightNumber?: string;
   simKind?: string;
   licence?: string;
+  /** ISO timestamp when the mission started — authoritative for ETA. */
+  startTime?: string;
 };
 
 // ----- Public types for the UI -----
@@ -1568,10 +1570,10 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
         const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
         if (!isMine && !isMyPlane && !includeUnmatched) continue;
         if (seen.has(f.id)) continue;
-        const departureMs = uuidV7Ms(f.id) ?? undefined;
+        const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
         const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
         const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
-        const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO }) : null;
+        const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
         seen.set(f.id, {
           id: f.id,
           aircraftICAO: f.aircraftICAO,
@@ -1615,10 +1617,10 @@ export const getMyHubsIncomingTraffic = createServerFn({ method: "GET" })
           .filter((f) => f.username?.toLowerCase() !== me)
           .filter((f) => f.destinationICAO === icao || f.originICAO === icao)
           .map<AirportLiveVisitor>((f) => {
-            const departureMs = uuidV7Ms(f.id) ?? undefined;
+            const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
             const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
             const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
-            const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO }) : null;
+            const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
             return {
               id: f.id,
               username: f.username,
