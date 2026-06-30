@@ -2216,3 +2216,140 @@ export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
       }),
     };
   });
+
+// ---- Airport Upgrade Advisor ------------------------------------------------
+// ROI estimate per owned airport. We pull the user's recent (last 60d) flight
+// history from `simfly_flights` and, for each airport, compute:
+//   * arrivals per day  = count(flights touching airport) / windowDays
+//   * base payout/flt   = trimmed mean of (raw pax * percToUser) — top 15% is
+//                         dropped so the Weekly Cycle First-Movement 3× bonus
+//                         (and other temporary multipliers) cannot inflate the
+//                         long-term sustainable average.
+// We then ask `airportUpgradeCost(tier, level+1)` + a fixed
+// `PAYOUT_LEVEL_GROWTH` per-level bump to estimate daily / annual income
+// uplift and payback period. Pure advisory — no game state is mutated.
+export type UpgradeAdvisorRow = {
+  icao: string;
+  name: string;
+  tier: number;
+  level: number;
+  nextLevel: number;
+  windowDays: number;
+  flightsSampled: number;
+  arrivalsPerDay: number;
+  avgBasePaxPerFlight: number;
+  currentDailyPax: number;
+  dailyIncrease: number;
+  annualIncrease: number;
+  upgradeCost: number;
+  paybackDays: number; // Infinity-ish → -1 sentinel for JSON
+  stars: 1 | 2 | 3 | 4 | 5;
+  ratingLabel: string;
+};
+
+export type UpgradeAdvisorResult = {
+  windowDays: number;
+  generatedAt: string;
+  rows: UpgradeAdvisorRow[];
+};
+
+export const getUpgradeAdvisor = createServerFn({ method: "GET" })
+  .inputValidator(
+    (d: {
+      username?: string;
+      airports: { icao: string; name: string; tier: number; level: number; percToUser: number }[];
+      windowDays?: number;
+    }) => d,
+  )
+  .handler(async ({ data }): Promise<UpgradeAdvisorResult> => {
+    const { airportUpgradeCost, ratingForPaybackDays, PAYOUT_LEVEL_GROWTH } =
+      await import("./airport-upgrade-costs");
+    const username = (data.username || defaultUsername()).trim();
+    const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
+    const since = new Date(Date.now() - windowDays * 86_400_000).toISOString();
+    const icaos = Array.from(
+      new Set((data.airports ?? []).map((a) => (a.icao || "").toUpperCase()).filter(Boolean)),
+    );
+    const empty: UpgradeAdvisorResult = {
+      windowDays,
+      generatedAt: new Date().toISOString(),
+      rows: [],
+    };
+    if (icaos.length === 0) return empty;
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("departure_icao,destination_icao,pax,mission_start_ts")
+      .eq("username", username)
+      .gte("mission_start_ts", since)
+      .or(
+        `departure_icao.in.(${icaos.join(",")}),destination_icao.in.(${icaos.join(",")})`,
+      );
+    if (error) {
+      console.warn("[simfly] getUpgradeAdvisor query failed", error);
+    }
+
+    // Bucket pax-per-flight per airport (raw, share applied later per airport).
+    const buckets = new Map<string, number[]>();
+    for (const r of rows ?? []) {
+      const pax = Number(r.pax) || 0;
+      if (pax <= 0) continue;
+      const dep = ((r.departure_icao as string) || "").toUpperCase();
+      const dst = ((r.destination_icao as string) || "").toUpperCase();
+      for (const icao of [dep, dst]) {
+        if (!icao || !icaos.includes(icao)) continue;
+        const arr = buckets.get(icao) ?? [];
+        arr.push(pax);
+        buckets.set(icao, arr);
+      }
+    }
+
+    const trimmedMean = (vals: number[], dropTopPct = 0.15) => {
+      if (vals.length === 0) return 0;
+      if (vals.length < 4) {
+        return vals.reduce((s, v) => s + v, 0) / vals.length;
+      }
+      const sorted = [...vals].sort((a, b) => a - b);
+      const keep = Math.max(1, Math.floor(sorted.length * (1 - dropTopPct)));
+      const kept = sorted.slice(0, keep);
+      return kept.reduce((s, v) => s + v, 0) / kept.length;
+    };
+
+    const out: UpgradeAdvisorRow[] = data.airports.map((a) => {
+      const icao = (a.icao || "").toUpperCase();
+      const shareRaw = a.percToUser ?? 0;
+      const share = shareRaw > 1 ? shareRaw / 100 : shareRaw;
+      const samples = buckets.get(icao) ?? [];
+      const avgRawPax = trimmedMean(samples);
+      const avgBasePaxPerFlight = avgRawPax * share;
+      const arrivalsPerDay = samples.length / windowDays;
+      const currentDailyPax = arrivalsPerDay * avgBasePaxPerFlight;
+      const dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH;
+      const annualIncrease = dailyIncrease * 365;
+      const upgradeCost = airportUpgradeCost(a.tier, a.level + 1);
+      const paybackDays = dailyIncrease > 0 ? upgradeCost / dailyIncrease : -1;
+      const rating = ratingForPaybackDays(paybackDays > 0 ? paybackDays : Number.POSITIVE_INFINITY);
+      return {
+        icao,
+        name: a.name,
+        tier: a.tier,
+        level: a.level,
+        nextLevel: a.level + 1,
+        windowDays,
+        flightsSampled: samples.length,
+        arrivalsPerDay,
+        avgBasePaxPerFlight,
+        currentDailyPax,
+        dailyIncrease,
+        annualIncrease,
+        upgradeCost,
+        paybackDays,
+        stars: rating.stars,
+        ratingLabel: rating.label,
+      };
+    });
+
+    return { windowDays, generatedAt: new Date().toISOString(), rows: out };
+  });
+
