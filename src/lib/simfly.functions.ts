@@ -1931,6 +1931,17 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
         }
         if (earned <= 0) { excluded++; continue; }
 
+        // `earned` / `bonus` / `totalEarnedPax` on the airport side are the
+        // PILOT's received PAX (after the Airport Profit Split). The actual
+        // credit to the airport OWNER for that flight is the complement:
+        //   ownerCredit = pilotTotal * ownerShare / pilotShare
+        // `percToUser` is the airport-owner cut (0–100 or 0–1).
+        const pilotTotal = side.totalEarnedPax ?? (earned + bonus);
+        const rawShare = side.percToUser ?? 0;
+        const ownerShare = rawShare > 1 ? rawShare / 100 : rawShare;
+        const pilotShare = 1 - ownerShare;
+        const ownerCredit = pilotShare > 0 ? pilotTotal * (ownerShare / pilotShare) : 0;
+
         const tier = f.airplane?.category;
         const level = f.airplane?.level;
         if (!tier || !level) { excluded++; continue; }
@@ -1952,8 +1963,9 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
           pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",
           basePax: earned,
           bonusPax: bonus,
-          totalPax: side.totalEarnedPax ?? (earned + bonus),
+          totalPax: ownerCredit,
         });
+
         buckets.set(key, b);
         used++;
       }
