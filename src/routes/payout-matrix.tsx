@@ -369,18 +369,18 @@ function CellDetailsDialog({
                         ) : null}
                       </td>
                       <td className="px-3 py-1.5 text-foreground/70">{s.pilot}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/50">
                         {s.basePax.toFixed(2)}
                       </td>
                       <td
                         className={cn(
                           "px-3 py-1.5 text-right tabular-nums",
-                          s.bonusPax > 0 ? "text-amber-400" : "text-foreground/30",
+                          s.bonusPax > 0 ? "text-amber-400/80" : "text-foreground/25",
                         )}
                       >
                         {s.bonusPax > 0 ? `+${s.bonusPax.toFixed(2)}` : "—"}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/70">
+                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-runway text-sm">
                         {s.totalPax.toFixed(2)}
                       </td>
                     </tr>
