@@ -58,7 +58,10 @@ function LicensesPage() {
         />
       </div>
 
+      <RouteChecker licenses={rows} />
+
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+
         {rows.map((l) => (
           <Link
             key={l.sku + l.code}
