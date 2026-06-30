@@ -2173,14 +2173,13 @@ export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
     if (!/^[A-Z0-9]{4}$/.test(departure) || !/^[A-Z0-9]{4}$/.test(arrival) || codes.length === 0) {
       return base;
     }
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const airports = Array.from(new Set([departure, arrival]));
     const { data: rows, error } = await supabaseAdmin
       .from("simfly_flights")
-      .select("flight_id,mission_start_ts,aircraft,aircraft_tail_number,username,pax,xp,licence")
+      .select("flight_id,mission_start_ts,aircraft,aircraft_tail_number,username,pax,xp,licence,departure_icao,destination_icao")
       .eq("username", username)
       .in("licence", codes)
-      .eq("departure_icao", departure)
-      .eq("destination_icao", arrival)
+      .or(`departure_icao.in.(${airports.join(",")}),destination_icao.in.(${airports.join(",")})`)
       .gte("mission_start_ts", startIso)
       .lte("mission_start_ts", endIso)
       .order("mission_start_ts", { ascending: false });
