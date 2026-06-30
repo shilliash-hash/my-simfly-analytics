@@ -90,7 +90,7 @@ function UpgradeAdvisorPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Upgrade Advisor"
-        description="Estimate how quickly each next airport upgrade pays for itself, using your real flight history plus an estimated Weekly Cycle ×3 first-movement bonus. Advisory only — no game data is changed."
+        description="Estimate how quickly each next airport upgrade pays for itself, using the real TOTAL PAX your airports receive on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Advisory only — no game data is changed."
       />
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
