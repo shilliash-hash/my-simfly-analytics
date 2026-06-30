@@ -2173,6 +2173,7 @@ export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
     if (!/^[A-Z0-9]{4}$/.test(departure) || !/^[A-Z0-9]{4}$/.test(arrival) || codes.length === 0) {
       return base;
     }
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const airports = Array.from(new Set([departure, arrival]));
     const { data: rows, error } = await supabaseAdmin
       .from("simfly_flights")
