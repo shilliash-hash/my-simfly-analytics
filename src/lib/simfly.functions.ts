@@ -2081,6 +2081,8 @@ export type LicenceRouteCheckMatch = {
   pilot: string;
   pax: number | null;
   xp: number | null;
+  departure: string | null;
+  arrival: string | null;
 };
 
 export type LicenceRouteCheckResult = {
