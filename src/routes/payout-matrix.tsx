@@ -53,7 +53,7 @@ function PayoutMatrixPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
-        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded as a separate transaction — we ignore only that bonus line and use the standard Airport Profit Split as the base payout, so bonus flights still count toward the sample. This normalization applies only to this matrix — Income, Activity, Stats, Visitors, Consistency and all other reports continue to show actual payouts received, bonuses included."
+        description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded separately — the matrix average uses the standard Airport Profit Split as the base payout, while the drawer's Total column shows the actual airport-owner wallet credit after bonus and share adjustments."
       />
 
       <div className="mb-6 flex flex-wrap gap-3 items-end">
@@ -97,7 +97,7 @@ function MatrixCard({ icao, pages }: { icao: string; pages: number }) {
   const fn = useServerFn(getAirportPayoutMatrix);
   const { keyTag, payload } = useSimflyArgs();
   const { data, isFetching, isError, refetch } = useQuery({
-    queryKey: ["payout-matrix", keyTag, icao, pages],
+    queryKey: ["payout-matrix", "airport-credit-v2", keyTag, icao, pages],
     queryFn: () => fn({ data: { icao, pages, username: payload?.username } }),
     staleTime: 15 * 60_000,
   });
@@ -162,8 +162,8 @@ function MatrixTable({
           </p>
         </div>
         <p className="text-[10px] uppercase tracking-wider text-foreground/50 max-w-sm text-right">
-          Base payout estimate · bonus filter applied only here.
-          Income, Activity, Stats and Consistency keep showing real payouts with all bonuses.
+          Base payout estimate · Total shows actual owner credit.
+          Income, Activity, Stats and Consistency keep showing real payouts.
         </p>
       </header>
 
@@ -312,9 +312,9 @@ function CellDetailsDialog({
                 {cell.flights.toLocaleString()} flight{cell.flights === 1 ? "" : "s"} averaged{" "}
                 <span className="text-foreground font-medium">{cell.avgPax.toFixed(3)} PAX</span>{" "}
                 base payout. <span className="text-runway">Total</span> is the real PAX credited to
-                your airport (Base + Weekly Cycle ×3 bonus) — that is what actually hits your
-                wallet. The per-tier average uses Base only so temporary multipliers don't skew
-                the baseline.
+                your airport after Weekly Cycle bonus and share adjustments — that is what actually
+                hits your wallet. The per-tier average uses Base only so temporary multipliers don't
+                skew the baseline.
               </DialogDescription>
             </DialogHeader>
 
@@ -343,7 +343,7 @@ function CellDetailsDialog({
                     <th className="text-right px-3 py-2 text-foreground/40">Bonus</th>
                     <th
                       className="text-right px-3 py-2 text-runway"
-                      title="Actual PAX credited to the airport OWNER for this flight (pilot total × ownerShare, matches the per-asset card on the SimFly flight report)"
+                      title="Actual PAX credited to the airport owner for this flight, after bonus and share adjustments."
                     >
                       Total ★
                     </th>

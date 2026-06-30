@@ -1662,10 +1662,27 @@ type RawAirportHistFlight = {
   totalDistance?: number;
   pilot?: { username?: string };
   airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
-  origin?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
-  destination?: { icao?: string; category?: number; level?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; percToUser?: number };
+  origin?: { icao?: string; category?: number; level?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
+  destination?: { icao?: string; category?: number; level?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
 
 };
+
+type RawAirportHistSide = NonNullable<RawAirportHistFlight["origin"]>;
+
+function airportOwnerCredit(side: RawAirportHistSide): number {
+  // SimFly's airport-side `totalEarnedPax` is the final amount credited to the
+  // airport owner after split adjustments. Example ENVA: base 0.73 + bonus
+  // 1.46 + sharedPax -1.32 = totalEarnedPax 0.87. Do not apply percToUser
+  // again or it under-reports the wallet credit as 0.52.
+  const direct = side.totalEarnedPax ?? 0;
+  if (direct > 0) return direct;
+  const earned = side.earnedPax ?? side.pax ?? 0;
+  const bonus = side.bonusPax ?? 0;
+  const shared = side.sharedPax ?? 0;
+  const withShared = earned + bonus + shared;
+  if (withShared > 0) return withShared;
+  return earned + bonus;
+}
 
 type RawAirportHistFlightWithLicence = RawAirportHistFlight & {
   licence?: { code?: string; earnedXp?: number; owner?: { username?: string } };
@@ -1931,14 +1948,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
         }
         if (earned <= 0) { excluded++; continue; }
 
-        // `totalEarnedPax` on the airport side is the FULL flight revenue
-        // (Base + Weekly ×3 bonus). The actual credit to the airport OWNER:
-        //   ownerCredit = pilotTotal * ownerShare
-        // `percToUser` is the airport-owner cut (0–100 or 0–1).
-        const pilotTotal = side.totalEarnedPax ?? (earned + bonus);
-        const rawShare = side.percToUser ?? 0;
-        const ownerShare = rawShare > 1 ? rawShare / 100 : rawShare;
-        const ownerCredit = pilotTotal * ownerShare;
+        const ownerCredit = airportOwnerCredit(side);
 
         const tier = f.airplane?.category;
         const level = f.airplane?.level;
@@ -2315,13 +2325,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
             const isOrigin = f.origin?.icao === icao;
             const side = isOrigin ? f.origin : f.destination;
             if (!side) continue;
-            const earned = side.earnedPax ?? 0;
-            const bonus = side.bonusPax ?? 0;
-            const pilotTotal = side.totalEarnedPax ?? earned + bonus;
-            if (pilotTotal <= 0) continue;
-            const rawShare = side.percToUser ?? 0;
-            const ownerShare = rawShare > 1 ? rawShare / 100 : rawShare;
-            const ownerCredit = pilotTotal * ownerShare;
+            const ownerCredit = airportOwnerCredit(side);
             if (ownerCredit <= 0) continue;
             totals.push(ownerCredit);
 
