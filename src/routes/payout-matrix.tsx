@@ -311,8 +311,10 @@ function CellDetailsDialog({
               <DialogDescription>
                 {cell.flights.toLocaleString()} flight{cell.flights === 1 ? "" : "s"} averaged{" "}
                 <span className="text-foreground font-medium">{cell.avgPax.toFixed(3)} PAX</span>{" "}
-                base payout. Bonus transactions (e.g. Weekly Cycle 3×) are shown for reference but
-                are not part of the matrix average.
+                base payout. <span className="text-runway">Total</span> is the real PAX credited to
+                your airport (Base + Weekly Cycle ×3 bonus) — that is what actually hits your
+                wallet. The per-tier average uses Base only so temporary multipliers don't skew
+                the baseline.
               </DialogDescription>
             </DialogHeader>
 
@@ -337,9 +339,14 @@ function CellDetailsDialog({
                     </th>
                     <th className="text-left px-3 py-2">Aircraft</th>
                     <th className="text-left px-3 py-2">Pilot</th>
-                    <th className="text-right px-3 py-2">Base</th>
-                    <th className="text-right px-3 py-2">Bonus</th>
-                    <th className="text-right px-3 py-2">Total</th>
+                    <th className="text-right px-3 py-2 text-foreground/40">Base</th>
+                    <th className="text-right px-3 py-2 text-foreground/40">Bonus</th>
+                    <th
+                      className="text-right px-3 py-2 text-runway"
+                      title="Actual PAX credited to this airport on landing (Base + Bonus)"
+                    >
+                      Total ★
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -364,18 +371,18 @@ function CellDetailsDialog({
                         ) : null}
                       </td>
                       <td className="px-3 py-1.5 text-foreground/70">{s.pilot}</td>
-                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold">
+                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/50">
                         {s.basePax.toFixed(2)}
                       </td>
                       <td
                         className={cn(
                           "px-3 py-1.5 text-right tabular-nums",
-                          s.bonusPax > 0 ? "text-amber-400" : "text-foreground/30",
+                          s.bonusPax > 0 ? "text-amber-400/80" : "text-foreground/25",
                         )}
                       >
                         {s.bonusPax > 0 ? `+${s.bonusPax.toFixed(2)}` : "—"}
                       </td>
-                      <td className="px-3 py-1.5 text-right tabular-nums text-foreground/70">
+                      <td className="px-3 py-1.5 text-right tabular-nums font-semibold text-runway text-sm">
                         {s.totalPax.toFixed(2)}
                       </td>
                     </tr>

@@ -1,46 +1,40 @@
-## Why it's slow now
+## What TOTAL actually is
 
-`getSimflyPayload` (the function backing the Overview page and most charts) runs a lot of work on every call:
+For each flight, SimFly stores two PAX numbers on the airport side (`origin` / `destination`):
 
-- For each owned airport: 25 sequential pages of `/airport/{icao}/flights`.
-- For each owned plane: up to ~180 pages of `/airplane/{id}/flights`, planes scanned 2 at a time.
-- A 50,000-row read from `simfly_flights`.
-- A page-1 upsert back into Postgres.
+- `earnedPax` — your **standard Airport Profit Split** payout (BASE column, 0.73 in your screenshot). This is the `pax * percToUser` cut after applying any aircraft-rental adjustments.
+- `bonusPax` — a separate **Weekly Cycle First-Movement ×3** transaction (BONUS, +1.46).
+- `totalEarnedPax = earnedPax + bonusPax` — what actually hits your wallet when the flight lands (TOTAL, 2.19 — the 0.87 in your screenshot is the display bug from old data; will be fixed when re-rendered).
 
-On top of that, `BackfillIndicator` polls every 2s and, on every tick, invalidates `["simfly", keyTag]` whenever the imported-flight count changes — which during an active backfill means the whole heavy payload is re-fetched constantly. That's the main reason the site feels much slower than before the backfill work landed.
+So TOTAL = real income to the airport owner. Everything else in the app already reports TOTAL; only the Payout Matrix and the Upgrade Advisor were using BASE.
 
-## Fix
+## Changes
 
-Trade a little freshness on the visitor/aircraft scans for big speedups, and stop the refetch storm.
+### 1. Payout Matrix drawer — make TOTAL the primary column
+File: `src/routes/payout-matrix.tsx`
+- Visually promote the TOTAL column: bold, runway-cyan, slightly larger; demote BASE/BONUS to muted reference columns.
+- Add a tiny header tooltip on TOTAL: "Actual PAX credited to this airport on landing (BASE + BONUS)".
+- Keep the cell averages computed from BASE so the per-tier baseline still isn't distorted by the ×3 bonus — explain this in the existing methodology paragraph.
 
-1. **Server-side cache for the heavy scans** (`src/lib/simfly.functions.ts`)
-   - Add an in-process cache keyed by `username` for:
-     - the per-airport visitor pages result
-     - the `fetchAircraftOwnedVisitorBackfill` result
-     - the `simfly_flights` DB read
-   - TTL ~90s. On cache hit, skip the SimFly HTTP pages and the 50k-row DB read entirely.
-   - Live page-1 of the logbook (`/user/flights?fpage=1`) keeps being fetched every call so brand-new flights still appear immediately and are merged on top of cached history.
-   - Cache is per Worker isolate (no DB writes), so it self-evicts and doesn't need invalidation plumbing.
+### 2. Upgrade Advisor — switch from BASE to TOTAL airport income
+File: `src/lib/simfly.functions.ts` (`getUpgradeAdvisor`)
+- Today it queries `simfly_flights` (the viewer's own missions only) and averages `pax * percToUser`. That misses every visiting pilot's flight, which is the bulk of airport income.
+- New source: for each owned airport, reuse the same public airport history endpoint the Payout Matrix already paginates, and sum `totalEarnedPax` (fallback `earnedPax + bonusPax`) on the airport side per flight — i.e. the TOTAL column.
+- Average = simple mean of TOTAL per arrival over the chosen window (no top-15% trim, because TOTAL already represents real income and the user explicitly wants the bonus included).
+- `arrivalsPerDay` = flights touching the airport in the window ÷ windowDays.
+- `currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight`. Drop the separate `bonusDailyPax` synthetic addition — TOTAL already includes it.
+- `dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH` (10% per level, unchanged).
+- Payback / annual / star rating logic unchanged.
 
-2. **Stop the tick-driven invalidation storm** (`src/components/backfill-progress.tsx`)
-   - Remove the `qc.invalidateQueries({ queryKey: ["simfly", keyTag] })` that fires on every tick when `flights_imported` changes.
-   - Instead, invalidate at most once every 60s while a backfill is running, and once when the backfill transitions to `completed`. That still surfaces new historical flights, just not 20–30× per minute.
+### 3. Upgrade Advisor UI
+File: `src/routes/upgrade-advisor.tsx`
+- Rename the "Daily increase" methodology line: "Based on real TOTAL PAX credited to your airport (Airport Profit Split + Weekly Cycle ×3 bonus), averaged across all flights in the window."
+- Remove the "incl. ×3 bonus +X/day" footer breakdown (no longer separated — it's inside TOTAL).
+- Type change: rename `avgBasePaxPerFlight` → `avgTotalPaxPerFlight` in `UpgradeAdvisorRow`; remove `bonusDailyPax`. Update the only consumer (this file).
 
-3. **Lower the per-call work even on cache miss**
-   - Drop the `simfly_flights` select from `limit(50000)` to `limit(20000)` and only select the columns `rowToRawFlight` actually reads. (The cap is only hit by very heavy pilots and the extra rows aren't used for the 30-day chart.)
-   - Make the page-1 upsert fire-and-forget (don't `await`) so it never adds to user-visible latency.
-
-4. **Client-side: longer `staleTime` on the main payload query**
-   - In the Overview/Activity/Stats query options for `["simfly", keyTag]`, set `staleTime: 60_000` so route remounts and tab focus don't trigger a full refetch within a minute.
+### 4. Caching
+- Public airport history is paginated; cap to ~3 pages per airport per advisor request (same cap the matrix uses) and reuse the existing 90s server-side payload cache so the page stays snappy.
 
 ## Out of scope
-
-- No schema changes, no new tables, no new cron.
-- No change to what data is shown — only how often it's re-fetched.
-- The persistent historical backfill keeps running exactly as today; only its UI-side side-effects on the dashboard change.
-
-## Expected outcome
-
-- First dashboard load: similar to today on cold cache, noticeably faster on warm cache (no 25×hubs + aircraft sweep).
-- Subsequent loads within ~90s: near-instant — just page-1 of the live logbook.
-- During an active backfill: dashboard stays responsive instead of re-running the heavy payload every couple of seconds.
+- No change to Activity, Stats, Visitors, Income, Consistency — those already use TOTAL.
+- No change to the upgrade cost table or `PAYOUT_LEVEL_GROWTH`.

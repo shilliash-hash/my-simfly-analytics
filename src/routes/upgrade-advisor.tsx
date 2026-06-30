@@ -90,7 +90,7 @@ function UpgradeAdvisorPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Upgrade Advisor"
-        description="Estimate how quickly each next airport upgrade pays for itself, using your real flight history plus an estimated Weekly Cycle ×3 first-movement bonus. Advisory only — no game data is changed."
+        description="Estimate how quickly each next airport upgrade pays for itself, using the real TOTAL PAX your airports receive on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Advisory only — no game data is changed."
       />
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -153,14 +153,14 @@ function UpgradeAdvisorPage() {
       )}
 
       <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-        Methodology: the long-term base payout per arrival is derived from your last{" "}
-        {advisor?.windowDays ?? windowDays} days of flights touching each airport,
-        applying your owner share and dropping the top 15% of values to remove
-        temporary multipliers from the baseline. We then add an estimated Weekly
-        Cycle First-Movement ×3 bonus of one flight per airport per week (extra
-        2× base ÷ 7 days) so projections reflect what the Payout Matrix actually
-        shows. Per-level payout growth is assumed at ~10%. Upgrade cost uses a
-        tunable Tier × Level table in <code>src/lib/airport-upgrade-costs.ts</code>.
+        Methodology: average per-arrival income is the mean TOTAL PAX credited
+        to each airport (Airport Profit Split + Weekly Cycle ×3 bonus — the
+        "Total" column in the Payout Matrix, i.e. what actually hits your
+        wallet on landing) across every flight touching the airport in the
+        last {advisor?.windowDays ?? windowDays} days, sampled from the same
+        public airport history as the Payout Matrix. Per-level payout growth
+        is assumed at ~10%. Upgrade cost uses a tunable Tier × Level table
+        in <code>src/lib/airport-upgrade-costs.ts</code>.
       </p>
     </AppShell>
   );
@@ -218,9 +218,9 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           <div className="text-foreground/40">
             {row.flightsSampled} flights · {row.arrivalsPerDay.toFixed(1)}/day
           </div>
-          {row.bonusDailyPax > 0 && (
+          {row.avgTotalPaxPerFlight > 0 && (
             <div className="text-instrument/80">
-              incl. ×3 bonus +{row.bonusDailyPax.toFixed(2)}/day
+              avg {row.avgTotalPaxPerFlight.toFixed(2)} PAX/flight (incl. bonus)
             </div>
           )}
         </div>
