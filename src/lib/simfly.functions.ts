@@ -2137,6 +2137,8 @@ export const checkLicenceRoute = createServerFn({ method: "GET" })
         pilot: (r.username as string) ?? username,
         pax: r.pax as number | null,
         xp: r.xp as number | null,
+        departure: departure,
+        arrival: arrival,
       })),
     };
   });
