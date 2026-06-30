@@ -311,8 +311,10 @@ function CellDetailsDialog({
               <DialogDescription>
                 {cell.flights.toLocaleString()} flight{cell.flights === 1 ? "" : "s"} averaged{" "}
                 <span className="text-foreground font-medium">{cell.avgPax.toFixed(3)} PAX</span>{" "}
-                base payout. Bonus transactions (e.g. Weekly Cycle 3×) are shown for reference but
-                are not part of the matrix average.
+                base payout. <span className="text-runway">Total</span> is the real PAX credited to
+                your airport (Base + Weekly Cycle ×3 bonus) — that is what actually hits your
+                wallet. The per-tier average uses Base only so temporary multipliers don't skew
+                the baseline.
               </DialogDescription>
             </DialogHeader>
 
