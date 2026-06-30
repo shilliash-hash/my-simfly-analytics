@@ -343,7 +343,7 @@ function CellDetailsDialog({
                     <th className="text-right px-3 py-2 text-foreground/40">Bonus</th>
                     <th
                       className="text-right px-3 py-2 text-runway"
-                      title="Actual PAX credited to the airport OWNER for this flight (pilot total × ownerShare / pilotShare, matches the per-asset card on the SimFly flight report)"
+                      title="Actual PAX credited to the airport OWNER for this flight (pilot total × ownerShare, matches the per-asset card on the SimFly flight report)"
                     >
                       Total ★
                     </th>
