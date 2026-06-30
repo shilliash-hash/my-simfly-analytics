@@ -91,10 +91,11 @@ const DEFAULT_SPEC: AircraftSpec = {
   pax: 50,
 };
 
-export function lookupAircraftSpec(aircraftICAO?: string | null): AircraftSpec {
+export function lookupAircraftSpec(aircraftICAO?: string | null): { spec: AircraftSpec; matched: boolean } {
   const k = (aircraftICAO ?? "").toUpperCase().trim();
-  if (!k) return DEFAULT_SPEC;
-  return BY_ICAO.get(k) ?? DEFAULT_SPEC;
+  if (!k) return { spec: DEFAULT_SPEC, matched: false };
+  const hit = BY_ICAO.get(k);
+  return hit ? { spec: hit, matched: true } : { spec: DEFAULT_SPEC, matched: false };
 }
 
 // ---------- ETA engine (modular: swap implementation later) ----------
@@ -120,6 +121,10 @@ export interface EtaInputs {
   origin: { lat: number; lon: number } | null | undefined;
   destination: { lat: number; lon: number } | null | undefined;
   aircraftICAO?: string | null;
+  /** Optional flight identifier for debug logging. */
+  flightId?: string;
+  /** Optional debug switch. Logs aircraft, cruise speed, distance, ETA. */
+  debug?: boolean;
 }
 
 export interface EtaResult {
@@ -127,6 +132,8 @@ export interface EtaResult {
   cruiseKt: number;
   durationMs: number;
   etaMs: number;
+  model: string;
+  matched: boolean;
 }
 
 /** Distance/cruise-speed ETA. Returns null when geo is missing. */
@@ -134,15 +141,22 @@ export function computeEta(inputs: EtaInputs): EtaResult | null {
   if (!inputs.origin || !inputs.destination) return null;
   if (!Number.isFinite(inputs.departureMs)) return null;
   const distanceNm = haversineNm(inputs.origin, inputs.destination);
-  const spec = lookupAircraftSpec(inputs.aircraftICAO);
+  const { spec, matched } = lookupAircraftSpec(inputs.aircraftICAO);
   const cruiseKt = spec.cruiseKt;
   const durationMs = (distanceNm / cruiseKt) * 3600 * 1000;
-  return {
-    distanceNm,
-    cruiseKt,
-    durationMs,
-    etaMs: inputs.departureMs + durationMs,
-  };
+  const etaMs = inputs.departureMs + durationMs;
+  if (inputs.debug) {
+    const hh = Math.floor(durationMs / 3600000);
+    const mm = Math.floor((durationMs % 3600000) / 60000);
+    // eslint-disable-next-line no-console
+    console.log(
+      `[ETA] flight=${inputs.flightId ?? "?"} icao=${inputs.aircraftICAO ?? "?"} ` +
+        `model="${spec.model}"${matched ? "" : " (FALLBACK)"} ` +
+        `cruise=${cruiseKt}kt distance=${distanceNm.toFixed(1)}NM ` +
+        `duration=${hh}h ${mm}m eta=${formatEtaUtc(etaMs)}`,
+    );
+  }
+  return { distanceNm, cruiseKt, durationMs, etaMs, model: spec.model, matched };
 }
 
 /** UUIDv7 → unix ms (SimFly mission ids are v7). */
