@@ -385,6 +385,8 @@ type RawLiveFlight = {
   flightNumber?: string;
   simKind?: string;
   licence?: string;
+  /** ISO timestamp when the mission started — authoritative for ETA. */
+  startTime?: string;
 };
 
 // ----- Public types for the UI -----
