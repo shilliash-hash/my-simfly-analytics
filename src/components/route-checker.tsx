@@ -165,7 +165,7 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
                       <div className="truncate text-[11px] text-muted-foreground">{name}</div>
                       {l.match?.completedAt && (
                         <div className="mono mt-0.5 text-[10px] text-muted-foreground">
-                          Used {formatUtc(l.match.completedAt)}
+                          {l.match.departure ?? "?"} → {l.match.arrival ?? "?"} · {formatUtc(l.match.completedAt)}
                         </div>
                       )}
                     </div>
