@@ -1519,16 +1519,18 @@ export const getSimflyAssetDetail = createServerFn({ method: "GET" })
 // every airborne (or recently landed) flight in the world, which we filter
 // client-side.
 async function fetchAllLiveFlights(): Promise<RawLiveFlight[]> {
-  try {
-    const res = await fetchJSON<{ data: RawLiveFlight[] }>(`${SIMFLY_BASE}/flights`);
-    return res?.data ?? [];
-  } catch (err) {
-    console.warn(
-      `[live] /flights failed:`,
-      err instanceof Error ? err.message : err,
-    );
-    return [];
-  }
+  return memo("live:flights", LIVE_FEED_TTL_MS, async () => {
+    try {
+      const res = await fetchJSON<{ data: RawLiveFlight[] }>(`${SIMFLY_BASE}/flights`);
+      return res?.data ?? [];
+    } catch (err) {
+      console.warn(
+        `[live] /flights failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      return [];
+    }
+  });
 }
 
 // LIVE visitors currently flying through one of my airports.
