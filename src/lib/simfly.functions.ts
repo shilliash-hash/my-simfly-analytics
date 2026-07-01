@@ -1556,11 +1556,16 @@ export const getMyLiveFlights = createServerFn({ method: "GET" })
             `${SIMFLY_BASE}/asset/airport/${encodeURIComponent(icao)}/flights`,
           );
           return { icao, list: res?.data ?? [] };
-        } catch {
+        } catch (err) {
+          console.warn(
+            `[live] getMyLiveFlights: /asset/airport/${icao}/flights failed:`,
+            err instanceof Error ? err.message : err,
+          );
           return { icao, list: [] as RawLiveFlight[] };
         }
       }),
     );
+
     const seen = new Map<string, MyLiveFlight>();
     const me = username.toLowerCase();
     const geo = await loadGeo().catch(() => new Map());

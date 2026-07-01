@@ -1,40 +1,49 @@
-## What TOTAL actually is
+## Diagnosis
 
-For each flight, SimFly stores two PAX numbers on the airport side (`origin` / `destination`):
+I traced the active-flight pipeline end-to-end.
 
-- `earnedPax` — your **standard Airport Profit Split** payout (BASE column, 0.73 in your screenshot). This is the `pax * percToUser` cut after applying any aircraft-rental adjustments.
-- `bonusPax` — a separate **Weekly Cycle First-Movement ×3** transaction (BONUS, +1.46).
-- `totalEarnedPax = earnedPax + bonusPax` — what actually hits your wallet when the flight lands (TOTAL, 2.19 — the 0.87 in your screenshot is the display bug from old data; will be fixed when re-rendered).
+**1. Polling service — running.**
+`src/routes/index.tsx` still schedules two live queries every 15s:
+- `getMyLiveFlights` (own aircraft airborne) — `["simfly","myLiveFlights",...]`, `refetchInterval: 15_000`.
+- `getMyHubsIncomingTraffic` (visitor arrivals) — `refetchInterval: 15_000`.
+Activity page also polls `getMyLiveFlights` every 60s. Nothing has been disabled client-side.
 
-So TOTAL = real income to the airport owner. Everything else in the app already reports TOTAL; only the Payout Matrix and the Upgrade Advisor were using BASE.
+**2. SimFly upstream — no longer returning data. (root cause)**
+Both live endpoints the app depends on now return HTTP 404 anonymously:
 
-## Changes
+```
+GET https://simfly.io/api/asset/airport/EPWA/flights   → 404
+GET https://simfly.io/api/live/flights                 → 404
+```
 
-### 1. Payout Matrix drawer — make TOTAL the primary column
-File: `src/routes/payout-matrix.tsx`
-- Visually promote the TOTAL column: bold, runway-cyan, slightly larger; demote BASE/BONUS to muted reference columns.
-- Add a tiny header tooltip on TOTAL: "Actual PAX credited to this airport on landing (BASE + BONUS)".
-- Keep the cell averages computed from BASE so the per-tier baseline still isn't distorted by the ×3 bonus — explain this in the existing methodology paragraph.
+These are called from `src/lib/simfly.functions.ts`:
+- line 1522 (`getAirportLiveVisitors`)
+- line 1556 (`getMyLiveFlights`)
+- line 1614 (`getMyHubsIncomingTraffic`)
+- line 109 (initial `live/flights` bootstrap inside `getSimflyPayload`)
 
-### 2. Upgrade Advisor — switch from BASE to TOTAL airport income
-File: `src/lib/simfly.functions.ts` (`getUpgradeAdvisor`)
-- Today it queries `simfly_flights` (the viewer's own missions only) and averages `pax * percToUser`. That misses every visiting pilot's flight, which is the bulk of airport income.
-- New source: for each owned airport, reuse the same public airport history endpoint the Payout Matrix already paginates, and sum `totalEarnedPax` (fallback `earnedPax + bonusPax`) on the airport side per flight — i.e. the TOTAL column.
-- Average = simple mean of TOTAL per arrival over the chosen window (no top-15% trim, because TOTAL already represents real income and the user explicitly wants the bonus included).
-- `arrivalsPerDay` = flights touching the airport in the window ÷ windowDays.
-- `currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight`. Drop the separate `bonusDailyPax` synthetic addition — TOTAL already includes it.
-- `dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH` (10% per level, unchanged).
-- Payback / annual / star rating logic unchanged.
+Each call site wraps `fetchJSON` in `try/catch` and returns `[]` on failure — so the app silently degrades to "no live flights" instead of surfacing an error. That is why the hero card sticks on last flight, the map has no in-flight layer, and Incoming Traffic is empty for everyone (not just other pilots).
 
-### 3. Upgrade Advisor UI
-File: `src/routes/upgrade-advisor.tsx`
-- Rename the "Daily increase" methodology line: "Based on real TOTAL PAX credited to your airport (Airport Profit Split + Weekly Cycle ×3 bonus), averaged across all flights in the window."
-- Remove the "incl. ×3 bonus +X/day" footer breakdown (no longer separated — it's inside TOTAL).
-- Type change: rename `avgBasePaxPerFlight` → `avgTotalPaxPerFlight` in `UpgradeAdvisorRow`; remove `bonusDailyPax`. Update the only consumer (this file).
+**3. Database writes — not involved.**
+Live flights are read-through only. They are never persisted; only completed flights land in `simfly_flights` via the logbook backfill. So no DB regression is possible here.
 
-### 4. Caching
-- Public airport history is paginated; cap to ~3 pages per airport per advisor request (same cap the matrix uses) and reuse the existing 90s server-side payload cache so the page stays snappy.
+**4. Frontend wiring — correct.**
+`src/routes/index.tsx` L61–67 and L93–108 read `myFlights` / `hubTraffic` from the right query keys and forward them to `CurrentFlightHero` and `FlightMap`. The pilot switcher's `keyTag`/`username` are threaded through. Nothing to change on the consumer side.
 
-## Out of scope
-- No change to Activity, Stats, Visitors, Income, Consistency — those already use TOTAL.
-- No change to the upgrade cost table or `PAYOUT_LEVEL_GROWTH`.
+**5. Recent changes — not the trigger.**
+Historical backfill code (`getSimflyPayload`, `backfill.functions.ts`, admin/reset flow) touches paginated logbook endpoints under `/api/user/flights` and `/api/user/assets/...`, which still respond. It does not share code paths with the live endpoints and did not disable them. The change is upstream at SimFly.
+
+## Plan
+
+1. **Confirm the new live endpoint.**
+   Open a signed-in SimFly session in the browser DevTools, hit an airport page, and capture the exact request the SimFly UI now uses (likely renamed, moved under `/api/user/...`, or now requires an `Authorization` / session cookie). This is a 30-second manual step — I cannot discover it from the sandbox because the endpoint is auth-gated after the change.
+
+2. **Update the three live call sites** in `src/lib/simfly.functions.ts` (lines 1522, 1556, 1614) plus the bootstrap at line 109 to use the new URL + any required headers. Keep the existing shape (`RawLiveFlight[]`) so downstream code and the map remain untouched; only the fetch layer changes.
+
+3. **Fail loudly, not silently.** Replace the bare `catch` on the live-fetch paths with a structured `console.warn` including status code so the next upstream change is visible in server logs immediately instead of degrading to empty arrays.
+
+4. **Sanity check.** After the fix, watch `stack_modern--server-function-logs` for `getMyLiveFlights` calls returning non-empty arrays, and verify the hero card flips to EN ROUTE when a mission is active.
+
+**No frontend/UI edits required.** No database migration. No changes to backfill.
+
+Please grab the new live-flights URL (path + any headers/cookies SimFly requires) from a logged-in browser session and paste it here — then I'll wire it in.
