@@ -14,6 +14,60 @@ export type Database = {
   }
   public: {
     Tables: {
+      airport_upgrade_cache: {
+        Row: {
+          generated_at: string
+          icao: string
+          last_manual_refresh_at: string | null
+          level: number
+          refresh_after: string
+          row: Json
+          tier: number
+          updated_at: string
+          window_days: number
+        }
+        Insert: {
+          generated_at?: string
+          icao: string
+          last_manual_refresh_at?: string | null
+          level: number
+          refresh_after: string
+          row: Json
+          tier: number
+          updated_at?: string
+          window_days: number
+        }
+        Update: {
+          generated_at?: string
+          icao?: string
+          last_manual_refresh_at?: string | null
+          level?: number
+          refresh_after?: string
+          row?: Json
+          tier?: number
+          updated_at?: string
+          window_days?: number
+        }
+        Relationships: []
+      }
+      app_settings: {
+        Row: {
+          key: string
+          updated_at: string
+          value: Json
+        }
+        Insert: {
+          key: string
+          updated_at?: string
+          value: Json
+        }
+        Update: {
+          key?: string
+          updated_at?: string
+          value?: Json
+        }
+        Relationships: []
+      }
       backfill_progress: {
         Row: {
           created_at: string

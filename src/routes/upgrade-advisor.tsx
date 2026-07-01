@@ -1,13 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
-import { getSimflyPayload, getUpgradeAdvisor } from "@/lib/simfly.functions";
-import type { UpgradeAdvisorRow } from "@/lib/simfly.functions";
+import { useEffect, useMemo, useState } from "react";
+import {
+  getSimflyPayload,
+  getUpgradeAdvisor,
+  getAdvisorSettings,
+  setAdvisorSettings,
+  type UpgradeAdvisorRow,
+  type UpgradeAdvisorRowMeta,
+} from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
-import { Star } from "lucide-react";
+import { RefreshCw, Star } from "lucide-react";
 
 export const Route = createFileRoute("/upgrade-advisor")({
   component: UpgradeAdvisorPage,
@@ -24,6 +30,23 @@ export const Route = createFileRoute("/upgrade-advisor")({
 });
 
 type SortKey = "payback" | "daily" | "annual" | "cost" | "name";
+type AdvisorRow = UpgradeAdvisorRow & { meta: UpgradeAdvisorRowMeta };
+
+const ADMIN_TOKEN_LS_KEY = "simflyhub:adminToken";
+
+function fmtDate(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toISOString().replace("T", " ").slice(0, 16) + " UTC";
+}
+
+function fmtDay(iso: string | null | undefined) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  return d.toISOString().slice(0, 10);
+}
 
 function UpgradeAdvisorPage() {
   const fn = useServerFn(getSimflyPayload);
@@ -49,9 +72,21 @@ function UpgradeAdvisorPage() {
   );
 
   const advisorFn = useServerFn(getUpgradeAdvisor);
+  const settingsFn = useServerFn(getAdvisorSettings);
+  const setSettingsFn = useServerFn(setAdvisorSettings);
+  const qc = useQueryClient();
+
   const [windowDays, setWindowDays] = useState(60);
+  const [adminToken, setAdminToken] = useState<string>("");
+  useEffect(() => {
+    try {
+      setAdminToken(localStorage.getItem(ADMIN_TOKEN_LS_KEY) ?? "");
+    } catch { /* noop */ }
+  }, []);
+
+  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length] as const;
   const { data: advisor, isFetching, isError, refetch } = useQuery({
-    queryKey: ["upgrade-advisor", keyTag, windowDays, airportsInput.length],
+    queryKey: advisorQueryKey,
     queryFn: () =>
       advisorFn({
         data: { username: payload?.username, airports: airportsInput, windowDays },
@@ -60,10 +95,16 @@ function UpgradeAdvisorPage() {
     enabled: airportsInput.length > 0,
   });
 
+  const { data: settings } = useQuery({
+    queryKey: ["advisor-settings"],
+    queryFn: () => settingsFn(),
+    staleTime: 60_000,
+  });
+
   const [sortKey, setSortKey] = useState<SortKey>("payback");
 
-  const rows = useMemo(() => {
-    const list = [...(advisor?.rows ?? [])];
+  const rows = useMemo<AdvisorRow[]>(() => {
+    const list = [...((advisor?.rows ?? []) as AdvisorRow[])];
     list.sort((a, b) => {
       switch (sortKey) {
         case "daily":
@@ -85,13 +126,66 @@ function UpgradeAdvisorPage() {
     return list;
   }, [advisor, sortKey]);
 
+  const isAdmin = adminToken.trim().length > 0;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function forceRefresh(icaos: string[]) {
+    if (!isAdmin || icaos.length === 0) return;
+    setBusy(icaos.join(","));
+    setMsg(null);
+    try {
+      const res = await advisorFn({
+        data: {
+          username: payload?.username,
+          airports: airportsInput,
+          windowDays,
+          forceIcaos: icaos,
+          adminToken,
+        },
+      });
+      qc.setQueryData(advisorQueryKey, res);
+      setMsg("Refreshed.");
+    } catch (e) {
+      setMsg((e as Error).message || "Refresh failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <AppShell>
       <PageHeader
         eyebrow="Analytics"
         title="Airport Upgrade Advisor"
-        description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus) and shows how long the current income needs to earn back the next upgrade cost. Advisory only — no game data is changed."
+        description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Long-lived analysis — cached and refreshed on a slow cadence to keep upstream load low."
       />
+
+      {advisor && (
+        <div className="mb-4 rounded-lg border border-border bg-card/60 p-4 text-xs grid gap-2 sm:grid-cols-3">
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Generated</div>
+            <div className="mono text-foreground">{fmtDate(advisor.generatedAt)}</div>
+          </div>
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Based on</div>
+            <div className="mono text-foreground">Last {advisor.windowDays} days</div>
+          </div>
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Next refresh</div>
+            <div className="mono text-foreground">
+              {fmtDay(advisor.refreshAfter)}{" "}
+              <span className="text-foreground/50">(TTL {advisor.ttlDays}d)</span>
+            </div>
+          </div>
+          <p className="sm:col-span-3 text-foreground/60">
+            This analysis is intentionally refreshed only once every {advisor.ttlDays} day
+            {advisor.ttlDays === 1 ? "" : "s"} per airport — upgrade recommendations change
+            slowly, and recalculating on every visit would waste database and upstream SimFly
+            capacity.
+          </p>
+        </div>
+      )}
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <label className="text-xs uppercase tracking-wider text-foreground/60">
@@ -122,9 +216,58 @@ function UpgradeAdvisorPage() {
           </select>
         </label>
         <div className="ml-auto text-[11px] text-foreground/50">
-          {isFetching ? "Crunching history…" : advisor ? `${rows.length} airports analysed` : ""}
+          {isFetching ? "Loading…" : advisor ? `${rows.length} airports analysed` : ""}
         </div>
       </div>
+
+      {/* Admin panel */}
+      <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
+        <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60">
+          Admin controls
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <input
+            type="password"
+            placeholder="Admin token"
+            value={adminToken}
+            onChange={(e) => {
+              setAdminToken(e.target.value);
+              try {
+                localStorage.setItem(ADMIN_TOKEN_LS_KEY, e.target.value);
+              } catch { /* noop */ }
+            }}
+            className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+          />
+          <TtlEditor
+            currentTtl={settings?.ttlDays ?? 30}
+            disabled={!isAdmin}
+            onSave={async (n) => {
+              try {
+                await setSettingsFn({ data: { adminToken, ttlDays: n } });
+                qc.invalidateQueries({ queryKey: ["advisor-settings"] });
+                setMsg(`TTL set to ${n} days.`);
+              } catch (e) {
+                setMsg((e as Error).message || "Failed to save TTL.");
+              }
+            }}
+          />
+          <button
+            type="button"
+            disabled={!isAdmin || busy !== null || !advisor}
+            onClick={() => forceRefresh(rows.map((r) => r.icao))}
+            className="inline-flex items-center gap-2 rounded-md border border-runway/50 bg-runway/10 px-3 py-2 text-xs text-runway hover:bg-runway/20 disabled:opacity-40"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh all (24 h cap)
+          </button>
+        </div>
+        {msg && <div className="mt-2 text-xs text-foreground/70">{msg}</div>}
+        {!isAdmin && (
+          <div className="mt-2 text-[11px] text-foreground/50">
+            Enter your admin token to unlock manual refresh and TTL configuration.
+          </div>
+        )}
+      </details>
 
       {isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
@@ -135,14 +278,20 @@ function UpgradeAdvisorPage() {
 
       {!advisor && !isError && (
         <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
-          Sampling recent flight history…
+          Loading cached analysis…
         </div>
       )}
 
       {advisor && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((r) => (
-            <AdvisorCard key={r.icao} row={r} />
+            <AdvisorCard
+              key={r.icao}
+              row={r}
+              canRefresh={isAdmin}
+              busy={busy === r.icao}
+              onRefresh={() => forceRefresh([r.icao])}
+            />
           ))}
           {rows.length === 0 && (
             <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
@@ -153,24 +302,71 @@ function UpgradeAdvisorPage() {
       )}
 
       <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-        Methodology: purely data-driven. Average per-arrival income is the
-        mean TOTAL PAX credited to each airport (Airport Profit Split +
-        Weekly Cycle ×3 bonus — the "Total" column in the Payout Matrix, i.e.
-        what actually hits your wallet on landing) across every flight
-        touching the airport in the last {advisor?.windowDays ?? windowDays}{" "}
-        days, sampled from the same public airport history as the Payout
-        Matrix. Payback = upgrade cost ÷ current daily income. No assumed
-        per-level growth is applied — as new flights land after an upgrade,
-        the historical average will naturally reflect the higher payout.
-        Upgrade cost uses a tunable Tier × Level table in{" "}
-        <code>src/lib/airport-upgrade-costs.ts</code>.
+        Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX
+        credited to each airport across every flight touching the airport in the selected
+        window, sampled from the same public airport history as the Payout Matrix. Payback =
+        upgrade cost ÷ current daily income. Results are cached per airport / level / window;
+        cache invalidates automatically when a level change is detected during sync, or when an
+        administrator forces a refresh (once per 24 h per airport).
       </p>
     </AppShell>
   );
 }
 
-function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
+function TtlEditor({
+  currentTtl,
+  disabled,
+  onSave,
+}: {
+  currentTtl: number;
+  disabled: boolean;
+  onSave: (n: number) => void | Promise<void>;
+}) {
+  const [v, setV] = useState<number>(currentTtl);
+  useEffect(() => setV(currentTtl), [currentTtl]);
+  return (
+    <div className="flex items-end gap-2">
+      <label className="text-[10px] uppercase tracking-widest text-foreground/60">
+        Cache TTL (days)
+        <input
+          type="number"
+          min={1}
+          max={365}
+          value={v}
+          disabled={disabled}
+          onChange={(e) => setV(Number(e.target.value))}
+          className="mt-1 block w-24 bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground disabled:opacity-40"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={disabled || !Number.isFinite(v) || v <= 0 || v === currentTtl}
+        onClick={() => onSave(Math.round(v))}
+        className="rounded-md border border-border bg-card px-3 py-2 text-xs hover:bg-card/70 disabled:opacity-40"
+      >
+        Save
+      </button>
+    </div>
+  );
+}
+
+function AdvisorCard({
+  row,
+  canRefresh,
+  busy,
+  onRefresh,
+}: {
+  row: AdvisorRow;
+  canRefresh: boolean;
+  busy: boolean;
+  onRefresh: () => void;
+}) {
   const hasData = row.flightsSampled > 0 && row.dailyIncrease > 0;
+  const lastManualMs = row.meta.lastManualRefreshAt
+    ? new Date(row.meta.lastManualRefreshAt).getTime()
+    : 0;
+  const cooldownLeftMs = Math.max(0, lastManualMs + 24 * 60 * 60 * 1000 - Date.now());
+  const cooldown = cooldownLeftMs > 0;
   return (
     <article className="panel rounded-xl p-4 flex flex-col gap-3">
       <header className="flex items-baseline justify-between gap-3">
@@ -228,6 +424,29 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           )}
         </div>
       </footer>
+
+      <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-foreground/50">
+        <div>
+          <div>Generated {fmtDate(row.meta.generatedAt)}</div>
+          <div>Next refresh {fmtDay(row.meta.refreshAfter)}</div>
+        </div>
+        {canRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={busy || cooldown}
+            title={
+              cooldown
+                ? `Manual refresh available in ${Math.ceil(cooldownLeftMs / 3_600_000)} h`
+                : "Force recalculation now"
+            }
+            className="inline-flex items-center gap-1 rounded-md border border-runway/40 bg-runway/10 px-2 py-1 text-runway hover:bg-runway/20 disabled:opacity-40"
+          >
+            <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
+            Refresh
+          </button>
+        )}
+      </div>
     </article>
   );
 }
