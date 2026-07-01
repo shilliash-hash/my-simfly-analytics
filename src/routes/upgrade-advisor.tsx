@@ -76,7 +76,7 @@ function UpgradeAdvisorPage() {
   const setSettingsFn = useServerFn(setAdvisorSettings);
   const qc = useQueryClient();
 
-  const [windowDays, setWindowDays] = useState(60);
+  const windowDays = 60; // fixed to keep upstream load predictable
   const [adminToken, setAdminToken] = useState<string>("");
   useEffect(() => {
     try {
