@@ -106,7 +106,7 @@ async function resolveNonce(username: string): Promise<number | null> {
   }
 
   // 1) Try live flights — fastest path if the pilot is airborne.
-  const live = await fetchJSON<RawLiveFlightsEnvelope>(`${SIMFLY_BASE}/live/flights`);
+  const live = await fetchJSON<RawLiveFlightsEnvelope>(`${SIMFLY_BASE}/flights`);
   for (const d of live?.data ?? []) rememberNonce(d.username, d.usernonce);
   let hit = nonceCache.get(key);
   if (hit) return hit;
