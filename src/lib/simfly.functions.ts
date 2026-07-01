@@ -1513,15 +1513,29 @@ export const getSimflyAssetDetail = createServerFn({ method: "GET" })
     return { kind: data.kind, key: data.key, json: text };
   });
 
+// Shared: fetch the global live-flights feed once per call. SimFly retired
+// the per-airport /asset/airport/{ICAO}/flights endpoint; /flights returns
+// every airborne (or recently landed) flight in the world, which we filter
+// client-side.
+async function fetchAllLiveFlights(): Promise<RawLiveFlight[]> {
+  try {
+    const res = await fetchJSON<{ data: RawLiveFlight[] }>(`${SIMFLY_BASE}/flights`);
+    return res?.data ?? [];
+  } catch (err) {
+    console.warn(
+      `[live] /flights failed:`,
+      err instanceof Error ? err.message : err,
+    );
+    return [];
+  }
+}
+
 // LIVE visitors currently flying through one of my airports.
 export const getAirportVisitors = createServerFn({ method: "GET" })
   .inputValidator((d: { icao: string; username?: string }) => d)
   .handler(async ({ data }): Promise<AirportLiveVisitor[]> => {
     const { username } = identity({ username: data.username });
-    const res = await fetchJSON<{ data: RawLiveFlight[] }>(
-      `${SIMFLY_BASE}/asset/airport/${encodeURIComponent(data.icao)}/flights`,
-    );
-    const list = res?.data ?? [];
+    const list = await fetchAllLiveFlights();
     return list
       .filter((f) => f.username?.toLowerCase() !== username.toLowerCase())
       .filter((f) => f.originICAO === data.icao || f.destinationICAO === data.icao)
