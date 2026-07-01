@@ -32,7 +32,7 @@ function Rankings() {
   const history = useQuery({
     queryKey: ["simfly", "visitor-history", keyTag, PAGES],
     queryFn: () => histFn({ data: { pages: PAGES, ...(username ? { username } : {}) } }),
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
   });
 
   const topHubsByPax = [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax).slice(0, 10);

@@ -31,7 +31,7 @@ function AirportsPage() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 5 * 60_000,
+      staleTime: 30 * 60_000,
     }),
   );
 

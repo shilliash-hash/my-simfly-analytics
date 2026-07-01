@@ -51,7 +51,8 @@ const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
 // Survives within a single Cloudflare Worker isolate so repeated dashboard
 // loads / route remounts within the TTL skip the 25×hubs + aircraft sweep
 // and the 20k-row DB read entirely. Self-evicts when the isolate recycles.
-const HEAVY_CACHE_TTL_MS = 90_000;
+const HEAVY_CACHE_TTL_MS = 300_000;
+const LIVE_FEED_TTL_MS = 10_000;
 const heavyCache = new Map<string, { at: number; value: unknown }>();
 async function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   const hit = heavyCache.get(key);
@@ -1518,16 +1519,18 @@ export const getSimflyAssetDetail = createServerFn({ method: "GET" })
 // every airborne (or recently landed) flight in the world, which we filter
 // client-side.
 async function fetchAllLiveFlights(): Promise<RawLiveFlight[]> {
-  try {
-    const res = await fetchJSON<{ data: RawLiveFlight[] }>(`${SIMFLY_BASE}/flights`);
-    return res?.data ?? [];
-  } catch (err) {
-    console.warn(
-      `[live] /flights failed:`,
-      err instanceof Error ? err.message : err,
-    );
-    return [];
-  }
+  return memo("live:flights", LIVE_FEED_TTL_MS, async () => {
+    try {
+      const res = await fetchJSON<{ data: RawLiveFlight[] }>(`${SIMFLY_BASE}/flights`);
+      return res?.data ?? [];
+    } catch (err) {
+      console.warn(
+        `[live] /flights failed:`,
+        err instanceof Error ? err.message : err,
+      );
+      return [];
+    }
+  });
 }
 
 // LIVE visitors currently flying through one of my airports.
