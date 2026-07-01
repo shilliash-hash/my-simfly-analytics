@@ -71,19 +71,9 @@ function PayoutMatrixPage() {
             ))}
           </select>
         </label>
-        <label className="text-xs uppercase tracking-wider text-foreground/60">
-          Sample depth
-          <select
-            value={pages}
-            onChange={(e) => setPages(Number(e.target.value))}
-            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-          >
-            <option value={25}>25 pages (~100 flights)</option>
-            <option value={50}>50 pages (~200 flights)</option>
-            <option value={80}>80 pages (~320 flights)</option>
-            <option value={120}>120 pages (~480 flights)</option>
-          </select>
-        </label>
+        <div className="text-[11px] text-foreground/50">
+          Sample depth: fixed ~250 flights (≈2 months of activity for most airports).
+        </div>
       </div>
 
       {icao ? <MatrixCard icao={icao} pages={pages} /> : (
