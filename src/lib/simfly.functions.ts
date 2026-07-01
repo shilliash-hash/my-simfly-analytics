@@ -1553,62 +1553,43 @@ export const getAirportVisitors = createServerFn({ method: "GET" })
       }));
   });
 
-// My OWN aircraft currently airborne. Polls the live feed of every owned hub
-// in parallel and filters where the flying username matches me. A flight is
-// reported once even if it appears on both origin and destination feeds.
+// My OWN aircraft currently airborne. Uses the global /flights feed and
+// filters to flights operated by me or using one of my tail numbers.
 export const getMyLiveFlights = createServerFn({ method: "GET" })
   .inputValidator((d: { icaos: string[]; username?: string; tails?: string[]; includeUnmatched?: boolean }) => d)
   .handler(async ({ data }): Promise<MyLiveFlight[]> => {
     const { username } = identity({ username: data.username });
-    const icaos = (data.icaos ?? []).filter(Boolean).slice(0, 24);
     const myTails = new Set((data.tails ?? []).filter(Boolean).map((t) => t.toLowerCase()));
     const includeUnmatched = !!data.includeUnmatched;
-    const results = await Promise.all(
-      icaos.map(async (icao) => {
-        try {
-          const res = await fetchJSON<{ data: RawLiveFlight[] }>(
-            `${SIMFLY_BASE}/asset/airport/${encodeURIComponent(icao)}/flights`,
-          );
-          return { icao, list: res?.data ?? [] };
-        } catch (err) {
-          console.warn(
-            `[live] getMyLiveFlights: /asset/airport/${icao}/flights failed:`,
-            err instanceof Error ? err.message : err,
-          );
-          return { icao, list: [] as RawLiveFlight[] };
-        }
-      }),
-    );
+    const list = await fetchAllLiveFlights();
 
     const seen = new Map<string, MyLiveFlight>();
     const me = username.toLowerCase();
     const geo = await loadGeo().catch(() => new Map());
-    for (const { icao, list } of results) {
-      for (const f of list) {
-        const isMine = f.username?.toLowerCase() === me;
-        const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
-        if (!isMine && !isMyPlane && !includeUnmatched) continue;
-        if (seen.has(f.id)) continue;
-        const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
-        const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
-        const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
-        const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
-        seen.set(f.id, {
-          id: f.id,
-          aircraftICAO: f.aircraftICAO,
-          aircraftName: f.aircraftName,
-          tailNumber: f.tailNumber,
-          origin: f.originICAO,
-          destination: f.destinationICAO,
-          sim: f.simKind,
-          observedAt: icao,
-          licenceCode: f.licence || undefined,
-          pilotUsername: f.username,
-          departureMs,
-          etaMs: eta?.etaMs,
-          distanceNm: eta?.distanceNm,
-        });
-      }
+    for (const f of list) {
+      const isMine = f.username?.toLowerCase() === me;
+      const isMyPlane = !!f.tailNumber && myTails.has(f.tailNumber.toLowerCase());
+      if (!isMine && !isMyPlane && !includeUnmatched) continue;
+      if (seen.has(f.id)) continue;
+      const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
+      const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
+      const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
+      const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
+      seen.set(f.id, {
+        id: f.id,
+        aircraftICAO: f.aircraftICAO,
+        aircraftName: f.aircraftName,
+        tailNumber: f.tailNumber,
+        origin: f.originICAO,
+        destination: f.destinationICAO,
+        sim: f.simKind,
+        observedAt: f.originICAO ?? f.destinationICAO ?? "",
+        licenceCode: f.licence || undefined,
+        pilotUsername: f.username,
+        departureMs,
+        etaMs: eta?.etaMs,
+        distanceNm: eta?.distanceNm,
+      });
     }
     return Array.from(seen.values());
   });
@@ -1625,44 +1606,51 @@ export const getMyHubsIncomingTraffic = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<MyHubIncomingTraffic[]> => {
     const { username } = identity({ username: data.username });
     const me = username.toLowerCase();
-    const icaos = (data.icaos ?? []).filter(Boolean).slice(0, 24);
+    const icaoSet = new Set((data.icaos ?? []).filter(Boolean));
     const geo = await loadGeo().catch(() => new Map());
-    const results = await Promise.all(
-      icaos.map(async (icao) => {
-        const res = await fetchJSON<{ data: RawLiveFlight[] }>(
-          `${SIMFLY_BASE}/asset/airport/${encodeURIComponent(icao)}/flights`,
-        );
-        const list = (res?.data ?? [])
-          .filter((f) => f.username?.toLowerCase() !== me)
-          .filter((f) => f.destinationICAO === icao || f.originICAO === icao)
-          .map<AirportLiveVisitor>((f) => {
-            const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
-            const o = f.originICAO ? geo.get(f.originICAO.toUpperCase()) : undefined;
-            const d = f.destinationICAO ? geo.get(f.destinationICAO.toUpperCase()) : undefined;
-            const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
-            return {
-              id: f.id,
-              username: f.username,
-              usernonce: f.usernonce,
-              userAvatar: f.userAvatar,
-              aircraftName: f.aircraftName,
-              aircraftICAO: f.aircraftICAO,
-              origin: f.originICAO,
-              destination: f.destinationICAO,
-              sim: f.simKind,
-              tailNumber: f.tailNumber,
-              departureMs,
-              etaMs: eta?.etaMs,
-              distanceNm: eta?.distanceNm,
-            };
-          });
-        // De-dupe by flight id (same flight can appear on both endpoints).
-        const seen = new Map<string, AirportLiveVisitor>();
-        for (const v of list) if (!seen.has(v.id)) seen.set(v.id, v);
-        return { icao, visitors: Array.from(seen.values()) };
-      }),
-    );
-    return results.filter((r) => r.visitors.length > 0);
+    const list = await fetchAllLiveFlights();
+
+    const byHub = new Map<string, Map<string, AirportLiveVisitor>>();
+    for (const f of list) {
+      if (f.username?.toLowerCase() === me) continue;
+      const origin = f.originICAO ?? "";
+      const dest = f.destinationICAO ?? "";
+      const matches: string[] = [];
+      if (icaoSet.has(origin)) matches.push(origin);
+      if (icaoSet.has(dest) && dest !== origin) matches.push(dest);
+      if (!matches.length) continue;
+      const departureMs = (f.startTime ? Date.parse(f.startTime) : NaN) || uuidV7Ms(f.id) || undefined;
+      const o = origin ? geo.get(origin.toUpperCase()) : undefined;
+      const d = dest ? geo.get(dest.toUpperCase()) : undefined;
+      const eta = departureMs ? computeEta({ departureMs, origin: o, destination: d, aircraftICAO: f.aircraftICAO, flightId: f.flightNumber ?? f.id, debug: true }) : null;
+      const visitor: AirportLiveVisitor = {
+        id: f.id,
+        username: f.username,
+        usernonce: f.usernonce,
+        userAvatar: f.userAvatar,
+        aircraftName: f.aircraftName,
+        aircraftICAO: f.aircraftICAO,
+        origin: f.originICAO,
+        destination: f.destinationICAO,
+        sim: f.simKind,
+        tailNumber: f.tailNumber,
+        departureMs,
+        etaMs: eta?.etaMs,
+        distanceNm: eta?.distanceNm,
+      };
+      for (const icao of matches) {
+        let bucket = byHub.get(icao);
+        if (!bucket) {
+          bucket = new Map();
+          byHub.set(icao, bucket);
+        }
+        if (!bucket.has(visitor.id)) bucket.set(visitor.id, visitor);
+      }
+    }
+
+    return Array.from(byHub.entries())
+      .map(([icao, bucket]) => ({ icao, visitors: Array.from(bucket.values()) }))
+      .filter((r) => r.visitors.length > 0);
   });
 
 // ----- Public historical flight log per airport -----
