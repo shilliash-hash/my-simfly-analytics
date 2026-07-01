@@ -46,7 +46,7 @@ function PayoutMatrixPage() {
   );
 
   const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
-  const [pages, setPages] = useState<number>(50);
+  const pages = 63; // fixed ~250-flight sample (covers ~2 months for most airports)
 
   return (
     <AppShell>
