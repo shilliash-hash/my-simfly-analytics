@@ -38,8 +38,8 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30_000,
-      refetchInterval: 60_000,
+      staleTime: 5 * 60_000,
+      refetchInterval: 5 * 60_000,
     }),
   );
 
@@ -49,21 +49,21 @@ function Overview() {
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
-  // Poll the live feeds aggressively so the EN ROUTE → ARRIVED swap happens
-  // within a few seconds of SimFly dropping the mission from its hub feeds.
+  // Live feeds — 30 s cadence. The server memoises the upstream /flights
+  // response for 10 s so concurrent tabs / callers share a single fetch.
   const { data: hubTraffic = [] } = useQuery({
     queryKey: ["simfly", "hubTraffic", keyTag, icaos],
     queryFn: () => trafficFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0,
-    refetchInterval: 15_000,
-    staleTime: 10_000,
+    refetchInterval: 30_000,
+    staleTime: 20_000,
   });
   const { data: myFlights = [] } = useQuery({
     queryKey: ["simfly", "myLiveFlights", keyTag, icaos],
     queryFn: () => myFlightsFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0,
-    refetchInterval: 15_000,
-    staleTime: 10_000,
+    refetchInterval: 30_000,
+    staleTime: 20_000,
   });
 
 
