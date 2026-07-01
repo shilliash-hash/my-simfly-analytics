@@ -2527,7 +2527,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
           tier: a.tier,
           level: a.level,
           window_days: windowDays,
-          row: row as unknown as Record<string, unknown>,
+          row: row as unknown as import("@/integrations/supabase/types").Json,
           generated_at: new Date(nowMs).toISOString(),
           refresh_after: new Date(nowMs + ttlMs).toISOString(),
           last_manual_refresh_at: isManual
