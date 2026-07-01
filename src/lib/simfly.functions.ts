@@ -2351,11 +2351,85 @@ export type UpgradeAdvisorRow = {
   ratingLabel: string;
 };
 
+export type UpgradeAdvisorRowMeta = {
+  generatedAt: string;
+  refreshAfter: string;
+  lastManualRefreshAt: string | null;
+  cached: boolean;
+};
+
 export type UpgradeAdvisorResult = {
   windowDays: number;
   generatedAt: string;
-  rows: UpgradeAdvisorRow[];
+  refreshAfter: string;
+  ttlDays: number;
+  rows: (UpgradeAdvisorRow & { meta: UpgradeAdvisorRowMeta })[];
 };
+
+const DEFAULT_UPGRADE_TTL_DAYS = 30;
+const MANUAL_REFRESH_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+async function verifyAdminToken(token: string | undefined | null) {
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected) throw new Error("ADMIN_TOKEN is not configured on the server.");
+  const { createHash, timingSafeEqual } = await import("node:crypto");
+  const provided = createHash("sha256").update(String(token ?? ""), "utf8").digest();
+  const known = createHash("sha256").update(expected, "utf8").digest();
+  if (!timingSafeEqual(provided, known)) throw new Error("Forbidden: admin token required.");
+}
+
+async function readAdvisorTtlDays(): Promise<number> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data } = await supabaseAdmin
+    .from("app_settings")
+    .select("value")
+    .eq("key", "airport_upgrade_ttl_days")
+    .maybeSingle();
+  const v = (data?.value as unknown);
+  const n = typeof v === "number" ? v : Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.round(n) : DEFAULT_UPGRADE_TTL_DAYS;
+}
+
+function computeAdvisorRow(
+  a: { icao: string; name: string; tier: number; level: number; percToUser: number },
+  totals: number[],
+  windowDays: number,
+  helpers: {
+    airportUpgradeCost: (tier: number, level: number) => number;
+    ratingForPaybackDays: (d: number) => { stars: 1 | 2 | 3 | 4 | 5; label: string };
+  },
+): UpgradeAdvisorRow {
+  const icao = (a.icao || "").toUpperCase();
+  const avgTotalPaxPerFlight =
+    totals.length > 0 ? totals.reduce((s, v) => s + v, 0) / totals.length : 0;
+  const arrivalsPerDay = totals.length / windowDays;
+  const currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight;
+  const dailyIncrease = currentDailyPax;
+  const annualIncrease = currentDailyPax * 365;
+  const upgradeCost = helpers.airportUpgradeCost(a.tier, a.level + 1);
+  const paybackDays = currentDailyPax > 0 ? upgradeCost / currentDailyPax : -1;
+  const rating = helpers.ratingForPaybackDays(
+    paybackDays > 0 ? paybackDays : Number.POSITIVE_INFINITY,
+  );
+  return {
+    icao,
+    name: a.name,
+    tier: a.tier,
+    level: a.level,
+    nextLevel: a.level + 1,
+    windowDays,
+    flightsSampled: totals.length,
+    arrivalsPerDay,
+    avgTotalPaxPerFlight,
+    currentDailyPax,
+    dailyIncrease,
+    annualIncrease,
+    upgradeCost,
+    paybackDays,
+    stars: rating.stars,
+    ratingLabel: rating.label,
+  };
+}
 
 export const getUpgradeAdvisor = createServerFn({ method: "GET" })
   .inputValidator(
@@ -2363,77 +2437,215 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
       username?: string;
       airports: { icao: string; name: string; tier: number; level: number; percToUser: number }[];
       windowDays?: number;
+      forceIcaos?: string[]; // admin-only forced refresh subset (validated in handler)
+      adminToken?: string;
     }) => d,
   )
   .handler(async ({ data }): Promise<UpgradeAdvisorResult> => {
     const { airportUpgradeCost, ratingForPaybackDays } =
       await import("./airport-upgrade-costs");
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
-    const sinceMs = Date.now() - windowDays * 86_400_000;
-    const empty: UpgradeAdvisorResult = {
-      windowDays,
-      generatedAt: new Date().toISOString(),
-      rows: [],
-    };
-    if (!data.airports?.length) return empty;
+    const ttlDays = await readAdvisorTtlDays();
+    const nowMs = Date.now();
+    const ttlMs = ttlDays * 86_400_000;
+    const generatedAtIso = new Date(nowMs).toISOString();
+    const refreshAfterIso = new Date(nowMs + ttlMs).toISOString();
+    if (!data.airports?.length) {
+      return {
+        windowDays,
+        generatedAt: generatedAtIso,
+        refreshAfter: refreshAfterIso,
+        ttlDays,
+        rows: [],
+      };
+    }
+
+    const forceSet = new Set<string>();
+    if (data.forceIcaos && data.forceIcaos.length > 0) {
+      await verifyAdminToken(data.adminToken);
+      for (const i of data.forceIcaos) forceSet.add(String(i).toUpperCase());
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // Read all existing cache rows for this window in one shot.
+    const keys = data.airports.map((a) => (a.icao || "").toUpperCase());
+    const { data: cachedRows } = await supabaseAdmin
+      .from("airport_upgrade_cache")
+      .select("icao,tier,level,window_days,row,generated_at,refresh_after,last_manual_refresh_at")
+      .eq("window_days", windowDays)
+      .in("icao", keys);
+    const cacheMap = new Map<string, typeof cachedRows extends Array<infer R> ? R : never>();
+    for (const r of cachedRows ?? []) {
+      cacheMap.set(`${r.icao}|${r.tier}|${r.level}`, r as never);
+    }
 
     const { username, nonce } = await resolveIdentity({ username: data.username });
 
-    // Reuse the same shared collector as the Payout Matrix — identical
-    // pagination cap, identical inclusion rules, identical income
-    // definition. Only the aggregation differs.
-    const perAirport = await Promise.all(
+    // Decide which airports need (re)computing.
+    const stale = data.airports.filter((a) => {
+      const icao = (a.icao || "").toUpperCase();
+      const key = `${icao}|${a.tier}|${a.level}`;
+      const c = cacheMap.get(key) as
+        | { refresh_after: string; last_manual_refresh_at: string | null }
+        | undefined;
+      if (forceSet.has(icao)) {
+        // manual refresh cooldown
+        const lastManual = c?.last_manual_refresh_at
+          ? new Date(c.last_manual_refresh_at).getTime()
+          : 0;
+        if (nowMs - lastManual < MANUAL_REFRESH_COOLDOWN_MS) return false;
+        return true;
+      }
+      if (!c) return true;
+      return new Date(c.refresh_after).getTime() <= nowMs;
+    });
+
+    if (stale.length > 0) {
+      const sinceMs = nowMs - windowDays * 86_400_000;
+      const computed = await Promise.all(
+        stale.map(async (a) => {
+          const icao = (a.icao || "").toUpperCase();
+          const { rows } = await collectAirportHistoryFlights(icao, username, nonce, {
+            maxPages: 50,
+            sinceMs,
+          });
+          const totals = rows.map((r) => r.ownerCredit);
+          const row = computeAdvisorRow(a, totals, windowDays, {
+            airportUpgradeCost,
+            ratingForPaybackDays,
+          });
+          return { a, row };
+        }),
+      );
+
+      const rowsToUpsert = computed.map(({ a, row }) => {
+        const icao = (a.icao || "").toUpperCase();
+        const isManual = forceSet.has(icao);
+        return {
+          icao,
+          tier: a.tier,
+          level: a.level,
+          window_days: windowDays,
+          row: row as unknown as Record<string, unknown>,
+          generated_at: new Date(nowMs).toISOString(),
+          refresh_after: new Date(nowMs + ttlMs).toISOString(),
+          last_manual_refresh_at: isManual
+            ? new Date(nowMs).toISOString()
+            : (cacheMap.get(`${icao}|${a.tier}|${a.level}`) as
+                | { last_manual_refresh_at: string | null }
+                | undefined)?.last_manual_refresh_at ?? null,
+          updated_at: new Date(nowMs).toISOString(),
+        };
+      });
+      if (rowsToUpsert.length > 0) {
+        await supabaseAdmin
+          .from("airport_upgrade_cache")
+          .upsert(rowsToUpsert, { onConflict: "icao,tier,level,window_days" });
+        for (const u of rowsToUpsert) {
+          cacheMap.set(`${u.icao}|${u.tier}|${u.level}`, u as never);
+        }
+      }
+    }
+
+    // Also opportunistically invalidate stale entries for other levels of these
+    // airports (e.g. when the pilot upgrades in SimFly, the old level cache
+    // becomes irrelevant). Cheap best-effort: delete any cache row for a
+    // (icao, window_days) whose level < current level.
+    void supabaseAdmin
+      .from("airport_upgrade_cache")
+      .delete()
+      .in("icao", keys)
+      .eq("window_days", windowDays)
+      .lt("level", 0); // no-op guard; real per-airport cleanup below
+    await Promise.all(
       data.airports.map(async (a) => {
         const icao = (a.icao || "").toUpperCase();
-        if (!icao) return { icao, totals: [] as number[] };
-        const { rows } = await collectAirportHistoryFlights(icao, username, nonce, {
-          maxPages: 50,
-          sinceMs,
-        });
-        return { icao, totals: rows.map((r) => r.ownerCredit) };
+        await supabaseAdmin
+          .from("airport_upgrade_cache")
+          .delete()
+          .eq("icao", icao)
+          .eq("window_days", windowDays)
+          .neq("level", a.level);
       }),
     );
 
-    const totalsByIcao = new Map(perAirport.map((p) => [p.icao, p.totals]));
-
-
-    const out: UpgradeAdvisorRow[] = data.airports.map((a) => {
+    const out = data.airports.map((a) => {
       const icao = (a.icao || "").toUpperCase();
-      const totals = totalsByIcao.get(icao) ?? [];
-      const avgTotalPaxPerFlight =
-        totals.length > 0 ? totals.reduce((s, v) => s + v, 0) / totals.length : 0;
-      const arrivalsPerDay = totals.length / windowDays;
-      const currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight;
-      // Data-driven: no assumed per-level growth. Payback = how long the
-      // airport, at its current observed daily income, needs to earn back
-      // the upgrade cost. As new flights land after the upgrade, the
-      // historical average will naturally reflect the higher payout.
-      const dailyIncrease = currentDailyPax;
-      const annualIncrease = currentDailyPax * 365;
-      const upgradeCost = airportUpgradeCost(a.tier, a.level + 1);
-      const paybackDays = currentDailyPax > 0 ? upgradeCost / currentDailyPax : -1;
-      const rating = ratingForPaybackDays(paybackDays > 0 ? paybackDays : Number.POSITIVE_INFINITY);
+      const key = `${icao}|${a.tier}|${a.level}`;
+      const c = cacheMap.get(key) as
+        | {
+            row: UpgradeAdvisorRow;
+            generated_at: string;
+            refresh_after: string;
+            last_manual_refresh_at: string | null;
+          }
+        | undefined;
+      if (!c) {
+        // Should not happen (we just upserted stale ones), but fail safe.
+        const row = computeAdvisorRow(a, [], windowDays, {
+          airportUpgradeCost,
+          ratingForPaybackDays,
+        });
+        return {
+          ...row,
+          meta: {
+            generatedAt: generatedAtIso,
+            refreshAfter: refreshAfterIso,
+            lastManualRefreshAt: null,
+            cached: false,
+          },
+        };
+      }
       return {
-        icao,
-        name: a.name,
-        tier: a.tier,
-        level: a.level,
-        nextLevel: a.level + 1,
-        windowDays,
-        flightsSampled: totals.length,
-        arrivalsPerDay,
-        avgTotalPaxPerFlight,
-        currentDailyPax,
-        dailyIncrease,
-        annualIncrease,
-        upgradeCost,
-        paybackDays,
-        stars: rating.stars,
-        ratingLabel: rating.label,
+        ...c.row,
+        meta: {
+          generatedAt: c.generated_at,
+          refreshAfter: c.refresh_after,
+          lastManualRefreshAt: c.last_manual_refresh_at,
+          cached: true,
+        },
       };
     });
 
-    return { windowDays, generatedAt: new Date().toISOString(), rows: out };
+    // Overall generatedAt / refreshAfter = oldest / earliest across rows
+    const gen = out.length
+      ? out.reduce((m, r) => (r.meta.generatedAt < m ? r.meta.generatedAt : m), out[0].meta.generatedAt)
+      : generatedAtIso;
+    const nextRefresh = out.length
+      ? out.reduce((m, r) => (r.meta.refreshAfter < m ? r.meta.refreshAfter : m), out[0].meta.refreshAfter)
+      : refreshAfterIso;
+
+    return {
+      windowDays,
+      generatedAt: gen,
+      refreshAfter: nextRefresh,
+      ttlDays,
+      rows: out,
+    };
   });
+
+export const getAdvisorSettings = createServerFn({ method: "GET" })
+  .handler(async (): Promise<{ ttlDays: number }> => {
+    const ttlDays = await readAdvisorTtlDays();
+    return { ttlDays };
+  });
+
+export const setAdvisorSettings = createServerFn({ method: "POST" })
+  .inputValidator((d: { adminToken: string; ttlDays: number }) => d)
+  .handler(async ({ data }): Promise<{ ttlDays: number }> => {
+    await verifyAdminToken(data.adminToken);
+    const ttl = Math.max(1, Math.min(365, Math.round(data.ttlDays)));
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("app_settings")
+      .upsert(
+        { key: "airport_upgrade_ttl_days", value: ttl as unknown as Record<string, unknown>, updated_at: new Date().toISOString() },
+        { onConflict: "key" },
+      );
+    return { ttlDays: ttl };
+  });
+
+
 
 
