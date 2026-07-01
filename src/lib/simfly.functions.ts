@@ -2640,7 +2640,7 @@ export const setAdvisorSettings = createServerFn({ method: "POST" })
     await supabaseAdmin
       .from("app_settings")
       .upsert(
-        { key: "airport_upgrade_ttl_days", value: ttl as unknown as Record<string, unknown>, updated_at: new Date().toISOString() },
+        { key: "airport_upgrade_ttl_days", value: ttl as unknown as import("@/integrations/supabase/types").Json, updated_at: new Date().toISOString() },
         { onConflict: "key" },
       );
     return { ttlDays: ttl };
