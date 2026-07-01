@@ -33,10 +33,14 @@ function AircraftPage() {
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
+  const tails = useMemo(
+    () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
+    [data.airplanes],
+  );
   const { data: liveFlights = [] } = useQuery({
-    queryKey: ["simfly", "myLive", keyTag, icaos],
-    queryFn: () => liveFn({ data: { icaos, ...(username ? { username } : {}) } }),
-    enabled: icaos.length > 0,
+    queryKey: ["simfly", "myLive", keyTag, icaos, tails],
+    queryFn: () => liveFn({ data: { icaos, tails, ...(username ? { username } : {}) } }),
+    enabled: icaos.length > 0 || tails.length > 0,
     refetchInterval: 60_000,
     staleTime: 30_000,
   });
