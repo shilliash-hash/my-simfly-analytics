@@ -2283,7 +2283,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
     }) => d,
   )
   .handler(async ({ data }): Promise<UpgradeAdvisorResult> => {
-    const { airportUpgradeCost, ratingForPaybackDays, PAYOUT_LEVEL_GROWTH } =
+    const { airportUpgradeCost, ratingForPaybackDays } =
       await import("./airport-upgrade-costs");
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
     const sinceMs = Date.now() - windowDays * 86_400_000;
@@ -2344,10 +2344,14 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
         totals.length > 0 ? totals.reduce((s, v) => s + v, 0) / totals.length : 0;
       const arrivalsPerDay = totals.length / windowDays;
       const currentDailyPax = arrivalsPerDay * avgTotalPaxPerFlight;
-      const dailyIncrease = currentDailyPax * PAYOUT_LEVEL_GROWTH;
-      const annualIncrease = dailyIncrease * 365;
+      // Data-driven: no assumed per-level growth. Payback = how long the
+      // airport, at its current observed daily income, needs to earn back
+      // the upgrade cost. As new flights land after the upgrade, the
+      // historical average will naturally reflect the higher payout.
+      const dailyIncrease = currentDailyPax;
+      const annualIncrease = currentDailyPax * 365;
       const upgradeCost = airportUpgradeCost(a.tier, a.level + 1);
-      const paybackDays = dailyIncrease > 0 ? upgradeCost / dailyIncrease : -1;
+      const paybackDays = currentDailyPax > 0 ? upgradeCost / currentDailyPax : -1;
       const rating = ratingForPaybackDays(paybackDays > 0 ? paybackDays : Number.POSITIVE_INFINITY);
       return {
         icao,

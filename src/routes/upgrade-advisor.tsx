@@ -90,7 +90,7 @@ function UpgradeAdvisorPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Airport Upgrade Advisor"
-        description="Estimate how quickly each next airport upgrade pays for itself, using the real TOTAL PAX your airports receive on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Advisory only — no game data is changed."
+        description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus) and shows how long the current income needs to earn back the next upgrade cost. Advisory only — no game data is changed."
       />
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -153,14 +153,17 @@ function UpgradeAdvisorPage() {
       )}
 
       <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-        Methodology: average per-arrival income is the mean TOTAL PAX credited
-        to each airport (Airport Profit Split + Weekly Cycle ×3 bonus — the
-        "Total" column in the Payout Matrix, i.e. what actually hits your
-        wallet on landing) across every flight touching the airport in the
-        last {advisor?.windowDays ?? windowDays} days, sampled from the same
-        public airport history as the Payout Matrix. Per-level payout growth
-        is assumed at ~10%. Upgrade cost uses a tunable Tier × Level table
-        in <code>src/lib/airport-upgrade-costs.ts</code>.
+        Methodology: purely data-driven. Average per-arrival income is the
+        mean TOTAL PAX credited to each airport (Airport Profit Split +
+        Weekly Cycle ×3 bonus — the "Total" column in the Payout Matrix, i.e.
+        what actually hits your wallet on landing) across every flight
+        touching the airport in the last {advisor?.windowDays ?? windowDays}{" "}
+        days, sampled from the same public airport history as the Payout
+        Matrix. Payback = upgrade cost ÷ current daily income. No assumed
+        per-level growth is applied — as new flights land after an upgrade,
+        the historical average will naturally reflect the higher payout.
+        Upgrade cost uses a tunable Tier × Level table in{" "}
+        <code>src/lib/airport-upgrade-costs.ts</code>.
       </p>
     </AppShell>
   );
@@ -200,13 +203,13 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           accent="instrument"
         />
         <Field
-          label="Daily increase"
-          value={hasData ? `+${row.dailyIncrease.toFixed(2)} PAX` : "—"}
+          label="Current daily PAX"
+          value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"}
           accent="runway"
         />
         <Field
-          label="Annual increase"
-          value={hasData ? `+${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
+          label="Annual @ current rate"
+          value={hasData ? `${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
           accent="runway"
         />
       </dl>
