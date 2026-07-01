@@ -76,7 +76,7 @@ function UpgradeAdvisorPage() {
   const setSettingsFn = useServerFn(setAdvisorSettings);
   const qc = useQueryClient();
 
-  const [windowDays, setWindowDays] = useState(60);
+  const windowDays = 60; // fixed to keep upstream load predictable
   const [adminToken, setAdminToken] = useState<string>("");
   useEffect(() => {
     try {
@@ -188,19 +188,12 @@ function UpgradeAdvisorPage() {
       )}
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
-        <label className="text-xs uppercase tracking-wider text-foreground/60">
+        <div className="text-xs uppercase tracking-wider text-foreground/60">
           History window
-          <select
-            value={windowDays}
-            onChange={(e) => setWindowDays(Number(e.target.value))}
-            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-          >
-            <option value={30}>Last 30 days</option>
-            <option value={60}>Last 60 days</option>
-            <option value={90}>Last 90 days</option>
-            <option value={180}>Last 180 days</option>
-          </select>
-        </label>
+          <div className="mt-1 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
+            Last {windowDays} days (fixed)
+          </div>
+        </div>
         <label className="text-xs uppercase tracking-wider text-foreground/60">
           Sort by
           <select
