@@ -1902,87 +1902,159 @@ export type AirportPayoutMatrix = {
   fetchedAt: string;
 };
 
+/**
+ * Shared airport-history collector. Single source of truth for both the
+ * Payout Matrix and the Upgrade Advisor: identical pagination, identical
+ * inclusion rules, identical income definition. Callers only differ in how
+ * they aggregate the returned rows.
+ */
+export type AirportHistoryRow = {
+  flightId: string;
+  ts: string;
+  tsMs: number;
+  role: "takeoff" | "landing";
+  isOrigin: boolean;
+  otherIcao: string;
+  distanceNm?: number;
+  aircraftName: string;
+  tailNumber?: string;
+  aircraftTier?: number;
+  aircraftLevel?: number;
+  pilot: string;
+  basePax: number;
+  bonusPax: number;
+  ownerCredit: number;
+};
+
+export type AirportHistoryResult = {
+  rows: AirportHistoryRow[];
+  pagesFetched: number;
+  sampled: number;
+  excluded: number;
+};
+
+async function collectAirportHistoryFlights(
+  icao: string,
+  username: string,
+  nonce: string,
+  opts: { maxPages?: number; sinceMs?: number } = {},
+): Promise<AirportHistoryResult> {
+  const maxPages = Math.min(Math.max(opts.maxPages ?? 50, 1), 120);
+  const sinceMs = opts.sinceMs ?? 0;
+  const urls = Array.from({ length: maxPages }, (_, i) =>
+    `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
+  );
+  const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
+  const rows: AirportHistoryRow[] = [];
+  let sampled = 0;
+  let excluded = 0;
+  let consecutiveEmpty = 0;
+  let stoppedByWindow = false;
+
+  for (const r of responses) {
+    if (!r?.flights?.length) {
+      consecutiveEmpty++;
+      if (consecutiveEmpty >= 3) break;
+      continue;
+    }
+    consecutiveEmpty = 0;
+    let pageAllOutside = sinceMs > 0;
+    for (const f of r.flights as RawAirportHistFlight[]) {
+      sampled++;
+      const isOrigin = f.origin?.icao === icao;
+      const side = isOrigin ? f.origin : f.destination;
+      if (!side) { excluded++; continue; }
+
+      const bonus = side.bonusPax ?? 0;
+      let earned = side.earnedPax ?? 0;
+      if (earned <= 0 && (side.totalEarnedPax ?? 0) > 0) {
+        earned = Math.max(0, (side.totalEarnedPax ?? 0) - bonus);
+      }
+      if (earned <= 0) { excluded++; continue; }
+
+      const tier = f.airplane?.category;
+      const level = f.airplane?.level;
+      if (!tier || !level) { excluded++; continue; }
+
+      const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "";
+      const tsMs = ts ? Date.parse(ts) : NaN;
+      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs >= sinceMs) {
+        pageAllOutside = false;
+      }
+      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs < sinceMs) {
+        continue;
+      }
+
+      rows.push({
+        flightId: f.flightID,
+        ts,
+        tsMs: Number.isFinite(tsMs) ? tsMs : 0,
+        role: isOrigin ? "takeoff" : "landing",
+        isOrigin,
+        otherIcao: (isOrigin ? f.destination?.icao : f.origin?.icao) ?? "—",
+        distanceNm: f.distance ?? f.flightDistance ?? f.totalDistance,
+        aircraftName: f.airplane?.name ?? f.airplane?.icao ?? "—",
+        tailNumber: (f.airplane as { tailNumber?: string } | undefined)?.tailNumber,
+        aircraftTier: tier,
+        aircraftLevel: level,
+        pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",
+        basePax: earned,
+        bonusPax: bonus,
+        ownerCredit: airportOwnerCredit(side),
+      });
+    }
+    if (sinceMs > 0 && pageAllOutside && !stoppedByWindow) {
+      stoppedByWindow = true;
+      break;
+    }
+  }
+
+  return { rows, pagesFetched: maxPages, sampled, excluded };
+}
+
+
 export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
   .inputValidator((d: { icao: string; pages?: number; username?: string }) => d)
   .handler(async ({ data }): Promise<AirportPayoutMatrix> => {
     const { username, nonce } = await resolveIdentity({ username: data.username });
-    const pages = Math.min(Math.max(data.pages ?? 50, 1), 120);
-    const urls = Array.from({ length: pages }, (_, i) =>
-      `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(data.icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-    );
-    const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
+    const { rows, pagesFetched, sampled, excluded } =
+      await collectAirportHistoryFlights(data.icao, username, nonce, {
+        maxPages: data.pages ?? 50,
+      });
 
     type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
     const buckets = new Map<string, Bucket>();
     const tierSet = new Set<number>();
     const levelSet = new Set<number>();
-    let sampled = 0;
-    let used = 0;
-    let excluded = 0;
-    let consecutiveEmpty = 0;
 
-    for (const r of responses) {
-      if (!r?.flights?.length) {
-        consecutiveEmpty++;
-        if (consecutiveEmpty >= 3) break;
-        continue;
-      }
-      consecutiveEmpty = 0;
-      for (const f of r.flights as RawAirportHistFlight[]) {
-        sampled++;
-        const isOrigin = f.origin?.icao === data.icao;
-        const side = isOrigin ? f.origin : f.destination;
-        if (!side) { excluded++; continue; }
-
-        // Include EVERY completed flight. The Weekly Cycle First Movement
-        // (3×) bonus is a separate transaction stored in `bonusPax`; the
-        // standard "Airport Profit Split" payout lives in `earnedPax`. Use
-        // `earnedPax` as the base payout and simply ignore the bonus
-        // transaction — flights are NOT excluded just because they got a
-        // bonus. Defensive fallback: if a payload only exposes
-        // `totalEarnedPax` + `bonusPax`, derive base by subtraction.
-        const bonus = side.bonusPax ?? 0;
-        let earned = side.earnedPax ?? 0;
-        if (earned <= 0 && (side.totalEarnedPax ?? 0) > 0) {
-          earned = Math.max(0, (side.totalEarnedPax ?? 0) - bonus);
-        }
-        if (earned <= 0) { excluded++; continue; }
-
-        const ownerCredit = airportOwnerCredit(side);
-
-        const tier = f.airplane?.category;
-        const level = f.airplane?.level;
-        if (!tier || !level) { excluded++; continue; }
-
-        tierSet.add(tier);
-        levelSet.add(level);
-        const key = `${tier}:${level}`;
-        const b = buckets.get(key) ?? { sum: 0, n: 0, samples: [] };
-        b.sum += earned;
-        b.n += 1;
-        b.samples.push({
-          flightId: f.flightID,
-          ts: f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "",
-          role: isOrigin ? "takeoff" : "landing",
-          otherIcao: (isOrigin ? f.destination?.icao : f.origin?.icao) ?? "—",
-          distanceNm: f.distance ?? f.flightDistance ?? f.totalDistance,
-          aircraftName: f.airplane?.name ?? f.airplane?.icao ?? "—",
-          tailNumber: (f.airplane as { tailNumber?: string } | undefined)?.tailNumber,
-          pilot: f.pilot?.username ?? f.airplane?.owner?.username ?? "—",
-          basePax: earned,
-          bonusPax: bonus,
-          totalPax: ownerCredit,
-        });
-
-        buckets.set(key, b);
-        used++;
-      }
+    for (const row of rows) {
+      const tier = row.aircraftTier!;
+      const level = row.aircraftLevel!;
+      tierSet.add(tier);
+      levelSet.add(level);
+      const key = `${tier}:${level}`;
+      const b = buckets.get(key) ?? { sum: 0, n: 0, samples: [] };
+      b.sum += row.basePax;
+      b.n += 1;
+      b.samples.push({
+        flightId: row.flightId,
+        ts: row.ts,
+        role: row.role,
+        otherIcao: row.otherIcao,
+        distanceNm: row.distanceNm,
+        aircraftName: row.aircraftName,
+        tailNumber: row.tailNumber,
+        pilot: row.pilot,
+        basePax: row.basePax,
+        bonusPax: row.bonusPax,
+        totalPax: row.ownerCredit,
+      });
+      buckets.set(key, b);
     }
 
     const cells: PayoutMatrixCell[] = [];
     for (const [key, b] of buckets) {
       const [tier, level] = key.split(":").map(Number);
-      // Sort samples newest first, cap to keep payload small.
       const samples = b.samples
         .sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0))
         .slice(0, 200);
@@ -1991,9 +2063,9 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
 
     return {
       icao: data.icao,
-      pagesFetched: pages,
+      pagesFetched,
       flightsSampled: sampled,
-      flightsUsed: used,
+      flightsUsed: rows.length,
       flightsExcluded: excluded,
       tiers: [...tierSet].sort((a, b) => a - b),
       levels: [...levelSet].sort((a, b) => a - b),
@@ -2001,6 +2073,7 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
       fetchedAt: new Date().toISOString(),
     };
   });
+
 
 
 /**
@@ -2296,46 +2369,23 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
 
     const { username, nonce } = await resolveIdentity({ username: data.username });
 
-    // Reuse the same public airport history endpoint that powers the Payout
-    // Matrix. Sample a few pages per airport — TOTAL is the airport-side
-    // credit (earnedPax + bonusPax) so the Weekly Cycle ×3 bonus is naturally
-    // included, matching what actually hits the wallet.
-    const PAGES_PER_AIRPORT = 5;
+    // Reuse the same shared collector as the Payout Matrix — identical
+    // pagination cap, identical inclusion rules, identical income
+    // definition. Only the aggregation differs.
     const perAirport = await Promise.all(
       data.airports.map(async (a) => {
         const icao = (a.icao || "").toUpperCase();
         if (!icao) return { icao, totals: [] as number[] };
-        const urls = Array.from({ length: PAGES_PER_AIRPORT }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-        );
-        const responses = await fetchJSONPages<RawAirportHistPage>(urls, 3);
-        const totals: number[] = [];
-        let consecutiveEmpty = 0;
-        for (const r of responses) {
-          if (!r?.flights?.length) {
-            consecutiveEmpty++;
-            if (consecutiveEmpty >= 2) break;
-            continue;
-          }
-          consecutiveEmpty = 0;
-          for (const f of r.flights as RawAirportHistFlight[]) {
-            const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime;
-            const tMs = ts ? Date.parse(ts) : NaN;
-            if (Number.isFinite(tMs) && tMs < sinceMs) continue;
-            const isOrigin = f.origin?.icao === icao;
-            const side = isOrigin ? f.origin : f.destination;
-            if (!side) continue;
-            const ownerCredit = airportOwnerCredit(side);
-            if (ownerCredit <= 0) continue;
-            totals.push(ownerCredit);
-
-          }
-        }
-        return { icao, totals };
+        const { rows } = await collectAirportHistoryFlights(icao, username, nonce, {
+          maxPages: 50,
+          sinceMs,
+        });
+        return { icao, totals: rows.map((r) => r.ownerCredit) };
       }),
     );
 
     const totalsByIcao = new Map(perAirport.map((p) => [p.icao, p.totals]));
+
 
     const out: UpgradeAdvisorRow[] = data.airports.map((a) => {
       const icao = (a.icao || "").toUpperCase();
