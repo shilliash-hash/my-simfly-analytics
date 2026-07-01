@@ -49,6 +49,10 @@ function Overview() {
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
+  const tails = useMemo(
+    () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
+    [data.airplanes],
+  );
   // Live feeds — 30 s cadence. The server memoises the upstream /flights
   // response for 10 s so concurrent tabs / callers share a single fetch.
   const { data: hubTraffic = [] } = useQuery({
@@ -59,9 +63,9 @@ function Overview() {
     staleTime: 20_000,
   });
   const { data: myFlights = [] } = useQuery({
-    queryKey: ["simfly", "myLiveFlights", keyTag, icaos],
-    queryFn: () => myFlightsFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
-    enabled: icaos.length > 0,
+    queryKey: ["simfly", "myLiveFlights", keyTag, icaos, tails],
+    queryFn: () => myFlightsFn({ data: { icaos, tails, ...(viewedUser ? { username: viewedUser } : {}) } }),
+    enabled: icaos.length > 0 || tails.length > 0,
     refetchInterval: 30_000,
     staleTime: 20_000,
   });
