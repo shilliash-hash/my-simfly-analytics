@@ -46,7 +46,7 @@ function Community() {
   const history = useQuery({
     queryKey: ["simfly", "visitor-history", keyTag, 5],
     queryFn: () => histFn({ data: { pages: 5, ...(username ? { username } : {}) } }),
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
   });
 
   // Live aggregate (right now)

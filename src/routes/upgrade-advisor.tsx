@@ -32,7 +32,7 @@ function UpgradeAdvisorPage() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 5 * 60_000,
+      staleTime: 30 * 60_000,
     }),
   );
 
@@ -56,7 +56,7 @@ function UpgradeAdvisorPage() {
       advisorFn({
         data: { username: payload?.username, airports: airportsInput, windowDays },
       }),
-    staleTime: 5 * 60_000,
+    staleTime: 30 * 60_000,
     enabled: airportsInput.length > 0,
   });
 
