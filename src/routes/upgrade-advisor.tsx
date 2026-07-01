@@ -203,13 +203,13 @@ function AdvisorCard({ row }: { row: UpgradeAdvisorRow }) {
           accent="instrument"
         />
         <Field
-          label="Daily increase"
-          value={hasData ? `+${row.dailyIncrease.toFixed(2)} PAX` : "—"}
+          label="Current daily PAX"
+          value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"}
           accent="runway"
         />
         <Field
-          label="Annual increase"
-          value={hasData ? `+${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
+          label="Annual @ current rate"
+          value={hasData ? `${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
           accent="runway"
         />
       </dl>
