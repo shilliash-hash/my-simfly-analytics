@@ -153,14 +153,17 @@ function UpgradeAdvisorPage() {
       )}
 
       <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-        Methodology: average per-arrival income is the mean TOTAL PAX credited
-        to each airport (Airport Profit Split + Weekly Cycle ×3 bonus — the
-        "Total" column in the Payout Matrix, i.e. what actually hits your
-        wallet on landing) across every flight touching the airport in the
-        last {advisor?.windowDays ?? windowDays} days, sampled from the same
-        public airport history as the Payout Matrix. Per-level payout growth
-        is assumed at ~10%. Upgrade cost uses a tunable Tier × Level table
-        in <code>src/lib/airport-upgrade-costs.ts</code>.
+        Methodology: purely data-driven. Average per-arrival income is the
+        mean TOTAL PAX credited to each airport (Airport Profit Split +
+        Weekly Cycle ×3 bonus — the "Total" column in the Payout Matrix, i.e.
+        what actually hits your wallet on landing) across every flight
+        touching the airport in the last {advisor?.windowDays ?? windowDays}{" "}
+        days, sampled from the same public airport history as the Payout
+        Matrix. Payback = upgrade cost ÷ current daily income. No assumed
+        per-level growth is applied — as new flights land after an upgrade,
+        the historical average will naturally reflect the higher payout.
+        Upgrade cost uses a tunable Tier × Level table in{" "}
+        <code>src/lib/airport-upgrade-costs.ts</code>.
       </p>
     </AppShell>
   );
