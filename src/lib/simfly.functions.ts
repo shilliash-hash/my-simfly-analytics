@@ -2369,46 +2369,23 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
 
     const { username, nonce } = await resolveIdentity({ username: data.username });
 
-    // Reuse the same public airport history endpoint that powers the Payout
-    // Matrix. Sample a few pages per airport — TOTAL is the airport-side
-    // credit (earnedPax + bonusPax) so the Weekly Cycle ×3 bonus is naturally
-    // included, matching what actually hits the wallet.
-    const PAGES_PER_AIRPORT = 5;
+    // Reuse the same shared collector as the Payout Matrix — identical
+    // pagination cap, identical inclusion rules, identical income
+    // definition. Only the aggregation differs.
     const perAirport = await Promise.all(
       data.airports.map(async (a) => {
         const icao = (a.icao || "").toUpperCase();
         if (!icao) return { icao, totals: [] as number[] };
-        const urls = Array.from({ length: PAGES_PER_AIRPORT }, (_, i) =>
-          `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-        );
-        const responses = await fetchJSONPages<RawAirportHistPage>(urls, 3);
-        const totals: number[] = [];
-        let consecutiveEmpty = 0;
-        for (const r of responses) {
-          if (!r?.flights?.length) {
-            consecutiveEmpty++;
-            if (consecutiveEmpty >= 2) break;
-            continue;
-          }
-          consecutiveEmpty = 0;
-          for (const f of r.flights as RawAirportHistFlight[]) {
-            const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime;
-            const tMs = ts ? Date.parse(ts) : NaN;
-            if (Number.isFinite(tMs) && tMs < sinceMs) continue;
-            const isOrigin = f.origin?.icao === icao;
-            const side = isOrigin ? f.origin : f.destination;
-            if (!side) continue;
-            const ownerCredit = airportOwnerCredit(side);
-            if (ownerCredit <= 0) continue;
-            totals.push(ownerCredit);
-
-          }
-        }
-        return { icao, totals };
+        const { rows } = await collectAirportHistoryFlights(icao, username, nonce, {
+          maxPages: 50,
+          sinceMs,
+        });
+        return { icao, totals: rows.map((r) => r.ownerCredit) };
       }),
     );
 
     const totalsByIcao = new Map(perAirport.map((p) => [p.icao, p.totals]));
+
 
     const out: UpgradeAdvisorRow[] = data.airports.map((a) => {
       const icao = (a.icao || "").toUpperCase();
