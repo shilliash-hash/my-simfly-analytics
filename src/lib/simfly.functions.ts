@@ -2283,7 +2283,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
     }) => d,
   )
   .handler(async ({ data }): Promise<UpgradeAdvisorResult> => {
-    const { airportUpgradeCost, ratingForPaybackDays, PAYOUT_LEVEL_GROWTH } =
+    const { airportUpgradeCost, ratingForPaybackDays } =
       await import("./airport-upgrade-costs");
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
     const sinceMs = Date.now() - windowDays * 86_400_000;
