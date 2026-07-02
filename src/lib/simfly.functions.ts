@@ -935,7 +935,19 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const ownedIcaos = (assets?.items ?? [])
       .filter((it) => it.type === "Airport")
       .map((it) => (it as RawAssetAirport).icao);
+
+    // Hub-support side effect: once per dashboard load, check if the fresh
+    // page-1 batch contains a qualifying arrival at one of the pilot's own
+    // airports this SimFly week. One indexed INSERT ON CONFLICT DO NOTHING.
+    if (ownedIcaos.length > 0 && p1?.flights?.length) {
+      const owned = new Set(ownedIcaos.map((i) => i.toLowerCase()));
+      void import("./hub-support.functions").then(({ recordAirportArrivalSupportForBatch }) =>
+        recordAirportArrivalSupportForBatch(username, owned, p1.flights),
+      );
+    }
+
     let airportFlights: RawFlightLite[] = flights;
+
     if (ownedIcaos.length > 0) {
       const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const visitorRows = await memo(
