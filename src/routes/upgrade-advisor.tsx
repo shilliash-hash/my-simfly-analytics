@@ -12,6 +12,7 @@ import {
 } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
+import { HubSupportGate } from "@/components/hub-support";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Star } from "lucide-react";
 
