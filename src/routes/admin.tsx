@@ -385,6 +385,7 @@ function HubSupportAdmin({ token }: { token: string }) {
   const loadFn = useServerFn(getHubSupportAdmin);
   const saveFn = useServerFn(setHubSupportSettings);
   const grantFn = useServerFn(adminGrantHubSupport);
+  const revokeFn = useServerFn(adminRevokeHubSupport);
   const qc = useQueryClient();
 
   const { data, isLoading } = useQuery({
