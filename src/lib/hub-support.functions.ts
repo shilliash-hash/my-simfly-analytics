@@ -186,12 +186,36 @@ type MinimalFlight = {
   id?: string;
   destination_icao?: string;
   mission_start_ts?: string | null;
+  // Completion signals — a flight only qualifies once it has actually landed
+  // at the intended destination. In-progress or cancelled flights must NOT
+  // grant weekly support (destination may change, or the flight may never
+  // arrive).
+  flight_time?: string | number | null;
+  total_reward?: number | null;
+  pax?: number | null;
 };
+
+function isCompletedFlight(f: MinimalFlight): boolean {
+  const ft = f.flight_time;
+  const hasTime =
+    (typeof ft === "string" &&
+      ft.trim().length > 0 &&
+      ft.trim() !== "0" &&
+      ft.trim() !== "00:00:00") ||
+    (typeof ft === "number" && ft > 0);
+  const reward = typeof f.total_reward === "number" ? f.total_reward : 0;
+  const pax = typeof f.pax === "number" ? f.pax : 0;
+  // Require BOTH a positive flight_time and some positive payout/pax — that
+  // combination only exists on a finalised logbook entry, never on an
+  // in-progress or cancelled mission.
+  return hasTime && (reward > 0 || pax > 0);
+}
 
 /**
  * Called once per imported page/batch (NOT per flight row).
  * Scans the batch in memory for the FIRST flight that qualifies:
- *   - arrival ICAO ∈ owned airports
+ *   - flight is COMPLETED (has flight_time + payout/pax) — not in-progress
+ *   - arrival ICAO ∈ owned airports (actual landing, not intended dest)
  *   - arrival timestamp ≥ current week start
  * If found and no row exists yet for this (username, week), inserts one.
  * Uses ON CONFLICT DO NOTHING so re-runs are free.
@@ -210,6 +234,7 @@ export async function recordAirportArrivalSupportForBatch(
 
   let hit: { flightId: string; icao: string; ts: string } | null = null;
   for (const f of flights) {
+    if (!isCompletedFlight(f)) continue;
     const icao = (f.destination_icao ?? "").toLowerCase();
     if (!icao || !ownedIcaosLower.has(icao)) continue;
     const ts = f.mission_start_ts;
