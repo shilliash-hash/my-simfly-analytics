@@ -145,6 +145,8 @@ function Overview() {
         />
       </section>
 
+      <HubSupportCard />
+
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 
       <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
