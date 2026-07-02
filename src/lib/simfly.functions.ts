@@ -2036,13 +2036,18 @@ async function collectAirportHistoryFlights(
 
 
 export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
-  .inputValidator((d: { icao: string; pages?: number; username?: string }) => d)
+  .inputValidator((d: { icao: string; pages?: number; username?: string; adminToken?: string }) => d)
   .handler(async ({ data }): Promise<AirportPayoutMatrix> => {
     const { username, nonce } = await resolveIdentity({ username: data.username });
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    if (!(await hasWeeklyHubSupport(username, { adminToken: data.adminToken }))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
     const { rows, pagesFetched, sampled, excluded } =
       await collectAirportHistoryFlights(data.icao, username, nonce, {
         maxPages: data.pages ?? 50,
       });
+
 
     type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
     const buckets = new Map<string, Bucket>();
