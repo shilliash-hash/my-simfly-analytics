@@ -31,6 +31,8 @@ export type HubSupportStatus = {
   activeSupportersThisWeek: number;
 };
 
+const DEFAULT_USERNAME = "shill";
+
 // ---------- Week helpers (pure) ----------
 
 /** Monday 00:00 UTC for the given date. */
@@ -371,7 +373,8 @@ export const getHubSupportStatus = createServerFn({ method: "GET" })
     const label = weekLabel(weekStart);
     const uname =
       sanitiseUsername(data?.username) ||
-      sanitiseUsername(process.env.SIMFLY_USERNAME);
+      sanitiseUsername(process.env.SIMFLY_USERNAME) ||
+      sanitiseUsername(DEFAULT_USERNAME);
 
     let source: SupportSource | null = null;
     let qualifyingIcao: string | null = null;
