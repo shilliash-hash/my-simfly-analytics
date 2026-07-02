@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { createHash, timingSafeEqual } from "node:crypto";
 
 /**
  * Weekly Hub Support — the central access-control layer for expensive
@@ -70,6 +69,7 @@ function normUser(u: string): string {
 async function verifyAdminToken(token: string | undefined | null) {
   const expected = process.env.ADMIN_TOKEN;
   if (!expected) throw new Error("ADMIN_TOKEN is not configured on the server.");
+  const { createHash, timingSafeEqual } = await import("node:crypto");
   const provided = createHash("sha256").update(String(token ?? ""), "utf8").digest();
   const known = createHash("sha256").update(expected, "utf8").digest();
   if (!timingSafeEqual(provided, known)) throw new Error("Forbidden: admin token required.");
