@@ -1,117 +1,89 @@
-# Performance & Polling Audit — SimFly Hub
+## Weekly Hub Support System (revised)
 
-Read-only baseline. No code changes in this pass. Numbers come from `pg_stat_statements`, `pg_indexes`, and the polling/cache constants in the current code.
+A lightweight access-control layer that gates only the two heaviest analytical pages (Upgrade Advisor + Payout Matrix) behind either (a) one qualifying arrival at any of my airports this SimFly week, or (b) a donation. Everything else stays free.
 
----
+### 1. Database
 
-## 1. Polling inventory (client-side, per active tab)
+New table `public.hub_support` (service-role only, matching `backfill_progress` / `airport_upgrade_cache`):
 
+- `username text` (lowercase)
+- `week_start_utc timestamptz` — Monday 00:00 UTC of the SimFly week; trivial equality comparisons, no ISO-week parsing, no year-edge bugs
+- `support_source text` — `'airport' | 'donation' | 'admin'`
+- `qualifying_icao text` (nullable)
+- `qualifying_flight_id text` (nullable)
+- `qualifying_arrival_at timestamptz` (nullable)
+- `activated_at timestamptz default now()`
+- `updated_at timestamptz default now()`
+- PK: `(username, week_start_utc)` — one row per pilot per week; idempotent upserts
+- Index on `(week_start_utc)` for the community counter
 
-| Feature                     | File                                  | Interval           | Verdict                                                          | Suggested                                                 |
-| --------------------------- | ------------------------------------- | ------------------ | ---------------------------------------------------------------- | --------------------------------------------------------- |
-| Live flights (hero)         | `routes/index.tsx:58`                 | 15 s               | Fine for "current flight", but every tab hits `getMyLiveFlights` | **30 s** (hero doesn't need 15 s; ETA is client-computed) |
-| Incoming visitor traffic    | `routes/index.tsx:65`                 | 15 s               | Same global feed as above                                        | **30 s** and share one query with hero                    |
-| Live flights (Activity map) | `routes/activity.tsx:68`              | 60 s               | OK                                                               | keep 60 s                                                 |
-| Aircraft page live          | `routes/aircraft.tsx:40`              | 60 s               | OK                                                               | keep                                                      |
-| Backfill progress poll      | `components/backfill-progress.tsx:44` | dynamic (2–5 s)    | Fine while running, but keep only while `status='running'`       | verify it stops when idle                                 |
-| Admin dashboard             | `routes/admin.tsx:125`                | 5 s                | Fine (admin only, low N)                                         | keep                                                      |
-| Homepage `getSimflyPayload` | `routes/index.tsx:21`                 | staleTime 30 s     | Heavy fn; see §3                                                 | staleTime **2–5 min**                                     |
-| Hero re-render tick         | `routes/index.tsx:652`                | 30 s `setInterval` | Cosmetic countdown only                                          | keep                                                      |
+Feature flag lives in the existing `public.app_settings` table under key `hub_support` with value `{ "enabled": true, "admin_bypass": true }` — no new settings table. When `enabled=false`, `hasWeeklyHubSupport()` always returns true.
 
+UI displays "Week 29" derived from `week_start_utc`; storage stays numeric-friendly.
 
-**Biggest single win:** the two 15 s polls on the homepage now hit a single upstream (`/api/flights`) — collapse them into one shared React-Query key (`["simfly","liveGlobal"]`) so multiple tabs / components dedupe, and lift the interval to 30 s. Estimated upstream + serverless invocations cut by ~66%.
+### 2. Server helpers (`src/lib/hub-support.server.ts` + `hub-support.functions.ts`)
 
----
+- `currentSimflyWeekStart(now = new Date())` → `Date` at Monday 00:00 UTC.
+- `recordAirportArrivalSupportForBatch(username, ownedIcaosLower, pageFlights)` — server-only. Called once per imported page/batch (not per row). Scans the page in memory for the first flight whose arrival ICAO ∈ owned set AND arrival ts ≥ current week start; if found, single `INSERT … ON CONFLICT (username, week_start_utc) DO NOTHING`. Zero writes when the row already exists or no qualifying flight in the batch.
+- `recordDonationSupport(username)` — upsert with source=`donation`.
+- `adminGrantSupport(username, weekStart?)` — admin action.
+- `getWeeklyHubSupport(username)` server fn → `{ active, weekStart, source, qualifyingIcao, qualifyingArrivalAt, featureEnabled, adminBypass }`. Single PK lookup.
+- `getActiveSupportersThisWeek()` — cached (5 min server memo) `SELECT count(*) WHERE week_start_utc = $1`; powers the community counter.
+- `hasWeeklyHubSupport(username, ctx)` — returns true when: feature disabled OR admin bypass active for caller (admin token present or `admin_bypass=true` + username is owner) OR a `hub_support` row exists for current week.
 
-## 2. Slow queries (from `pg_stat_statements`)
+### 3. Admin bypass
 
+Two paths, both handled inside `hasWeeklyHubSupport`:
+- `admin_bypass=true` in `app_settings.hub_support` → any request carrying a valid admin token passes (useful on staging).
+- Owner username hardcoded via existing admin-owner recognition → optional; controlled from the admin settings card.
 
-| Rank | Query                                                                                | Calls | Mean   | Total      | Notes                                                                                                                                                        |
-| ---- | ------------------------------------------------------------------------------------ | ----- | ------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #1   | `SELECT … WHERE username=$1 ORDER BY mission_start_ts DESC LIMIT/OFFSET`             | 2 455 | 22 ms  | **54.9 s** | Uses `simfly_flights_user_ts_idx` — index is correct. Volume is the problem: called from every homepage/activity/stats render. Cache the result server-side. |
-| #2   | `INSERT … simfly_flights ON CONFLICT DO NOTHING`                                     | 3 960 | 1 ms   | 4.1 s      | Healthy; already idempotent. Batching size is fine.                                                                                                          |
-| #3   | `SELECT … WHERE departure_icao=ANY OR destination_icao=ANY AND mission_start_ts>=$3` | 675   | 4.6 ms | 3.1 s      | **No supporting index** — the OR forces a seq/bitmap scan on the two ICAO columns. Add partial indexes.                                                      |
+### 4. Wiring into existing sync
 
+Call `recordAirportArrivalSupportForBatch` **once per page/batch**, not per row, in the three existing write paths:
 
-**Recommended indexes** (schema-only migration when we start implementing):
+- `backfill.functions.ts` — after each page's upsert loop
+- `simfly.functions.ts` incremental sync path — after the batch upsert
+- Any completed-flight upsert in `upsertFlightRows` — after the batch commit
 
-```sql
-CREATE INDEX simfly_flights_dep_ts_idx  ON public.simfly_flights (departure_icao, mission_start_ts DESC);
-CREATE INDEX simfly_flights_dest_ts_idx ON public.simfly_flights (destination_icao, mission_start_ts DESC);
-CREATE INDEX simfly_flights_aircraft_id_ts_idx ON public.simfly_flights (aircraft_id, mission_start_ts DESC);
-```
+The owned-ICAO set is already computed for visitor tracking — reuse it. No new polling, no historical scans, no page-load recalculation.
 
-The OR-of-ANY query will be rewritten by the planner into a BitmapOr across the two ICAO indexes — mean should drop from 4.6 ms → <1 ms and it eliminates the current implicit full scan when a hub set is large. Aircraft index helps the visitor-by-aircraft scans in `simfly.functions.ts` §aircraft-backfill.
+### 5. Protected pages
 
----
+Gate only:
 
-## 3. Expensive server functions
+- `/upgrade-advisor`
+- `/payout-matrix`
 
-Current in-memory memo (`HEAVY_CACHE_TTL_MS = 90 s`, `src/lib/simfly.functions.ts:54`) covers `getSimflyPayload` per-isolate but **is lost on cold start** and **not shared across regions**. Findings:
+Their server fns call `hasWeeklyHubSupport(username)` at the top; on false, throw `{ code: 'HUB_SUPPORT_REQUIRED' }`. Route components catch that and render `<HubSupportGate />` (friendly card with airport-visit + coffee CTAs) instead of the analytics.
 
+Future premium features just call the same helper — no new permission logic.
 
-| Function                                          | Cost driver                                                                 | Today                   | Recommendation                                                                                                                                                     |
-| ------------------------------------------------- | --------------------------------------------------------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `getSimflyPayload`                                | 25× hub scan + aircraft sweep + DB read of user flights                     | 90 s isolate memo       | Keep memo, but raise TTL to **5 min**; store the derived payload in a `payload_cache` table keyed by (username, computed_at) so cold isolates rehydrate instantly. |
-| `getAirportPayoutMatrix` / `getUpgradeAdvisor`    | Shared `collectAirportHistoryFlights` (up to 50 pages upstream per airport) | client staleTime 15 min | Add a server-side memo of `collectAirportHistoryFlights(icao, windowDays)` with 30 min TTL — both features already share the collector, so one memo serves both.   |
-| `getAirportVisitors` / `getMyHubsIncomingTraffic` | Global `/api/flights` fetch                                                 | called ad-hoc           | Wrap `fetchAllLiveFlights()` in a **10 s memo** — any concurrent caller inside 10 s reuses one upstream fetch.                                                     |
-| Rankings / community lists                        | Recomputed per request                                                      | client staleTime 5 min  | Move to a nightly materialization or 30 min server memo.                                                                                                           |
-| Consistency / stats aggregates                    | Full-history scan of `simfly_flights` per view                              | none                    | Aggregate once at request time and cache 5 min per (username, window).                                                                                             |
+### 6. UI
 
+- `<HubSupportCard />` on the homepage — compact card with:
+  - Status (🟢 Active / ⚪ Not Active)
+  - Current week label ("Week 29") derived from `week_start_utc`
+  - Activated by (✈️ Airport Visit / ☕ Donation / 🛠 Admin) + qualifying arrival (ICAO + time) when airport
+  - **Active supporters this week: N pilots** (community counter)
+- `<HubSupportGate />` — full-card fallback on protected pages when inactive.
+- Sidebar copy under "Buy me a coffee" replaced with:
+  > Enjoying SimFly Hub? ☕ Buy me a coffee to help cover hosting and development.
+  > Prefer to support me in-game? ✈️ Fly to one of my airports just one time a week instead — every landing is just as appreciated and helps keep SimFly Hub online. ❤️
+- Admin page (`/admin`) — new "Hub Support" section visible only when admin token is set: toggle `enabled`, toggle `admin_bypass`, manual grant for a username, list of this week's active supporters.
 
-Estimated impact: query #1 total time drops proportionally to TTL increase — a 30 s → 5 min effective cache is **~10× fewer DB reads** on the hot path.
+### 7. Performance
 
----
+- Page render cost = 1 indexed PK lookup on `hub_support`, cached client-side (staleTime 5 min).
+- Community counter = 1 aggregate query behind a 5 min server memo.
+- Support only mutates as a side effect of existing page/batch writes — at most one extra INSERT per pilot per week, `ON CONFLICT DO NOTHING`.
+- Zero historical scans, zero polling, zero background jobs.
 
-## 4. Historical backfill
+### Technical notes
 
-Current behavior (`backfill.functions.ts`) is already correct on the important axes:
+- `week_start_utc` computed as: take `now` in UTC, subtract `((getUTCDay()+6)%7)` days, zero the time. Pure arithmetic, deterministic, safe across year boundaries.
+- All new tables follow existing sensitive-table pattern: `GRANT ALL … TO service_role`, RLS enabled, no anon/authenticated policies. Access only through server functions using `supabaseAdmin`.
 
-- Idempotent `INSERT … ON CONFLICT (username, flight_id) DO NOTHING` — no overwrites.
-- Resumable via `backfill_progress.current_page`.
-- Nonce cached in `pilot_nonces`.
+### Out of scope
 
-Improvement opportunities (not bugs):
-
-- **Short-circuit re-runs:** when `status='complete'` and `last_page_at < 24h`, refuse restart from UI unless admin forces. Prevents user-triggered full rescans.
-- **Incremental top-up:** add a lightweight "sync latest 2 pages" job for completed users instead of full resume from page 1 on any refresh. Cuts writes to only genuinely new flights.
-- **Batch size:** current per-page upsert already batches — verified as query #2, 1 ms mean. No change needed.
-
----
-
-## 5. Live vs analytical cache policy (target state)
-
-
-| Feature                     | Cache                                        | Rationale                |
-| --------------------------- | -------------------------------------------- | ------------------------ |
-| Active flights (hero + map) | 30 s poll, no server memo beyond 10 s dedupe | freshness first          |
-| Visitors                    | 30 s poll, shares dedupe with above          | same source              |
-| Activity list               | staleTime 60 s (up from 30)                  | tolerable                |
-| Airport Payout Matrix       | server memo 30 min + client 15 min           | rarely changes intra-day |
-| Upgrade Advisor             | reuses matrix memo                           | free                     |
-| Rankings / community        | server memo 30 min                           | slow-moving              |
-| Historical stats            | server memo 5 min per (user, window)         | append-only data         |
-| Aircraft specs / static     | in-memory forever                            | pure data                |
-
-
----
-
-## 6. Write reduction
-
-- `backfill_progress` is currently updated once per page fetched (~1/s during a run). Fine, but skip the write when `current_page` and `flights_imported` are unchanged (no-op writes seen in slow-query samples).
-- `pilot_nonces` upsert is fine; already best-effort.
-- No other write hot paths — the app is read-heavy.
-
----
-
-## Ranked action list (when we switch to build mode)
-
-1. **Add three indexes** on `simfly_flights` (dep, dest, aircraft_id + ts). Migration only. — biggest DB win, near-zero risk.
-2. **Collapse the two homepage 15 s polls into one 30 s shared query**. — biggest upstream/API win.
-3. **Raise `HEAVY_CACHE_TTL_MS` to 5 min** and extend `memo` to `collectAirportHistoryFlights`, `fetchAllLiveFlights`, rankings, stats aggregates. — cuts slow-query #1 by ~10×.
-4. **Persist a `payload_cache` row** so cold isolates skip the 25×hub sweep.
-5. **Skip no-op `backfill_progress` writes** and gate "restart" for recently-completed users.
-6. **Bump analytical client staleTimes** (rankings, community, matrix) to 15–30 min to match server memo.
-
-Each step is independently deployable and measurable via `pg_stat_statements` deltas + Cloud request logs. Once you approve, I'll implement them one at a time and re-check the slow-query table after each.  
-  
+- Real donation webhook (deferred until Paddle/Stripe is enabled); `recordDonationSupport` is wired but only reachable via admin grant for now.
+- Retroactive backfill of `hub_support` for past weeks — only the current week matters.
