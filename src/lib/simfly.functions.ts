@@ -935,7 +935,19 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const ownedIcaos = (assets?.items ?? [])
       .filter((it) => it.type === "Airport")
       .map((it) => (it as RawAssetAirport).icao);
+
+    // Hub-support side effect: once per dashboard load, check if the fresh
+    // page-1 batch contains a qualifying arrival at one of the pilot's own
+    // airports this SimFly week. One indexed INSERT ON CONFLICT DO NOTHING.
+    if (ownedIcaos.length > 0 && p1?.flights?.length) {
+      const owned = new Set(ownedIcaos.map((i) => i.toLowerCase()));
+      void import("./hub-support.functions").then(({ recordAirportArrivalSupportForBatch }) =>
+        recordAirportArrivalSupportForBatch(username, owned, p1.flights),
+      );
+    }
+
     let airportFlights: RawFlightLite[] = flights;
+
     if (ownedIcaos.length > 0) {
       const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const visitorRows = await memo(
@@ -2024,13 +2036,18 @@ async function collectAirportHistoryFlights(
 
 
 export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
-  .inputValidator((d: { icao: string; pages?: number; username?: string }) => d)
+  .inputValidator((d: { icao: string; pages?: number; username?: string; adminToken?: string }) => d)
   .handler(async ({ data }): Promise<AirportPayoutMatrix> => {
     const { username, nonce } = await resolveIdentity({ username: data.username });
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    if (!(await hasWeeklyHubSupport(username, { adminToken: data.adminToken }))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
     const { rows, pagesFetched, sampled, excluded } =
       await collectAirportHistoryFlights(data.icao, username, nonce, {
         maxPages: data.pages ?? 50,
       });
+
 
     type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
     const buckets = new Map<string, Bucket>();
@@ -2445,6 +2462,12 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
     const { airportUpgradeCost, ratingForPaybackDays } =
       await import("./airport-upgrade-costs");
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    const { username: gateUser } = await resolveIdentity({ username: data.username });
+    if (!(await hasWeeklyHubSupport(gateUser, { adminToken: data.adminToken }))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
+
     const ttlDays = await readAdvisorTtlDays();
     const nowMs = Date.now();
     const ttlMs = ttlDays * 86_400_000;

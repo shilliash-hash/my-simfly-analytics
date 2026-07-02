@@ -12,6 +12,7 @@ import {
 } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
+import { HubSupportGate } from "@/components/hub-support";
 import { cn } from "@/lib/utils";
 import { RefreshCw, Star } from "lucide-react";
 
@@ -84,16 +85,24 @@ function UpgradeAdvisorPage() {
     } catch { /* noop */ }
   }, []);
 
-  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length] as const;
-  const { data: advisor, isFetching, isError, refetch } = useQuery({
+  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, adminToken ? "admin" : "user"] as const;
+  const { data: advisor, isFetching, isError, error, refetch } = useQuery({
     queryKey: advisorQueryKey,
     queryFn: () =>
       advisorFn({
-        data: { username: payload?.username, airports: airportsInput, windowDays },
+        data: {
+          username: payload?.username,
+          airports: airportsInput,
+          windowDays,
+          ...(adminToken ? { adminToken } : {}),
+        },
       }),
     staleTime: 30 * 60_000,
     enabled: airportsInput.length > 0,
+    retry: (_n, e) => !(e instanceof Error && e.message.includes("HUB_SUPPORT_REQUIRED")),
   });
+
+  const gated = isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED");
 
   const { data: settings } = useQuery({
     queryKey: ["advisor-settings"],
@@ -161,7 +170,9 @@ function UpgradeAdvisorPage() {
         description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Long-lived analysis — cached and refreshed on a slow cadence to keep upstream load low."
       />
 
-      {advisor && (
+      {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
+
+      {!gated && advisor && (
         <div className="mb-4 rounded-lg border border-border bg-card/60 p-4 text-xs grid gap-2 sm:grid-cols-3">
           <div>
             <div className="mono uppercase tracking-widest text-foreground/50">Generated</div>
@@ -262,20 +273,20 @@ function UpgradeAdvisorPage() {
         )}
       </details>
 
-      {isError && (
+      {!gated && isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
           Failed to compute advisor.{" "}
           <button onClick={() => refetch()} className="underline">Retry</button>
         </div>
       )}
 
-      {!advisor && !isError && (
+      {!gated && !advisor && !isError && (
         <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
           Loading cached analysis…
         </div>
       )}
 
-      {advisor && (
+      {!gated && advisor && (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {rows.map((r) => (
             <AdvisorCard

@@ -8,6 +8,7 @@ import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
 } from "@/components/app-shell";
+import { HubSupportCard } from "@/components/hub-support";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
@@ -143,6 +144,8 @@ function Overview() {
           icon={Building2}
         />
       </section>
+
+      <HubSupportCard />
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 

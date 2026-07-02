@@ -110,6 +110,39 @@ export type Database = {
         }
         Relationships: []
       }
+      hub_support: {
+        Row: {
+          activated_at: string
+          qualifying_arrival_at: string | null
+          qualifying_flight_id: string | null
+          qualifying_icao: string | null
+          support_source: string
+          updated_at: string
+          username: string
+          week_start_utc: string
+        }
+        Insert: {
+          activated_at?: string
+          qualifying_arrival_at?: string | null
+          qualifying_flight_id?: string | null
+          qualifying_icao?: string | null
+          support_source: string
+          updated_at?: string
+          username: string
+          week_start_utc: string
+        }
+        Update: {
+          activated_at?: string
+          qualifying_arrival_at?: string | null
+          qualifying_flight_id?: string | null
+          qualifying_icao?: string | null
+          support_source?: string
+          updated_at?: string
+          username?: string
+          week_start_utc?: string
+        }
+        Relationships: []
+      }
       pilot_nonces: {
         Row: {
           created_at: string
