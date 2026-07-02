@@ -273,14 +273,14 @@ function UpgradeAdvisorPage() {
         )}
       </details>
 
-      {isError && (
+      {!gated && isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
           Failed to compute advisor.{" "}
           <button onClick={() => refetch()} className="underline">Retry</button>
         </div>
       )}
 
-      {!advisor && !isError && (
+      {!gated && !advisor && !isError && (
         <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
           Loading cached analysis…
         </div>
