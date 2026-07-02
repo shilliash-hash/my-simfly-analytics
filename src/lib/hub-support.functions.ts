@@ -271,7 +271,9 @@ export const getHubSupportStatus = createServerFn({ method: "GET" })
     const weekStart = currentSimflyWeekStart();
     const weekIso = weekStart.toISOString();
     const label = weekLabel(weekStart);
-    const uname = sanitiseUsername(data?.username);
+    const uname =
+      sanitiseUsername(data?.username) ||
+      sanitiseUsername(process.env.SIMFLY_USERNAME);
 
     let source: SupportSource | null = null;
     let qualifyingIcao: string | null = null;
