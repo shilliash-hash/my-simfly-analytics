@@ -391,7 +391,8 @@ function HubSupportAdmin({ token }: { token: string }) {
   const { data, isLoading } = useQuery({
     queryKey: ["admin", "hub-support"],
     queryFn: () => loadFn({ data: { token } }),
-    refetchInterval: 30_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
   });
 
   const [granting, setGranting] = useState("");
