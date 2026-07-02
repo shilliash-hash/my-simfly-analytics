@@ -170,7 +170,9 @@ function UpgradeAdvisorPage() {
         description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Long-lived analysis — cached and refreshed on a slow cadence to keep upstream load low."
       />
 
-      {advisor && (
+      {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
+
+      {!gated && advisor && (
         <div className="mb-4 rounded-lg border border-border bg-card/60 p-4 text-xs grid gap-2 sm:grid-cols-3">
           <div>
             <div className="mono uppercase tracking-widest text-foreground/50">Generated</div>
