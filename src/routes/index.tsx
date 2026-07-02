@@ -143,9 +143,8 @@ function Overview() {
           hint="Owned airports"
           icon={Building2}
         />
+        <HubSupportCard />
       </section>
-
-      <HubSupportCard />
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 
