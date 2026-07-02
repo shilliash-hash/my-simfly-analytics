@@ -88,13 +88,26 @@ function PayoutMatrixPage() {
 function MatrixCard({ icao, pages }: { icao: string; pages: number }) {
   const fn = useServerFn(getAirportPayoutMatrix);
   const { keyTag, payload } = useSimflyArgs();
-  const { data, isFetching, isError, refetch } = useQuery({
-    queryKey: ["payout-matrix", "airport-credit-v2", keyTag, icao, pages],
-    queryFn: () => fn({ data: { icao, pages, username: payload?.username } }),
+  const adminToken = useAdminToken();
+  const { data, isFetching, isError, error, refetch } = useQuery({
+    queryKey: ["payout-matrix", "airport-credit-v2", keyTag, icao, pages, adminToken ? "admin" : "user"],
+    queryFn: () =>
+      fn({
+        data: {
+          icao,
+          pages,
+          username: payload?.username,
+          ...(adminToken ? { adminToken } : {}),
+        },
+      }),
     staleTime: 15 * 60_000,
+    retry: (_n, e) => !(e instanceof Error && e.message.includes("HUB_SUPPORT_REQUIRED")),
   });
 
   if (isError) {
+    if (error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
+      return <HubSupportGate featureName="The Airport Payout Matrix" />;
+    }
     return (
       <div className="rounded-lg border border-border bg-card p-6">
         <p className="text-sm text-destructive">Failed to load payout history for {icao}.</p>
