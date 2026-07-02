@@ -31,7 +31,14 @@ function AdminPage() {
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
-      {token ? <AdminTable token={token} /> : <TokenForm />}
+      {token ? (
+        <div className="space-y-8">
+          <AdminTable token={token} />
+          <HubSupportAdmin token={token} />
+        </div>
+      ) : (
+        <TokenForm />
+      )}
     </AppShell>
   );
 }
