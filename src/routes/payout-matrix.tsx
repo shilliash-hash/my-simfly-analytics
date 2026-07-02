@@ -14,6 +14,8 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import { HubSupportGate } from "@/components/hub-support";
+import { useAdminToken } from "@/lib/admin-token";
 
 export const Route = createFileRoute("/payout-matrix")({
   component: PayoutMatrixPage,
