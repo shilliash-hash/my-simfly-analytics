@@ -102,10 +102,12 @@ function Sidebar() {
           <span className="mono uppercase tracking-widest text-[10px]">Buy me a coffee</span>
         </a>
         <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Like what you see? ☕ Help keep SimFly Hub cruising by buying me a coffee with above link
+          Enjoying SimFly Hub? ☕ Buy me a coffee to help cover hosting and development.
           <br />
-          <strong>Or file a flight plan few times every week to one of my airports — every landing is</strong> appreciated just as much. ❤️
+          <br />
+          Prefer to support me in-game? ✈️ Fly to one of my airports just one time a week instead — every landing is just as appreciated and helps keep SimFly Hub online. ❤️
         </p>
+
       </div>
     </aside>
   );
