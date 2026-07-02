@@ -424,7 +424,22 @@ function HubSupportAdmin({ token }: { token: string }) {
       setErr(e instanceof Error ? e.message : "Grant failed");
     } finally {
       setBusy(false);
+  }
+
+  async function revoke(username: string, weekStartUtc: string) {
+    if (!confirm(`Revoke Hub Support for @${username} this week?`)) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await revokeFn({ data: { token, username, weekStartUtc } });
+      qc.invalidateQueries({ queryKey: ["admin", "hub-support"] });
+      qc.invalidateQueries({ queryKey: ["hub-support"] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Revoke failed");
+    } finally {
+      setBusy(false);
     }
+  }
   }
 
   return (
