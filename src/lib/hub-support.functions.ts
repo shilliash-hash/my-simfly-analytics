@@ -368,3 +368,19 @@ export const adminGrantHubSupport = createServerFn({ method: "POST" })
     );
     return { ok: true as const };
   });
+
+export const adminRevokeHubSupport = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; username: string; weekStartUtc?: string }) => d)
+  .handler(async ({ data }) => {
+    await verifyAdminToken(data.token);
+    const uname = sanitiseUsername(data.username);
+    if (!uname) throw new Error("Invalid username.");
+    const weekIso = data.weekStartUtc ?? currentSimflyWeekStart().toISOString();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin
+      .from("hub_support")
+      .delete()
+      .eq("username", normUser(uname))
+      .eq("week_start_utc", weekIso);
+    return { ok: true as const };
+  });
