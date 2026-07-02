@@ -8,6 +8,11 @@ import {
   verifyAdminToken,
   type AdminAction,
 } from "@/lib/admin.functions";
+import {
+  getHubSupportAdmin,
+  setHubSupportSettings,
+  adminGrantHubSupport,
+} from "@/lib/hub-support.functions";
 import { setAdminToken, useAdminToken } from "@/lib/admin-token";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
