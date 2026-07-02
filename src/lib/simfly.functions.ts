@@ -1754,8 +1754,8 @@ function normaliseHistFlight(
   if (role === "takeoff" && origin !== icao) return null;
   const paxAirport =
     role === "takeoff"
-      ? raw.origin ? airportOwnerCredit(raw.origin) : 0
-      : raw.destination ? airportOwnerCredit(raw.destination) : 0;
+      ? (raw.origin ? airportOwnerCredit(raw.origin) : 0)
+      : (raw.destination ? airportOwnerCredit(raw.destination) : 0);
   const aircraftOwner = raw.airplane?.owner?.username ?? "";
   const aircraftIsMine = aircraftOwner.toLowerCase() === me.toLowerCase();
   const paxAircraft = aircraftIsMine
