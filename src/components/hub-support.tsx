@@ -28,8 +28,8 @@ export function HubSupportCard() {
   const { data } = useQuery({
     queryKey: ["hub-support", keyTag],
     queryFn: () => fn(payload ? { data: payload } : undefined),
-    staleTime: 60_000,
-    refetchInterval: 120_000,
+    staleTime: 5 * 60_000,
+    refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
   });
 
