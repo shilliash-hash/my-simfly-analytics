@@ -85,16 +85,24 @@ function UpgradeAdvisorPage() {
     } catch { /* noop */ }
   }, []);
 
-  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length] as const;
-  const { data: advisor, isFetching, isError, refetch } = useQuery({
+  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, adminToken ? "admin" : "user"] as const;
+  const { data: advisor, isFetching, isError, error, refetch } = useQuery({
     queryKey: advisorQueryKey,
     queryFn: () =>
       advisorFn({
-        data: { username: payload?.username, airports: airportsInput, windowDays },
+        data: {
+          username: payload?.username,
+          airports: airportsInput,
+          windowDays,
+          ...(adminToken ? { adminToken } : {}),
+        },
       }),
     staleTime: 30 * 60_000,
     enabled: airportsInput.length > 0,
+    retry: (_n, e) => !(e instanceof Error && e.message.includes("HUB_SUPPORT_REQUIRED")),
   });
+
+  const gated = isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED");
 
   const { data: settings } = useQuery({
     queryKey: ["advisor-settings"],
