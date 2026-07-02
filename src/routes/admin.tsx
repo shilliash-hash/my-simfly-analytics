@@ -424,6 +424,7 @@ function HubSupportAdmin({ token }: { token: string }) {
       setErr(e instanceof Error ? e.message : "Grant failed");
     } finally {
       setBusy(false);
+    }
   }
 
   async function revoke(username: string, weekStartUtc: string) {
@@ -439,7 +440,6 @@ function HubSupportAdmin({ token }: { token: string }) {
     } finally {
       setBusy(false);
     }
-  }
   }
 
   return (
