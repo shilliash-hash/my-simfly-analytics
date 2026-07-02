@@ -22,12 +22,13 @@ function sourceLabel(s: string | null) {
   return null;
 }
 
-export function HubSupportCard() {
+export function HubSupportCard({ username }: { username?: string }) {
   const fn = useServerFn(getHubSupportStatus);
   const { keyTag, payload } = useSimflyArgs();
+  const supportPayload = username ? { username } : payload;
   const { data } = useQuery({
-    queryKey: ["hub-support", keyTag],
-    queryFn: () => fn(payload ? { data: payload } : undefined),
+    queryKey: ["hub-support", username ?? keyTag],
+    queryFn: () => fn(supportPayload ? { data: supportPayload } : undefined),
     staleTime: 5 * 60_000,
     refetchInterval: 5 * 60_000,
     refetchOnWindowFocus: true,
