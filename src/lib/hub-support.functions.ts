@@ -31,6 +31,8 @@ export type HubSupportStatus = {
   activeSupportersThisWeek: number;
 };
 
+const DEFAULT_USERNAME = "shill";
+
 // ---------- Week helpers (pure) ----------
 
 /** Monday 00:00 UTC for the given date. */
@@ -195,6 +197,15 @@ type MinimalFlight = {
   pax?: number | null;
 };
 
+type AirportHistorySupportFlight = {
+  id: string;
+  visitor: string;
+  role: "takeoff" | "landing";
+  airportIcao: string;
+  ts: string;
+  paxAirport: number;
+};
+
 function isCompletedFlight(f: MinimalFlight): boolean {
   const ft = f.flight_time;
   const hasTime =
@@ -269,6 +280,70 @@ export async function recordAirportArrivalSupportForBatch(
   }
 }
 
+/**
+ * Records support from the owned-airport activity feed, which is the most
+ * reliable source for supporter grants: it includes the visiting pilot name,
+ * the actual airport side that earned income, and only appears once the flight
+ * has landed/settled in SimFly's airport history.
+ */
+export async function recordAirportLandingSupportFromHistory(
+  flights: AirportHistorySupportFlight[],
+): Promise<void> {
+  if (flights.length === 0) return;
+
+  const weekStart = currentSimflyWeekStart();
+  const weekStartMs = weekStart.getTime();
+  const rowsByUser = new Map<string, {
+    username: string;
+    qualifying_icao: string;
+    qualifying_flight_id: string | null;
+    qualifying_arrival_at: string;
+  }>();
+
+  for (const f of flights) {
+    if (f.role !== "landing") continue;
+    if (!f.airportIcao || f.paxAirport <= 0) continue;
+
+    const uname = sanitiseUsername(f.visitor);
+    if (!uname) continue;
+
+    const ms = new Date(f.ts).getTime();
+    if (!Number.isFinite(ms) || ms < weekStartMs) continue;
+
+    const key = normUser(uname);
+    const current = rowsByUser.get(key);
+    if (current && new Date(current.qualifying_arrival_at).getTime() <= ms) continue;
+
+    rowsByUser.set(key, {
+      username: key,
+      qualifying_icao: f.airportIcao.toUpperCase(),
+      qualifying_flight_id: f.id || null,
+      qualifying_arrival_at: new Date(ms).toISOString(),
+    });
+  }
+
+  const rows = Array.from(rowsByUser.values());
+  if (rows.length === 0) return;
+
+  try {
+    const now = new Date().toISOString();
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    await supabaseAdmin.from("hub_support").upsert(
+      rows.map((row) => ({
+        ...row,
+        week_start_utc: weekStart.toISOString(),
+        support_source: "airport",
+        activated_at: now,
+        updated_at: now,
+      })),
+      { onConflict: "username,week_start_utc", ignoreDuplicates: true },
+    );
+    counterCache = null;
+  } catch (err) {
+    console.warn("[hub-support] airport-history write failed", err);
+  }
+}
+
 /** Grant support via donation (called from a verified payment webhook). */
 export async function recordDonationSupport(username: string): Promise<void> {
   const uname = sanitiseUsername(username);
@@ -298,7 +373,8 @@ export const getHubSupportStatus = createServerFn({ method: "GET" })
     const label = weekLabel(weekStart);
     const uname =
       sanitiseUsername(data?.username) ||
-      sanitiseUsername(process.env.SIMFLY_USERNAME);
+      sanitiseUsername(process.env.SIMFLY_USERNAME) ||
+      sanitiseUsername(DEFAULT_USERNAME);
 
     let source: SupportSource | null = null;
     let qualifyingIcao: string | null = null;

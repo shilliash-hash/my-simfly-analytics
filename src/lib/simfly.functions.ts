@@ -936,16 +936,6 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       .filter((it) => it.type === "Airport")
       .map((it) => (it as RawAssetAirport).icao);
 
-    // Hub-support side effect: once per dashboard load, check if the fresh
-    // page-1 batch contains a qualifying arrival at one of the pilot's own
-    // airports this SimFly week. One indexed INSERT ON CONFLICT DO NOTHING.
-    if (ownedIcaos.length > 0 && p1?.flights?.length) {
-      const owned = new Set(ownedIcaos.map((i) => i.toLowerCase()));
-      void import("./hub-support.functions").then(({ recordAirportArrivalSupportForBatch }) =>
-        recordAirportArrivalSupportForBatch(username, owned, p1.flights),
-      );
-    }
-
     let airportFlights: RawFlightLite[] = flights;
 
     if (ownedIcaos.length > 0) {
@@ -1038,14 +1028,33 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
             );
             const pages = await fetchJSONPages<RawAirportHistPage>(urls, 3);
             const items: (AirportFlightHistoryItem & { airportIcao: string })[] = [];
+            const support: {
+              id: string;
+              visitor: string;
+              role: "takeoff" | "landing";
+              airportIcao: string;
+              ts: string;
+              paxAirport: number;
+            }[] = [];
             for (const r of pages) {
               if (!r) continue;
               for (const f of r.flights ?? []) {
                 const n = normaliseHistFlight(f, ap.icao, username);
-                if (n && !n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+                if (!n) continue;
+                if (n.role === "landing" && n.paxAirport > 0) {
+                  support.push({
+                    id: n.id,
+                    visitor: n.visitor,
+                    role: n.role,
+                    airportIcao: ap.icao,
+                    ts: n.ts,
+                    paxAirport: n.paxAirport,
+                  });
+                }
+                if (!n.isOwner) items.push({ ...n, airportIcao: ap.icao });
               }
             }
-            return items;
+            return { items, support };
           }),
         ),
       ),
@@ -1056,7 +1065,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       ),
     ]);
 
-    const visitorFlights = [...visitorPerAirport.flat(), ...aircraftPerPlane.items];
+    const airportVisitorItems = visitorPerAirport.flatMap((r) => r.items);
+    const airportSupportCandidates = visitorPerAirport.flatMap((r) => r.support);
+    const visitorFlights = [...airportVisitorItems, ...aircraftPerPlane.items];
     // De-dupe across hubs + aircraft feeds (a flight can appear in multiple sources).
     type VisitorFlightRec = AirportFlightHistoryItem & {
       airportIcao: string;
@@ -1080,6 +1091,16 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       }
     }
     const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
+
+    // Weekly Hub Support grants come from completed airport activity history,
+    // not from live/in-progress route intent. A pilot qualifies only when the
+    // final airport-history record shows a landing at one of my airports and
+    // that airport earned PAX from the completed flight.
+    if (username.toLowerCase() === defaultUsername().toLowerCase()) {
+      await import("./hub-support.functions").then(({ recordAirportLandingSupportFromHistory }) =>
+        recordAirportLandingSupportFromHistory(airportSupportCandidates),
+      );
+    }
 
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
     const visitorByDay = new Map<string, number>();
@@ -1726,14 +1747,15 @@ function normaliseHistFlight(
   if (!raw.flightID) return null;
   const visitor = raw.pilot?.username ?? raw.airplane?.owner?.username ?? "";
   if (!visitor) return null;
-  const ts = raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "";
+  const ts = raw.landingTime ?? raw.takeoffTime ?? raw.departureTime ?? "";
   const origin = raw.origin?.icao ?? "";
   const destination = raw.destination?.icao ?? "";
-  const role: "takeoff" | "landing" = origin === icao ? "takeoff" : "landing";
+  const role: "takeoff" | "landing" = destination === icao ? "landing" : "takeoff";
+  if (role === "takeoff" && origin !== icao) return null;
   const paxAirport =
     role === "takeoff"
-      ? raw.origin?.totalEarnedPax ?? raw.origin?.earnedPax ?? 0
-      : raw.destination?.totalEarnedPax ?? raw.destination?.earnedPax ?? 0;
+      ? (raw.origin ? airportOwnerCredit(raw.origin) : 0)
+      : (raw.destination ? airportOwnerCredit(raw.destination) : 0);
   const aircraftOwner = raw.airplane?.owner?.username ?? "";
   const aircraftIsMine = aircraftOwner.toLowerCase() === me.toLowerCase();
   const paxAircraft = aircraftIsMine

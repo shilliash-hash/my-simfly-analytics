@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
+import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/")({
 
 function Overview() {
   const fn = useServerFn(getSimflyPayload);
+  const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
   const { data } = useSuspenseQuery(
     queryOptions({
@@ -43,6 +44,10 @@ function Overview() {
       refetchInterval: 5 * 60_000,
     }),
   );
+
+  useEffect(() => {
+    qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
+  }, [qc, keyTag, data._fetchedAt]);
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
   const myFlightsFn = useServerFn(getMyLiveFlights);
@@ -143,7 +148,7 @@ function Overview() {
           hint="Owned airports"
           icon={Building2}
         />
-        <HubSupportCard />
+        <HubSupportCard username={data.me.handle} />
       </section>
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
