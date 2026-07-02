@@ -2462,6 +2462,12 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
     const { airportUpgradeCost, ratingForPaybackDays } =
       await import("./airport-upgrade-costs");
     const windowDays = Math.max(7, Math.min(180, Math.round(data.windowDays ?? 60)));
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    const { username: gateUser } = await resolveIdentity({ username: data.username });
+    if (!(await hasWeeklyHubSupport(gateUser, { adminToken: data.adminToken }))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
+
     const ttlDays = await readAdvisorTtlDays();
     const nowMs = Date.now();
     const ttlMs = ttlDays * 86_400_000;
