@@ -37,68 +37,48 @@ export function HubSupportCard() {
   const src = sourceLabel(data.source);
 
   return (
-    <section className="panel mt-6 rounded-xl p-5">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex min-w-0 items-start gap-3">
-          <div
-            className={`grid h-10 w-10 shrink-0 place-items-center rounded-lg ${
-              data.active
-                ? "bg-runway/15 text-runway ring-1 ring-runway/40"
-                : "bg-secondary text-muted-foreground ring-1 ring-border"
-            }`}
-          >
-            <Heart className={`h-5 w-5 ${data.active ? "fill-runway" : ""}`} />
-          </div>
-          <div className="min-w-0">
-            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-              Weekly Hub Support · {data.weekLabel}
-            </div>
-            <div className="font-display mt-1 text-lg font-semibold">
-              {data.active ? (
-                <span className="text-runway">Active</span>
-              ) : (
-                <span className="text-muted-foreground">Not active this week</span>
-              )}
-            </div>
-            {data.active && src ? (
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                <span className="mono inline-flex items-center gap-1 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] uppercase tracking-widest">
-                  {src.icon}
-                  {src.text}
-                </span>
-                {data.qualifyingIcao && (
-                  <span>
-                    Qualifying arrival{" "}
-                    <span className="mono text-runway">{data.qualifyingIcao}</span>
-                    {data.qualifyingArrivalAt ? ` · ${fmtWhen(data.qualifyingArrivalAt)}` : ""}
-                  </span>
-                )}
-              </div>
-            ) : (
-              <p className="mt-1 max-w-md text-xs text-muted-foreground">
-                Complete one arrival to any of my airports during the current SimFly week — or
-                buy me a coffee — to unlock advanced analytics until next Monday 00:00 UTC.
-              </p>
-            )}
-          </div>
+    <div className="panel rounded-xl p-4">
+      <div className="flex items-start justify-between gap-2">
+        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Hub Support · {data.weekLabel}
         </div>
-
-        <div className="flex flex-col items-end gap-2 text-right">
-          <a
-            href="https://paypal.me/shilliash"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mono inline-flex items-center gap-1.5 rounded-md border border-runway/40 bg-runway/10 px-3 py-1.5 text-[10px] uppercase tracking-widest text-runway hover:bg-runway/20"
-          >
-            <Coffee className="h-3.5 w-3.5" /> Buy me a coffee
-          </a>
-          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            {data.activeSupportersThisWeek}{" "}
-            {data.activeSupportersThisWeek === 1 ? "pilot" : "pilots"} supporting this week
-          </div>
+        <div
+          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
+            data.active
+              ? "bg-runway/15 text-runway ring-1 ring-runway/40"
+              : "bg-secondary text-muted-foreground ring-1 ring-border"
+          }`}
+        >
+          <Heart className={`h-4 w-4 ${data.active ? "fill-runway" : ""}`} />
         </div>
       </div>
-    </section>
+      <div className="font-display mt-2 text-2xl font-semibold leading-tight">
+        {data.active ? (
+          <span className="text-runway">Active</span>
+        ) : (
+          <span className="text-muted-foreground">Inactive</span>
+        )}
+      </div>
+      {data.active && src ? (
+        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+          <span className="mono inline-flex items-center gap-1 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] uppercase tracking-widest">
+            {src.icon}
+            {src.text}
+          </span>
+          {data.qualifyingIcao && (
+            <span className="mono text-runway">{data.qualifyingIcao}</span>
+          )}
+        </div>
+      ) : (
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Fly into one of my airports this week to unlock advanced analytics.
+        </p>
+      )}
+      <div className="mono mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+        {data.activeSupportersThisWeek}{" "}
+        {data.activeSupportersThisWeek === 1 ? "pilot" : "pilots"} supporting
+      </div>
+    </div>
   );
 }
 
