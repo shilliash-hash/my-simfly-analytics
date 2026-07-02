@@ -54,20 +54,26 @@ export function HubSupportCard() {
       </div>
       <div className="font-display mt-2 text-2xl font-semibold leading-tight">
         {data.active ? (
-          <span className="text-runway">Active</span>
+          <span className="text-runway">✔ Active</span>
         ) : (
           <span className="text-muted-foreground">Inactive</span>
         )}
       </div>
-      {data.active && src ? (
-        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
-          <span className="mono inline-flex items-center gap-1 rounded bg-secondary/60 px-1.5 py-0.5 text-[10px] uppercase tracking-widest">
-            {src.icon}
-            {src.text}
-          </span>
-          {data.qualifyingIcao && (
-            <span className="mono text-runway">{data.qualifyingIcao}</span>
-          )}
+      {data.active ? (
+        <div className="mt-1 space-y-1">
+          {data.qualifyingIcao ? (
+            <p className="text-[12px] text-foreground">
+              Qualified with arrival to{" "}
+              <span className="mono font-semibold text-runway">{data.qualifyingIcao}</span>.
+            </p>
+          ) : src ? (
+            <p className="text-[12px] text-foreground">
+              Activated via <span className="text-runway">{src.text}</span>.
+            </p>
+          ) : null}
+          <p className="text-[11px] text-muted-foreground">
+            Thanks for your support! <span className="text-runway">❤</span>
+          </p>
         </div>
       ) : (
         <p className="mt-1 text-[11px] text-muted-foreground">
