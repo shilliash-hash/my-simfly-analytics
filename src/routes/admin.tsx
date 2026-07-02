@@ -524,19 +524,20 @@ function HubSupportAdmin({ token }: { token: string }) {
               <th className="px-3 py-2">Source</th>
               <th className="px-3 py-2">Qualifying ICAO</th>
               <th className="px-3 py-2">Activated</th>
+              <th className="px-3 py-2 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {isLoading && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground">
                   Loading…
                 </td>
               </tr>
             )}
             {!isLoading && (data?.supporters ?? []).length === 0 && (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">
+                <td colSpan={5} className="px-3 py-4 text-center text-muted-foreground">
                   No supporters this week yet.
                 </td>
               </tr>
@@ -549,9 +550,18 @@ function HubSupportAdmin({ token }: { token: string }) {
                     {s.support_source}
                   </span>
                 </td>
-                <td className="mono px-3 py-2 text-xs">{s.qualifying_icao ?? "—"}</td>
+                <td className="mono px-3 py-2 text-xs text-runway">{s.qualifying_icao ?? "—"}</td>
                 <td className="mono px-3 py-2 text-[11px] text-muted-foreground">
                   {fmtDate(s.activated_at)}
+                </td>
+                <td className="px-3 py-2 text-right">
+                  <button
+                    onClick={() => revoke(s.username, data!.weekStartUtc)}
+                    disabled={busy}
+                    className="rounded-md border border-destructive/40 px-2 py-1 text-[11px] text-destructive hover:bg-destructive/10 disabled:opacity-50"
+                  >
+                    Revoke
+                  </button>
                 </td>
               </tr>
             ))}
