@@ -379,3 +379,168 @@ function RowBtn({
     </button>
   );
 }
+
+function HubSupportAdmin({ token }: { token: string }) {
+  const loadFn = useServerFn(getHubSupportAdmin);
+  const saveFn = useServerFn(setHubSupportSettings);
+  const grantFn = useServerFn(adminGrantHubSupport);
+  const qc = useQueryClient();
+
+  const { data, isLoading } = useQuery({
+    queryKey: ["admin", "hub-support"],
+    queryFn: () => loadFn({ data: { token } }),
+    refetchInterval: 30_000,
+  });
+
+  const [granting, setGranting] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function toggle(field: "enabled" | "admin_bypass", next: boolean) {
+    setBusy(true);
+    setErr(null);
+    try {
+      await saveFn({ data: { token, [field]: next } });
+      qc.invalidateQueries({ queryKey: ["admin", "hub-support"] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function grant() {
+    const u = granting.trim();
+    if (!u) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      await grantFn({ data: { token, username: u } });
+      setGranting("");
+      qc.invalidateQueries({ queryKey: ["admin", "hub-support"] });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Grant failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-semibold">Hub Support</h2>
+        <p className="text-xs text-muted-foreground">
+          Weekly access gate for the Payout Matrix and Upgrade Advisor.{" "}
+          {data ? <>Current week: <span className="mono">{data.weekLabel}</span></> : null}
+        </p>
+      </div>
+
+      {err && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {err}
+        </div>
+      )}
+
+      <div className="panel grid gap-3 rounded-xl p-4 sm:grid-cols-2">
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            disabled={busy || !data}
+            checked={data?.settings.enabled ?? true}
+            onChange={(e) => toggle("enabled", e.target.checked)}
+          />
+          <div>
+            <div className="font-medium">Feature enabled</div>
+            <div className="text-xs text-muted-foreground">
+              When off, everyone bypasses the gate and can use gated features freely.
+            </div>
+          </div>
+        </label>
+        <label className="flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            className="mt-1"
+            disabled={busy || !data}
+            checked={data?.settings.admin_bypass ?? true}
+            onChange={(e) => toggle("admin_bypass", e.target.checked)}
+          />
+          <div>
+            <div className="font-medium">Admin token bypass</div>
+            <div className="text-xs text-muted-foreground">
+              Any request carrying a valid admin token skips the gate (useful for testing).
+            </div>
+          </div>
+        </label>
+      </div>
+
+      <div className="panel rounded-xl p-4">
+        <div className="mb-2 text-sm font-medium">Manually grant support for this week</div>
+        <div className="flex gap-2">
+          <input
+            value={granting}
+            onChange={(e) => setGranting(e.target.value)}
+            placeholder="SimFly username"
+            className="flex-1 rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm outline-none focus:border-runway"
+          />
+          <button
+            onClick={grant}
+            disabled={busy || !granting.trim()}
+            className="rounded-md bg-runway px-4 py-2 text-sm font-medium text-background hover:bg-runway/90 disabled:opacity-50"
+          >
+            Grant
+          </button>
+        </div>
+      </div>
+
+      <div className="panel overflow-x-auto rounded-xl">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2">
+          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Supporters this week
+          </div>
+          <div className="mono text-xs text-runway">{data?.supporters.length ?? 0}</div>
+        </div>
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-[10px] uppercase tracking-widest text-muted-foreground">
+              <th className="px-3 py-2">Username</th>
+              <th className="px-3 py-2">Source</th>
+              <th className="px-3 py-2">Qualifying ICAO</th>
+              <th className="px-3 py-2">Activated</th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading && (
+              <tr>
+                <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">
+                  Loading…
+                </td>
+              </tr>
+            )}
+            {!isLoading && (data?.supporters ?? []).length === 0 && (
+              <tr>
+                <td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">
+                  No supporters this week yet.
+                </td>
+              </tr>
+            )}
+            {(data?.supporters ?? []).map((s) => (
+              <tr key={s.username} className="border-t border-border/40">
+                <td className="px-3 py-2 font-medium">@{s.username}</td>
+                <td className="px-3 py-2">
+                  <span className="mono rounded bg-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-widest">
+                    {s.support_source}
+                  </span>
+                </td>
+                <td className="mono px-3 py-2 text-xs">{s.qualifying_icao ?? "—"}</td>
+                <td className="mono px-3 py-2 text-[11px] text-muted-foreground">
+                  {fmtDate(s.activated_at)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
