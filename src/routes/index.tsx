@@ -40,14 +40,23 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 5 * 60_000,
-      refetchInterval: 5 * 60_000,
+      staleTime: 30 * 60_000, // Zmiana na 30 minut
+      refetchInterval: 30 * 60_000, // Zmiana na 30 minut
     }),
   );
 
+  // Timers change for Supporters check
+  const lastInvalidateRef = useRef<number>(0);
+
+  // Zamień stary useEffect na ten z warunkiem if:
   useEffect(() => {
-    qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
-  }, [qc, keyTag, data._fetchedAt]);
+    const now = Date.now();
+    if (now - lastInvalidateRef.current >= 30 * 60_000) {
+      qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
+      lastInvalidateRef.current = now;
+    }
+  }, [qc, keyTag, data._fetchedAt]
+  );
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
   const myFlightsFn = useServerFn(getMyLiveFlights);
