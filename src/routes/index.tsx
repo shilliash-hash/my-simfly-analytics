@@ -75,8 +75,9 @@ function Overview() {
     queryKey: ["simfly", "myLiveFlights", keyTag, icaos, tails],
     queryFn: () => myFlightsFn({ data: { icaos, tails, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0 || tails.length > 0,
-    refetchInterval: 30_000,
-    staleTime: 20_000,
+    // Server refresh every 5 minutes; countdown ticks locally via CurrentFlightHero.
+    refetchInterval: 300_000,
+    staleTime: 300_000,
   });
 
 
