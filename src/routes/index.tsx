@@ -40,21 +40,13 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000, // Zmiana na 30 minut
-      refetchInterval: 30 * 60_000, // Zmiana na 30 minut
+      staleTime: 30 * 60_000,
+      refetchInterval: 30 * 60_000,
     }),
   );
 
-  // Dodaj tę jedną linię nad useEffect:
-  const lastInvalidateRef = useRef<number>(0);
-
-  // Zamień stary useEffect na ten z warunkiem if:
   useEffect(() => {
-    const now = Date.now();
-    if (now - lastInvalidateRef.current >= 30 * 60_000) {
-      qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
-      lastInvalidateRef.current = now;
-    }
+    qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
   }, [qc, keyTag, data._fetchedAt]);
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
@@ -156,7 +148,7 @@ function Overview() {
           hint="Owned airports"
           icon={Building2}
         />
-        <HubSupportCard username={data.me.handle} />
+        <HubSupportCard />
       </section>
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
