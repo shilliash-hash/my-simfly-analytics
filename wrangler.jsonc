@@ -1,7 +1,13 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "simfly-inteligence-hub",
+  "name": "simfly-intelegence-hub",
   "compatibility_date": "2025-09-24",
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
+  "vars": {
+    "ADMIN_TOKEN": "malleus666",
+    "SUPABASE_URL": "https://supabase.co",
+    "SUPABASE_ANON_KEY": "TUTAJ_WKLEJ_CAŁY_TWÓJ_SUPABASE_ANON_KEY",
+    "SUPABASE_SERVICE_ROLE_KEY": "TUTAJ_WKLEJ_CAŁY_TWÓJ_SERVICE_ROLE_KEY"
+  }
 }
