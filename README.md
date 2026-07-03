@@ -1,1 +1,1 @@
-# my-simfly-analytics .
+# my-simfly-analytics
