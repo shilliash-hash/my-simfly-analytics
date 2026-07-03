@@ -51,13 +51,12 @@ function Overview() {
     }),
   );
 
-  // Licznik przechowujący w pamięci przeglądarki dokładny czas ostatniego czyszczenia cache
+  // Dodaj tę jedną linię nad useEffect:
   const lastInvalidateRef = useRef<number>(0);
 
-  // Bezpiecznik: Czyści cache hub-support maksymalnie raz na 30 minut, blokując nieskończoną pętlę
+  // Zamień stary useEffect na ten z warunkiem if:
   useEffect(() => {
     const now = Date.now();
-    
     if (now - lastInvalidateRef.current >= 30 * 60_000) {
       qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
       lastInvalidateRef.current = now;
