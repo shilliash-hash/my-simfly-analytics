@@ -59,13 +59,16 @@ function Overview() {
     () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
     [data.airplanes],
   );
-  // Live feeds — 30 s cadence. The server memoises the upstream /flights
-  // response for 10 s so concurrent tabs / callers share a single fetch.
+  // Incoming Traffic refreshes every 5 min — aircraft inbound to hubs are
+  // usually tens of minutes to hours away, so a 30 s cadence wasted Worker,
+  // DB and SimFly API calls without improving UX. The server memoises the
+  // upstream /flights response for 10 s so concurrent tabs / callers share a
+  // single fetch.
   const { data: hubTraffic = [] } = useQuery({
     queryKey: ["simfly", "hubTraffic", keyTag, icaos],
     queryFn: () => trafficFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0,
-    refetchInterval: 30_000,
+    refetchInterval: 300_000,
     staleTime: 20_000,
   });
   const { data: myFlights = [] } = useQuery({
