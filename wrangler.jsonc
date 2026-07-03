@@ -6,8 +6,8 @@
   "main": "src/server.ts",
   "vars": {
     "ADMIN_TOKEN": "malleus666",
-    "SUPABASE_URL": "https://supabase.co",
-    "SUPABASE_ANON_KEY": "TUTAJ_WKLEJ_CAŁY_TWÓJ_SUPABASE_ANON_KEY",
-    "SUPABASE_SERVICE_ROLE_KEY": "TUTAJ_WKLEJ_CAŁY_TWÓJ_SERVICE_ROLE_KEY"
+    "SUPABASE_URL": "https://ljyzjyaqtsqxhxkphuxj.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqeXpqeWFxdHNxeGh4a3BodXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTczNzksImV4cCI6MjA5ODU5MzM3OX0.q8lIhK9Hq5Gaa8f9m3rI9SippQXUMuPvWUM5zXS7qxM",
+    "SUPABASE_SERVICE_ROLE_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqeXpqeWFxdHNxeGh4a3BodXhqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MzAxNzM3OSwiZXhwIjoyMDk4NTkzMzc5fQ.BftUXKqtyE_THrMarCQ5QOkSqpxwwxdGqbSpAQoqvD0"
   }
 }
