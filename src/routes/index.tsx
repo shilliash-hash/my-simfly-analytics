@@ -40,13 +40,19 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 5 * 60_000,
-      refetchInterval: 5 * 60_000,
+      staleTime: 30 * 60_000,
+      refetchInterval: 30 * 60_000,
     }),
   );
 
+   // Bezpiecznik czasowy: unieważnia zapytanie hub-support tylko jeśli od ostatniego pobrania minęło 30 minut
   useEffect(() => {
-    qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
+    const lastFetch = data._fetchedAt ? new Date(data._fetchedAt).getTime() : 0;
+    const now = Date.now();
+    
+    if (now - lastFetch >= 30 * 60_000) {
+      qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
+    }
   }, [qc, keyTag, data._fetchedAt]);
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
@@ -59,6 +65,20 @@ function Overview() {
     () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
     [data.airplanes],
   );
+  // useEffect(() => {
+  //  qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
+  //}, [qc, keyTag, data._fetchedAt]);
+
+  //const trafficFn = useServerFn(getMyHubsIncomingTraffic);
+  //const myFlightsFn = useServerFn(getMyLiveFlights);
+  //const icaos = useMemo(
+    //() => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
+    //[data.airports],
+  //);
+  //const tails = useMemo(
+    //() => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
+    //[data.airplanes],
+  //);
   // Incoming Traffic refreshes every 5 min — aircraft inbound to hubs are
   // usually tens of minutes to hours away, so a 30 s cadence wasted Worker,
   // DB and SimFly API calls without improving UX. The server memoises the
