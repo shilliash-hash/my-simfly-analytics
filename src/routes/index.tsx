@@ -16,6 +16,11 @@ import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
 
+// Tymczasowy komponent, aby naprawić błąd braku definicji w pliku
+function PilotSwitcher({ current }: { current?: string | null }) {
+  return null; 
+}
+
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(
@@ -36,6 +41,7 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
+  
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -121,7 +127,7 @@ function Overview() {
           return ids;
         }, [myFlights, hubTraffic])}
         completedIds={useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights])}
-        lastFlight={data.flights[0] ?? null}
+        lastFlight={data.flights ?? null}
       />
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
