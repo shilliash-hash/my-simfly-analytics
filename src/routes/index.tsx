@@ -664,7 +664,7 @@ function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enrou
   const [, setTick] = useState(0);
   useEffect(() => {
     if (!isLive || !snap.etaMs) return;
-    const t = setInterval(() => setTick((n) => n + 1), 30_000);
+    const t = setInterval(() => setTick((n) => n + 1), 60_000);
     return () => clearInterval(t);
   }, [isLive, snap.etaMs]);
   const showEta = isLive && !!snap.etaMs;
