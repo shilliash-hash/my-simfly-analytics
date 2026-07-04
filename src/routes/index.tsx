@@ -48,8 +48,8 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000, // Zmiana na 30 minut
-      refetchInterval: 30 * 60_000, // Zmiana na 30 minut
+      staleTime: 30 * 60_000, 
+      refetchInterval: 30 * 60_000, 
     }),
   );
 
