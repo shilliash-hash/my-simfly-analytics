@@ -1,9 +1,11 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery, queryOptions } from "@tanstack/react-query";
+import { useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { getLatestChangelog } from "@/lib/simfly.functions";
+import { getLatestChangelog, deleteChangelogEntry } from "@/lib/simfly.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { History, ArrowLeft } from "lucide-react";
+import { History, ArrowLeft, Trash2, ShieldAlert } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/changelog")({
   loader: ({ context }) =>
@@ -20,12 +22,32 @@ export const Route = createFileRoute("/changelog")({
 });
 
 function ChangelogPage() {
+  const queryClient = useQueryClient();
   const changelogFn = useServerFn(getLatestChangelog);
+  const deleteFn = useServerFn(deleteChangelogEntry);
+
+  const [adminToken, setAdminToken] = useState("");
+  const [isAuth, setIsAuth] = useState(false);
+
   const { data: allUpdates = [] } = useQuery({
     queryKey: ["app-changelog-full"],
     queryFn: () => changelogFn(),
     staleTime: 5 * 60_000,
   });
+
+  async function handleDelete(id: number) {
+    if (!window.confirm("Are you sure you want to delete this update log permanently?")) return;
+
+    try {
+      await deleteFn({ data: { id, token: adminToken } });
+      toast.success("Log entry deleted successfully");
+      // Natychmiastowe odświeżenie danych na ekranie i dashboardzie
+      queryClient.invalidateQueries({ queryKey: ["app-changelog-full"] });
+      queryClient.invalidateQueries({ queryKey: ["app-changelog"] });
+    } catch (err) {
+      toast.error("Failed to delete. Invalid token or server error.");
+    }
+  }
 
   return (
     <AppShell>
@@ -34,9 +56,29 @@ function ChangelogPage() {
         title="App Changelog"
         description="Every feature, improvement, and fix deployed to the platform."
         actions={
-          <Link to="/" className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary">
-            <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
-          </Link>
+          <div className="flex items-center gap-3">
+            {!isAuth ? (
+              <button 
+                onClick={() => {
+                  const tok = prompt("Enter Admin Token to enable developer tools:");
+                  if (tok) {
+                    setAdminToken(tok);
+                    setIsAuth(true);
+                  }
+                }}
+                className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-3 py-1.5 text-[11px] uppercase tracking-widest text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+              >
+                <ShieldAlert className="h-3.5 w-3.5" /> Dev Mode
+              </button>
+            ) : (
+              <span className="mono text-[10px] text-runway bg-runway/10 border border-runway/20 px-2 py-1.5 rounded uppercase tracking-wider">
+                Dev Mode Active
+              </span>
+            )}
+            <Link to="/" className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary">
+              <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
+            </Link>
+          </div>
         }
       />
 
@@ -50,15 +92,28 @@ function ChangelogPage() {
           <p className="text-sm text-muted-foreground py-4 text-center">No update logs found in the database.</p>
         ) : (
           <div className="space-y-6">
-            {allUpdates.map((update: any, index: number) => (
-              <div key={index} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
-                <div className="flex items-center justify-between">
-                  <span className="mono text-xs font-bold text-runway bg-runway/10 px-2 py-0.5 rounded border border-runway/25 uppercase tracking-wider">
-                    {update.version}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
-                    {update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
-                  </span>
+            {allUpdates.map((update: any) => (
+              <div key={update.id || update.version} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="mono text-xs font-bold text-runway bg-runway/10 px-2 py-0.5 rounded border border-runway/25 uppercase tracking-wider">
+                      {update.version}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
+                      {update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
+                    </span>
+                  </div>
+
+                  {/* Dynamiczny przycisk usuwania widoczny tylko w trybie deweloperskim */}
+                  {isAuth && (
+                    <button
+                      onClick={() => handleDelete(update.id)}
+                      className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
+                      title="Delete Entry"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
                 <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1">
                   {update.text}
