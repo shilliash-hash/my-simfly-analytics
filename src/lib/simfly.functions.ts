@@ -2730,10 +2730,10 @@ export const deleteChangelogEntry = createServerFn({
       throw new Error("Unauthorized");
     }
 
-    const { error } = await supabaseAdmin
+   const { error } = await supabaseAdmin
       .from("app_changelog")
       .delete()
-      .eq("id", data.id);
+      .eq("id", Number(data.id));
 
     if (error) throw error;
     return { success: true };
