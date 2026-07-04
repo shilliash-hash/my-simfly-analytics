@@ -224,9 +224,25 @@ function Overview() {
                     <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
                       {update.version}
                     </span>
-                    <span className="text-xs text-foreground/80 leading-relaxed">
-                      {update.text}
-                    </span>
+                                <span className="text-xs text-foreground/80 leading-relaxed inline-flex flex-wrap items-baseline gap-1.5">
+              {update.text?.startsWith("[FIX]") && (
+                <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>
+              )}
+              {update.text?.startsWith("[FEATURE]") && (
+                <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>
+              )}
+              {update.text?.startsWith("[PERF]") && (
+                <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1 py-px text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>
+              )}
+              <span>
+                {update.text
+                  ? update.text
+                      .replace(/^\[FIX\]\s*/, "")
+                      .replace(/^\[FEATURE\]\s*/, "")
+                      .replace(/^\[PERF\]\s*/, "")
+                  : ""}
+              </span>
+            </span>
                   </li>
                 );
               })}
