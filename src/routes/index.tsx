@@ -236,18 +236,42 @@ function Overview() {
           <h2 className="font-display text-lg font-semibold">Recent flights</h2>
           <Link to="/activity" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All →</Link>
         </div>
-        <ul className="space-y-3">
-          {data.activity.slice(0, 8).map((a: any) => (
-            <li key={a.id} className="flex items-center justify-between border-b border-border/40 pb-2 last:border-0 last:pb-0">
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium text-foreground truncate">{a.message}</p>
-                <p className="text-[10px] text-muted-foreground">{relativeTime(a.timestamp)}</p>
-              </div>
-              <div className="mono text-xs font-semibold pl-3 shrink-0 text-runway">
-                +{formatNumber(a.paxGained)} PAX
-              </div>
-            </li>
-          ))}
+                <ul className="space-y-3">
+          {data.activity.slice(0, 8).map((a: any) => {
+            const isVisitor = a.message?.startsWith("(Visitor)") ?? false;
+            return (
+              <li key={a.id} className="flex items-start gap-3 text-sm border-b border-border/40 pb-2 last:border-0 last:pb-0">
+                <ArrowUpRight
+                  className={`mt-0.5 h-4 w-4 shrink-0 ${isVisitor ? "" : "text-runway"}`}
+                  style={isVisitor ? { color: "var(--instrument)" } : undefined}
+                />
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-muted-foreground">
+                    {isVisitor && (
+                      <span
+                        className="mono mr-1.5 rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-wider"
+                        style={{ 
+                          background: "color-mix(in oklab, var(--instrument) 18%, transparent)", 
+                          color: "var(--instrument)" 
+                        }}
+                      >
+                        Visitor
+                      </span>
+                    )}
+                    <span className="text-foreground">
+                      {isVisitor ? a.message.replace(/^\(Visitor\)\s*/, "") : a.message}
+                    </span>
+                  </div>
+                  <div className="mono mt-0.5 text-[10px] uppercase tracking-wider text-muted-foreground/60">
+                    {typeof window !== "undefined" && a.at ? relativeTime(a.at) : "Just now"}
+                  </div>
+                </div>
+                <div className="mono text-xs font-semibold pl-3 shrink-0 text-runway">
+                  +{formatNumber(Number(a.delta) || 0)} PAX
+                </div>
+              </li>
+            );
+          })}
         </ul>
       </div>
 
