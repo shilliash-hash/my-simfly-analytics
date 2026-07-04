@@ -17,9 +17,16 @@ import {
 import { useSimflyArgs } from "@/lib/viewed-user";
 
 export const Route = createFileRoute("/")({
-  loader: ({ context }) =>
+  validateSearch: (search: Record<string, unknown>) => ({
+    pilot: (search.pilot as string) || undefined,
+  }),
+  loader: ({ context, search }) =>
     context.queryClient.ensureQueryData(
-      queryOptions({ queryKey: ["simfly", "__self__"], queryFn: () => getSimflyPayload(), staleTime: 30_000 }),
+      queryOptions({ 
+        queryKey: ["simfly", search.pilot || "__self__"], 
+        queryFn: () => getSimflyPayload(search.pilot ? { data: { username: search.pilot } } : undefined), 
+        staleTime: 30_000 
+      }),
     ),
   component: Overview,
   head: () => ({
@@ -33,13 +40,14 @@ export const Route = createFileRoute("/")({
 });
 
 function Overview() {
+  const { pilot } = Route.useSearch();
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-  const { data } = useSuspenseQuery(
+    const { data } = useSuspenseQuery(
     queryOptions({
-      queryKey: ["simfly", keyTag],
-      queryFn: () => fn(payload ? { data: payload } : undefined),
+      queryKey: ["simfly", pilot || keyTag],
+      queryFn: () => fn(pilot ? { data: { username: pilot } } : (payload ? { data: payload } : undefined)),
       staleTime: 30 * 60_000,
       refetchInterval: 30 * 60_000,
     }),
