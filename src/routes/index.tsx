@@ -2,7 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
@@ -11,18 +10,11 @@ import {
 import { HubSupportCard } from "@/components/hub-support";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getChangelogEntries } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-
-// ============================================================================
-// RECENT UPDATES (TUTAJ DODAWAJ RĘCZNIE SWOJE WPISY)
-// ============================================================================
-const UPDATES = [
-  { version: "v 0.902", text: "Single Airport License checker added" },
-  { version: "v 0.901", text: "Hub Supporters database sync spam fix" },
-] as const;
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
@@ -44,6 +36,11 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
+    const { data: remoteUpdates = [] } = useQuery({
+    queryKey: ["changelog", "list"],
+    queryFn: () => getChangelogEntries(),
+    staleTime: 60_000 * 5,
+  });
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -103,8 +100,36 @@ function Overview() {
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
-        description="Real-time intelligence on your SimFly.io operations — PAX-first."
+               description={
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground mb-4">Real-time intelligence on your SimFly.io operations — PAX-first.</p>
+            
+            {/* DYNAMICZNY CHANGELOG Z TAGAMI Z SUPABASE */}
+            <div className="flex flex-col gap-1.5 border-t border-border/20 pt-3 max-w-xl">
+              {remoteUpdates.slice(0, 3).map((update) => {
+                const tagColor = 
+                  update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
+                  update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
+                  "text-runway bg-runway/15 border-runway/30";
+
+                return (
+                  <div key={update.id} className="flex items-center gap-2 text-xs">
+                    <span className="mono text-runway font-bold shrink-0">{update.version}</span>
+                     className={`mono text-[9px] font-bold px-1 py-0.2 rounded border shrink-0 ${tagColor}`}
+                      {update.type}
+                    </span>
+                    <span className="text-muted-foreground truncate">{update.text}</span>
+                  </div>
+                );
+              })}
+              {remoteUpdates.length === 0 && (
+                <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
+              )}
+            </div>
+          </div>
+        }
         actions={
+
           <div className="flex items-center gap-3">
             <PilotSwitcher current={viewedUser} />
             {data.me.avatarUrl ? (
