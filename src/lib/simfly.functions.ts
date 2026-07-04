@@ -2748,3 +2748,52 @@ export const getChangelogEntries = createServerFn({
     }
   },
 });
+// 2. Dodawanie nowego wpisu do tabeli app_changelog
+export const addChangelogEntry = createServerFn({
+  method: "POST",
+  validator: (data: { version: string; text: string; type: string }) => data,
+  handler: async ({ data }) => {
+    try {
+      const supabase = getSupabaseInstance();
+      const { data: insertedData, error } = await supabase
+        .from("app_changelog")
+        .insert([
+          {
+            version: data.version,
+            text: data.text,
+            type: data.type,
+          }
+        ])
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+      return { success: true, entry: insertedData };
+    } catch (err) {
+      console.error("Failed to add changelog entry:", err);
+      throw err;
+    }
+  },
+});
+
+// 3. Usuwanie wpisu z tabeli app_changelog
+export const deleteChangelogEntry = createServerFn({
+  method: "POST",
+  validator: (id: string) => id,
+  handler: async ({ data: id }) => {
+    try {
+      const supabase = getSupabaseInstance();
+      const { error } = await supabase
+        .from("app_changelog")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw new Error(error.message);
+      return { success: true, deletedId: id };
+    } catch (err) {
+      console.error("Failed to delete changelog entry:", err);
+      throw err;
+    }
+  },
+});
+
