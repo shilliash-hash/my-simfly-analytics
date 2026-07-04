@@ -48,6 +48,17 @@ function ChangelogPage() {
       toast.error("Failed to delete. Invalid token or server error.");
     }
   }
+  if (typeof window === "undefined") {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="System History"
+          title="App Changelog"
+          description="Loading updates..."
+        />
+      </AppShell>
+    );
+  }
 
   return (
     <AppShell>
