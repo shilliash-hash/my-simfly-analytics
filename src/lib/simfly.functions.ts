@@ -870,7 +870,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const isExternalPilot = username.toLowerCase() !== defaultUsername().toLowerCase();
 
     // Dla obcych pilotów pobieramy od razu 5 stron logbooka z API dla bogatej historii wykresów
-    const logbookPagesToFetch = isExternalPilot ? [1, 2, 3, 4, 5] :;
+    const logbookPagesToFetch = isExternalPilot ? [1, 2, 3, 4, 5] :[1];
 
     const [profile, stats, assets, availablePaxRaw, ...fetchedPages] = await Promise.all([
       fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`),
