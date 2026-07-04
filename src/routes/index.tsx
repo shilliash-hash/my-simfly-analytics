@@ -213,7 +213,7 @@ function Overview() {
           </div>
           <div className="overflow-y-auto max-h-64 pr-1">
             <ul className="space-y-3">
-              {appUpdates.map((update: any, index: number) => (
+              {appUpdates.map(((update: any, index: number) => 
                 <li key={index} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
                   <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
                     {update.version}
@@ -222,7 +222,7 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-              ))}
+              })}
             </ul>
           </div>
         </div>
