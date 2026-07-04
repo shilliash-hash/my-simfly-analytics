@@ -3,7 +3,7 @@ import { useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getLatestChangelog, deleteChangelogEntry } from "@/lib/simfly.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { History, ArrowLeft, Trash2, ShieldAlert, LogOut } from "lucide-react";
+import { History, ArrowLeft, Trash2, ShieldAlert, LogOut, KeyRound, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -28,6 +28,10 @@ function ChangelogPage() {
 
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
+  
+  // Stany dla wbudowanego okna logowania (zamiast zepsutego prompt)
+  const [showModal, setShowModal] = useState(false);
+  const [modalInput, setModalInput] = useState("");
 
   // Synchronizacja sesji z Local Storage
   useEffect(() => {
@@ -46,13 +50,15 @@ function ChangelogPage() {
     staleTime: 5 * 60_000,
   });
 
-  function handleAdminLogin() {
-    const token = prompt("Enter Admin Token to unlock developer management tools:");
-    if (token && token.trim()) {
-      const trimmed = token.trim();
+  function submitAdminLogin(e?: React.FormEvent) {
+    e?.preventDefault();
+    if (modalInput.trim()) {
+      const trimmed = modalInput.trim();
       localStorage.setItem("simfly:adminToken", trimmed);
       setAdminToken(trimmed);
       setIsAuth(true);
+      setShowModal(false);
+      setModalInput("");
       toast.success("Admin Mode Activated permanently");
     }
   }
@@ -96,7 +102,7 @@ function ChangelogPage() {
             {isAuth && (
               <button
                 onClick={handleAdminLogout}
-                className="mono inline-flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-rose-400 transition hover:bg-rose-500/20"
+                className="mono inline-flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-rose-400 transition hover:bg-rose-500/20 cursor-pointer"
               >
                 <LogOut className="h-3 w-3" /> Admin Active (Sign Out)
               </button>
@@ -170,13 +176,66 @@ function ChangelogPage() {
       {!isAuth && (
         <div className="mt-8 flex justify-center">
           <button
-            onClick={handleAdminLogin}
-            className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-runway transition"
+            onClick={() => setShowModal(true)}
+            className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-runway transition cursor-pointer"
           >
             <ShieldAlert className="h-3 w-3" /> System Operator Login
           </button>
         </div>
       )}
-    </AppShell>
-  );
+
+      {/* Profesjonalne, wbudowane okno modalne zabezpieczone przed blokowaniem mobilnym */}
+      {showModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <form 
+            onSubmit={submitAdminLogin} 
+            className="panel w-full max-w-sm rounded-xl p-5 border border-border bg-popover shadow-2xl animate-in fade-in zoom-in-95 duration-150"
+          >
+            <div className="flex items-center justify-between border-b border-border/40 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <KeyRound className="h-4 w-4 text-runway" />
+                <span className="mono text-xs uppercase tracking-widest text-runway font-semibold">Operator Authentication</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => { setShowModal(false); setModalInput(""); }} 
+                className="text-muted-foreground hover:text-foreground transition p-0.5 rounded"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <p className="text-[11px] text-muted-foreground mb-3 leading-relaxed">
+              Provide your environment security token to unlock entry eviction and infrastructure commands.
+            </p>
+            
+            <input
+              autoFocus
+              type="password"
+              placeholder="Paste secret ADMIN_TOKEN..."
+              className="mono w-full rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus:border-runway text-foreground placeholder:text-muted-foreground/40"
+              value={modalInput}
+              onChange={(e) => setModalInput(e.target.value)}
+            />
+            
+            <div className="mt-4 flex items-center justify-end gap-2 text-xs">
+            <button 
+              type="button" 
+              onClick={() => { setShowModal(false); setModalInput(""); }} 
+              className="mono rounded px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition"
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="mono rounded bg-runway/20 border border-runway/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/35"
+            >
+              Confirm Unlock
+            </button>
+          </div>
+        </form>
+      </div>
+    )}
+  </AppShell>
+);
 }
