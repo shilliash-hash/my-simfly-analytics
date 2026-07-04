@@ -2720,6 +2720,27 @@ export const addChangelogEntry = createServerFn({ method: "POST" })
     return { success: true, data: row };
   });
 
+export const deleteChangelogEntry = createServerFn({
+  method: "POST",
+  validator: (d: { id: number; token: string }) => d,
+  handler: async ({ data }) => {
+    // Weryfikacja tokenu admina bezpośrednio na serwerze
+    const adminToken = process.env.ADMIN_TOKEN || "Twój_Domyślny_Token_Jeśli_Nie_Ma_Env";
+    if (data.token !== adminToken) {
+      throw new Error("Unauthorized");
+    }
+
+    const { error } = await supabaseAdmin
+      .from("app_changelog")
+      .delete()
+      .eq("id", data.id);
+
+    if (error) throw error;
+    return { success: true };
+  },
+});
+
+
 
 
 
