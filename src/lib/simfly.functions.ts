@@ -1,5 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { getEvent } from "@tanstack/react-start/server";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
@@ -2713,15 +2712,14 @@ export interface ChangelogEntry {
   created_at: string;
 }
 
-const getSupabaseAdmin = () => {
-  const event = getEvent();
-  const cfEnv = (event?.context as any)?.cloudflare?.env || process.env;
-
-  const url = cfEnv.SUPABASE_URL;
-  const serviceKey = cfEnv.SUPABASE_SERVICE_ROLE_KEY;
+// Bezpieczna funkcja pobierająca instancję klienta Supabase bez wywoływania błędów kompilacji
+const getSupabaseInstance = () => {
+  const globalEnv = (globalThis as any).process?.env || (globalThis as any).env || {};
+  const url = globalEnv.SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = globalEnv.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Supabase secrets missing in Cloudflare Environment.");
+    throw new Error("Supabase URL or Service Role Key is missing in server environment.");
   }
   return createClient(url, serviceKey);
 };
@@ -2730,9 +2728,9 @@ const getSupabaseAdmin = () => {
 export const getChangelogEntries = createServerFn({
   method: "GET",
   handler: async () => {
-    const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseInstance();
     const { data, error } = await supabase
-      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .from("app_changelog")
       .select("id, version, text, type, created_at")
       .order("created_at", { ascending: false });
 
@@ -2746,9 +2744,9 @@ export const addChangelogEntry = createServerFn({
   method: "POST",
   validator: (data: { version: string; text: string; type: string }) => data,
   handler: async ({ data }) => {
-    const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseInstance();
     const { data: insertedData, error } = await supabase
-      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .from("app_changelog")
       .insert([
         {
           version: data.version,
@@ -2769,9 +2767,9 @@ export const deleteChangelogEntry = createServerFn({
   method: "POST",
   validator: (id: string) => id,
   handler: async ({ data: id }) => {
-    const supabase = getSupabaseAdmin();
+    const supabase = getSupabaseInstance();
     const { error } = await supabase
-      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .from("app_changelog")
       .delete()
       .eq("id", id);
 
@@ -2779,6 +2777,5 @@ export const deleteChangelogEntry = createServerFn({
     return { success: true, deletedId: id };
   },
 });
-
 
 
