@@ -27,6 +27,7 @@ export const Route = createFileRoute("/")({
     ],
   }),
 });
+
 function Overview() {
   const [isMounted, setIsMounted] = useState(false);
 
@@ -97,6 +98,7 @@ function Overview() {
     staleTime: 5 * 60_000,
   });
 
+  // Hydration Guard: Umieszczony bezpiecznie POD wszystkimi hookami, a przed startem HTML
   if (!isMounted) {
     return (
       <AppShell>
@@ -299,14 +301,21 @@ function Overview() {
       <section className="mt-8">
         <div className="mb-3 flex items-end justify-between">
           <h2 className="font-display text-xl font-semibold">Your top hubs</h2>
-          <Link to="/airports" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All airports →</Link>
+          <Link to="/airports" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">
+            All airports →
+          </Link>
         </div>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {[...data.airports]
             .sort((a, b) => b.totalEarnedPax - a.totalEarnedPax)
             .slice(0, 6)
             .map((a) => (
-              <Link key={a.icao} to="/airports/$id" params={{ id: a.icao }} className="panel group block rounded-xl p-5 transition-colors hover:bg-secondary/40">
+              <Link
+                key={a.icao}
+                to="/airports/$id"
+                params={{ id: a.icao }}
+                className="panel group block rounded-xl p-5 transition-colors hover:bg-secondary/40"
+              >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="mono text-[11px] uppercase tracking-widest text-runway">{a.icao}</div>
@@ -327,7 +336,6 @@ function Overview() {
     </AppShell>
   );
 }
-
 function Stat({ label, value, custom }: { label: string; value: string; custom?: React.ReactNode }) {
   return (
     <div>
@@ -343,6 +351,7 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
     for (const a of airports) m.set(a.icao.toUpperCase(), a);
     return m;
   }, [airports]);
+
   const myByHub = useMemo(() => {
     const m = new Map<string, { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] }>();
     const ensure = (icao: string) => {
@@ -356,6 +365,7 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
     }
     return m;
   }, [myFlights, airportByIcao]);
+
   const active = useMemo(() => {
     const hubIcaos = new Set<string>([...traffic.map((t) => t.icao.toUpperCase()), ...Array.from(myByHub.keys())]);
     return Array.from(hubIcaos).map((icao) => {
@@ -365,8 +375,10 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
       return airport ? { icao, airport, visitors, mine } : null;
     }).filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => !!r).sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
   }, [traffic, myByHub, airportByIcao]);
+
   const totalVisitors = active.reduce((s, t) => s + t.visitors.length, 0);
   const totalMine = active.reduce((s, t) => s + t.mine.inbound.length + t.mine.outbound.length, 0);
+
   return (
     <section className="mt-8">
       <div className="mb-3 flex items-end justify-between">
@@ -380,7 +392,7 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
         <Link to="/airports" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All airports →</Link>
       </div>
       {active.length === 0 ? (
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground">No other pilots are currently flying to or from your hubs, and you have no aircraft airborne. Traffic appears here as it happens.</div>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground">No live traffic right now.</div>
       ) : (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
           {active.map(({ airport: a, visitors, mine }) => {
@@ -391,66 +403,35 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
                   <div className="min-w-0">
                     <div className="mono text-[11px] uppercase tracking-widest text-runway">{a.icao}</div>
                     <div className="font-display mt-1 truncate text-lg font-semibold">{a.name}</div>
-                    <div className="text-xs text-muted-foreground">{a.country} · L{a.level}</div>
                   </div>
                   <div className="flex flex-col items-end gap-2">
                     <TierPill tier={a.tier} label={a.tierLabel} />
-                    <div className="flex flex-wrap items-center justify-end gap-1">
-                      {visitors.length > 0 && (
-                        <span className="mono inline-flex items-center gap-1 rounded-full border border-runway/40 bg-runway/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-runway">
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-runway shadow-[0_0_8px_var(--runway)]" />
-                          {visitors.length} visitor{visitors.length === 1 ? "" : "s"}
-                        </span>
-                      )}
-                      {mineTotal > 0 && (
-                        <span className="mono inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)", color: "var(--instrument)" }}>
-                          <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--instrument)", boxShadow: "0 0 8px var(--instrument)" }} />
-                          {mineTotal} mine
-                        </span>
-                      )}
-                    </div>
                   </div>
                 </div>
                 <ul className="mt-4 space-y-2 border-t border-border pt-3">
-                  {mine.inbound.slice(0, 2).map((f) => (
-                    <li key={`mi-${f.id}`} className="flex items-center gap-2 text-xs">
-                      <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>You · Inbound</div>
-                        <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">{f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}</div>
-                        {f.etaMs && <div className="mono mt-0.5 text-[10px] uppercase tracking-widest" style={{ color: "var(--instrument)" }}>ETA {formatEtaUtc(f.etaMs)} · {formatRemainingFromNow(f.etaMs)}</div>}
-                      </div>
-                      <PlaneLanding className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
+                  {mine.inbound.slice(0, 1).map((f) => (
+                    <li key={`mi-${f.id}`} className="flex items-center gap-2 text-xs text-instrument">
+                      <div className="truncate flex-1">You · Inbound ({f.aircraftICAO})</div>
                     </li>
                   ))}
-                  {mine.outbound.slice(0, 2).map((f) => (
-                    <li key={`mo-${f.id}`} className="flex items-center gap-2 text-xs">
-                      <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>You · Outbound</div>
-                        <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">{f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}</div>
-                        {f.etaMs && <div className="mono mt-0.5 text-[10px] uppercase tracking-widest" style={{ color: "var(--instrument)" }}>ETA {formatEtaUtc(f.etaMs)} · {formatRemainingFromNow(f.etaMs)}</div>}
-                      </div>
-                      <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
+                  {mine.outbound.slice(0, 1).map((f) => (
+                    <li key={`mo-${f.id}`} className="flex items-center gap-2 text-xs text-instrument">
+                      <div className="truncate flex-1">You · Outbound ({f.aircraftICAO})</div>
                     </li>
                   ))}
-                  {visitors.slice(0, 4).map((v) => {
-                    const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
-                    return (
-                      <li key={v.id} className="flex items-center gap-2 text-xs">
-                        {v.userAvatar ? <img src={v.userAvatar} alt="" className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover" /> : <div className="h-6 w-6 shrink-0 rounded-full border border-border/40 bg-secondary/40" />}
-                </div>
-              </li>
+                  {visitors.slice(0, 2).map((v) => (
+                    <li key={v.id} className="flex items-center gap-2 text-xs text-foreground">
+                      <div className="truncate flex-1">@{v.username} ({v.aircraftICAO})</div>
+                    </li>
+                  ))}
+                </ul>
+              </Link>
             );
           })}
-        </ul>
-      </Link>
-    );
-  })}
-</div>
-)}
-</section>
-);
+        </div>
+      )}
+    </section>
+  );
 }
 type FlightSnapshot = { id: string; origin: string; destination: string; aircraft: string; tail?: string; licence?: string; sim?: string; etaMs?: number; distanceNm?: number; };
 function snapshotFromLive(f: MyLiveFlight): FlightSnapshot { return { id: f.id, origin: f.origin, destination: f.destination, aircraft: f.aircraftICAO, tail: f.tailNumber, licence: f.licenceCode, sim: f.sim, etaMs: f.etaMs, distanceNm: f.distanceNm, }; }
@@ -461,21 +442,14 @@ function CurrentFlightHero({ live, liveMissionIds, completedIds, lastFlight }: {
   useEffect(() => { if (live && live.id !== snapshot?.id) { setSnapshot(snapshotFromLive(live)); setExpanded(false); } }, [live, snapshot?.id]);
   if (!lastFlight) return null;
   return (
-    <section className="panel mb-4 overflow-hidden rounded-xl p-4">
-      <div className="text-sm font-semibold">Last flight: {lastFlight.departure} → {lastFlight.destination} · {lastFlight.aircraftName}</div>
+    <section className="panel mb-4 overflow-hidden rounded-xl p-4 border border-border/40 bg-background/20">
+      <div className="text-sm font-semibold text-foreground">Last flight: {lastFlight.departure} → {lastFlight.destination} · {lastFlight.aircraftName}</div>
     </section>
   );
 }
 
 function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enroute" | "arrived" }) { return null; }
-function Stat({ label, value, custom }: { label: string; value: string; custom?: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className="font-display mt-0.5 text-base font-semibold">{custom ?? value}</div>
-    </div>
-  );
-}
+
 function PilotSwitcher({ current }: { current: string | null }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(current ?? "");
@@ -493,13 +467,13 @@ function PilotSwitcher({ current }: { current: string | null }) {
   }
   return (
     <div className="relative">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary">
+      <button type="button" onClick={() => setOpen((o) => !o)} className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary cursor-pointer">
         <UserCog className="h-3.5 w-3.5 text-runway" /> @{current ?? "you"}
       </button>
       {open && (
-        <form onSubmit={apply} className="panel absolute right-0 z-30 mt-2 w-72 rounded-xl p-4 shadow-xl bg-popover border border-border">
+        <form onSubmit={apply} className="panel absolute right-0 z-30 mt-2 w-72 rounded-xl p-4 shadow-xl bg-popover border border-border text-card-foreground">
           <input autoFocus value={value} onChange={(e) => setValue(e.target.value)} placeholder="SimFly username..." className="mono w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-runway text-foreground" />
-          <button type="submit" className="mono w-full mt-2 rounded bg-runway/20 border border-runway/30 py-1.5 text-[10px] font-bold uppercase tracking-widest text-runway">View Pilot</button>
+          <button type="submit" className="mono w-full mt-2 rounded bg-runway/20 border border-runway/30 py-1.5 text-[10px] font-bold uppercase tracking-widest text-runway cursor-pointer">View Pilot</button>
         </form>
       )}
     </div>
