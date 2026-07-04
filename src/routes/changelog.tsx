@@ -106,14 +106,15 @@ function ChangelogPage() {
 
                   {/* Dynamiczny przycisk usuwania widoczny tylko w trybie deweloperskim */}
                   {isAuth && (
-                    <button
-                      onClick={() => handleDelete(update.id)}
-                      className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
-                      title="Delete Entry"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
-                  )}
+                 <button
+                 onClick={() => handleDelete(Number(update.id))} // 👈 TUTAJ dodajemy Number()
+                 className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
+                 title="Delete Entry"
+                  >
+                 <Trash2 className="h-4 w-4" />
+                  </button>
+              )}
+
                 </div>
                                 <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1 flex flex-wrap items-baseline gap-1.5">
                   {update.text?.startsWith("[FIX]") && (
