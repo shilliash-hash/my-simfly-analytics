@@ -214,8 +214,7 @@ function Overview() {
           </div>
         </div>
         
-        {/* NOWA SEKCJA: Recent Updates (Changelog) */}
-        
+      {/* NOWA SEKCJA: Recent Updates (Changelog) */}
         <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
           <div className="mb-4 flex items-center gap-2">
             <History className="h-4 w-4 text-runway" />
@@ -232,10 +231,11 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-              )}
+              ))}
             </ul>
           </div>
-        </div>
+          
+
 
         <div className="panel rounded-xl p-5">
           <div className="mb-3 flex items-center justify-between">
