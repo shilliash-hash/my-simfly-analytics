@@ -634,13 +634,13 @@ function CurrentFlightHero({
           {tail && ` · ${tail}`}
         </span>
         <span className="mono hidden text-[11px] uppercase tracking-widest text-muted-foreground md:inline">
-          · {formatNumber(Math.round(lastFlight.distance))} NM · {lastFlight.flightTime}
+           · {lastFlight?.distance ? `${formatNumber(Math.round(lastFlight.distance))} NM` : "0 NM"} · {lastFlight?.flightTime ?? "—"}
         </span>
         <span className="ml-auto font-display text-sm font-semibold text-runway">
-          +{lastFlight.pax.toFixed(2)} PAX
+          +{lastFlight?.pax ? Number(lastFlight.pax).toFixed(2) : "0.00"} PAX
         </span>
         <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {relativeTime(lastFlight.ts)}
+         {lastFlight?.ts ? relativeTime(lastFlight.ts) : "Just now"}
         </span>
       </button>
       {expanded && (
