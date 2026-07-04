@@ -110,7 +110,9 @@ function ChangelogPage() {
                       {update.version}
                     </span>
                     <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
-                      {update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
+                    {typeof window !== "undefined" && update.created_at 
+                    ? new Date(update.created_at).toLocaleDateString() 
+                    : "Stable Release"}
                     </span>
                   </div>
 
