@@ -230,44 +230,26 @@ function Overview() {
         </div>
       </section>
 
-      {/* Sekcja ostatnich aktywności/lotów */}
+           {/* Sekcja ostatnich aktywności/lotów */}
       <div className="panel rounded-xl p-5 mt-6">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold">Recent flights</h2>
-            <Link to="/activity" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All →</Link>
-          </div>
-          <ul className="space-y-3">
-            {data.activity.slice(0, 8).map((a) => {
-              const isVisitor = a.message.startsWith("(Visitor)");
-              return (
-                <li key={a.id} className="flex items-start gap-3 text-sm">
-                  <ArrowUpRight
-                    className={`mt-0.5 h-4 w-4 shrink-0 ${isVisitor ? "" : "text-runway"}`}
-                    style={isVisitor ? { color: "var(--instrument)" } : undefined}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate">
-                      {isVisitor && (
-                        <span
-                          className="mono mr-1.5 rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-widest"
-                          style={{ background: "color-mix(in oklab, var(--instrument) 18%, transparent)", color: "var(--instrument)" }}
-                        >
-                          Visitor
-                        </span>
-                      )}
-                      {isVisitor ? a.message.replace(/^\(Visitor\)\s*/, "") : a.message}
-                    </div>
-                    <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-                      {relativeTime(a.at)}
-                      {a.delta ? ` · +${a.delta.toFixed(2)} PAX` : ""}
-                    </div>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="font-display text-lg font-semibold">Recent flights</h2>
+          <Link to="/activity" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All →</Link>
         </div>
-      </section>
+        <ul className="space-y-3">
+          {data.activity.slice(0, 8).map((a: any) => (
+            <li key={a.id} className="flex items-center justify-between border-b border-border/40 pb-2 last:border-0 last:pb-0">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium text-foreground truncate">{a.message}</p>
+                <p className="text-[10px] text-muted-foreground">{relativeTime(a.timestamp)}</p>
+              </div>
+              <div className="mono text-xs font-semibold pl-3 shrink-0 text-runway">
+                +{formatNumber(a.paxGained)} PAX
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
 
       <section className="mt-8">
         <div className="mb-3 flex items-end justify-between">
