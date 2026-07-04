@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, getWebRequest } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
@@ -2714,12 +2714,14 @@ export interface ChangelogEntry {
 
 // Bezpieczna funkcja pobierająca instancję klienta Supabase bez wywoływania błędów kompilacji
 const getSupabaseInstance = () => {
-  const globalEnv = (globalThis as any).process?.env || (globalThis as any).env || {};
-  const url = globalEnv.SUPABASE_URL || process.env.SUPABASE_URL;
-  const serviceKey = globalEnv.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const request = getWebRequest();
+  const cfContext = (request as any)?.context?.cloudflare?.env || {};
+  
+  const url = cfContext.SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = cfContext.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Supabase URL or Service Role Key is missing in server environment.");
+    throw new Error("Supabase URL or Service Role Key is missing in Cloudflare runtime context.");
   }
   return createClient(url, serviceKey);
 };
@@ -2728,54 +2730,21 @@ const getSupabaseInstance = () => {
 export const getChangelogEntries = createServerFn({
   method: "GET",
   handler: async () => {
-    const supabase = getSupabaseInstance();
-    const { data, error } = await supabase
-      .from("app_changelog")
-      .select("id, version, text, type, created_at")
-      .order("created_at", { ascending: false });
+    try {
+      const supabase = getSupabaseInstance();
+      const { data, error } = await supabase
+        .from("app_changelog")
+        .select("id, version, text, type, created_at")
+        .order("created_at", { ascending: false });
 
-    if (error) throw new Error(error.message);
-    return (data || []) as ChangelogEntry[];
+      if (error) {
+        console.error("Supabase query error:", error.message);
+        return [];
+      }
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      console.error("Failed to fetch changelog entries:", err);
+      return [];
+    }
   },
 });
-
-// 2. Dodawanie nowego wpisu do tabeli app_changelog
-export const addChangelogEntry = createServerFn({
-  method: "POST",
-  validator: (data: { version: string; text: string; type: string }) => data,
-  handler: async ({ data }) => {
-    const supabase = getSupabaseInstance();
-    const { data: insertedData, error } = await supabase
-      .from("app_changelog")
-      .insert([
-        {
-          version: data.version,
-          text: data.text,
-          type: data.type,
-        }
-      ])
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-    return { success: true, entry: insertedData };
-  },
-});
-
-// 3. Usuwanie wpisu z tabeli app_changelog
-export const deleteChangelogEntry = createServerFn({
-  method: "POST",
-  validator: (id: string) => id,
-  handler: async ({ data: id }) => {
-    const supabase = getSupabaseInstance();
-    const { error } = await supabase
-      .from("app_changelog")
-      .delete()
-      .eq("id", id);
-
-    if (error) throw new Error(error.message);
-    return { success: true, deletedId: id };
-  },
-});
-
-
