@@ -231,11 +231,11 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-              ))}
-            </ul>
-          </div>
+            ))
+          </ul>
         </div>
-      </section>
+      </div>
+    </section>
 
       {/* Sekcja ostatnich lotów (Recent flights) */}
       <div className="panel rounded-xl p-5">
