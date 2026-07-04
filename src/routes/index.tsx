@@ -31,9 +31,8 @@ export const Route = createFileRoute("/")({
     ],
   }),
 });
-
 function Overview() {
-const [isMounted, setIsMounted] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
@@ -47,7 +46,8 @@ const [isMounted, setIsMounted] = useState(false);
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-     const { data } = useSuspenseQuery(
+  
+  const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", pilot || "__self__"],
       queryFn: () => fn(pilot ? { data: { username: pilot } } : undefined),
@@ -55,18 +55,8 @@ const [isMounted, setIsMounted] = useState(false);
       refetchInterval: 30 * 60_000,
     }),
   );
-
-  if (!isMounted) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="Welcome back"
-          title="Loading Intel..."
-          description="Fetching live operations from SimFly.io API..."
-        />
-      </AppShell>
- 
-      const lastInvalidateRef = useRef<number>(0);
+  
+  const lastInvalidateRef = useRef<number>(0);
 
   useEffect(() => {
     const now = Date.now();
@@ -78,6 +68,22 @@ const [isMounted, setIsMounted] = useState(false);
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
   const myFlightsFn = useServerFn(getMyLiveFlights);
+
+  // Strażnik hydratacji: Umieszczony legalnie POD wszystkimi hookami, a NAD renderowaniem widoku
+  if (!isMounted) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Welcome back"
+          title="Loading Intel..."
+          description="Fetching live operations from SimFly.io API..."
+        />
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell>
   
   const icaos = useMemo(
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
