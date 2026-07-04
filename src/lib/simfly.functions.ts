@@ -1,4 +1,4 @@
-import { createServerFn } from "@tanstack/react-start";
+import { createServerFn, getEvent } from "@tanstack/react-start";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
   ActivityEntry,
@@ -2702,9 +2702,6 @@ export const getLatestChangelog = createServerFn({ method: "GET" })
     if (error) throw new Error(error.message);
     return data ?? [];
   });
-
-import { createServerFn, getEvent } from "@tanstack/react-start";
-import { createClient } from "@supabase/supabase-js";
 
 export interface ChangelogEntry {
   id: string;
