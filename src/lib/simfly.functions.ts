@@ -2691,6 +2691,35 @@ export const setAdvisorSettings = createServerFn({ method: "POST" })
     return { ttlDays: ttl };
   });
 
+export const getLatestChangelog = createServerFn({ method: "GET" })
+  .handler(async (): Promise<Array<{ version: string; text: string }>> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data, error } = await supabaseAdmin
+      .from("app_changelog")
+      .select("version, text")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return data ?? [];
+  });
+
+export const addChangelogEntry = createServerFn({ method: "POST" })
+  .inputValidator((d: { version: string; text: string; adminToken: string }) => d)
+  .handler(async ({ data }) => {
+    // Wykorzystujemy istniejącą w pliku weryfikację tokenu
+    await verifyAdminToken(data.adminToken);
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: row, error } = await supabaseAdmin
+      .from("app_changelog")
+      .insert([{ version: data.version, text: data.text }])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { success: true, data: row };
+  });
+
 
 
 
