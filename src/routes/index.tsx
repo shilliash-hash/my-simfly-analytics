@@ -36,7 +36,7 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-    const { data: remoteUpdates = [] } = useQuery({
+    const { data: liveChangelogFeed = [] } = useQuery({
     queryKey: ["changelog", "list"],
     queryFn: () => getChangelogEntries(),
     staleTime: 60_000 * 5,
@@ -105,7 +105,7 @@ function Overview() {
             <p className="text-sm text-muted-foreground mb-4">Real-time intelligence on your SimFly.io operations — PAX-first.</p>
             
             <div className="flex flex-col gap-1.5 border-t border-border/20 pt-3 max-w-xl">
-              {remoteUpdates.slice(0, 3).map((update) => {
+              {liveChangelogFeed.slice(0, 3).map((update) => {
                 const tagColor = 
                   update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
                   update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
@@ -122,7 +122,7 @@ function Overview() {
                 );
               })}
               
-              {remoteUpdates.length === 0 ? (
+              {liveChangelogFeed.length === 0 ? (
                 <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
               ) : null}
             </div>
