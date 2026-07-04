@@ -234,3 +234,7 @@ function ChangelogPage() {
     </AppShell>
   );
 }
+// Zabezpieczenie przed brakującą referencją z głównego pliku dashboardu
+if (typeof window !== "undefined") {
+  (window as any).setViewedUser = (window as any).setViewedUser || (() => {});
+}
