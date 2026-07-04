@@ -2703,22 +2703,6 @@ export const getLatestChangelog = createServerFn({ method: "GET" })
     return data ?? [];
   });
 
-export const addChangelogEntry = createServerFn({ method: "POST" })
-  .inputValidator((d: { version: string; text: string; adminToken: string }) => d)
-  .handler(async ({ data }) => {
-    // Wykorzystujemy istniejącą w pliku weryfikację tokenu
-    await verifyAdminToken(data.adminToken);
-
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    const { data: row, error } = await supabaseAdmin
-      .from("app_changelog")
-      .insert([{ version: data.version, text: data.text }])
-      .select()
-      .single();
-
-    if (error) throw new Error(error.message);
-    return { success: true, data: row };
-  });
 import { createServerFn, getEvent } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 
