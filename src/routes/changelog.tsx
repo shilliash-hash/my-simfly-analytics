@@ -115,8 +115,24 @@ function ChangelogPage() {
                     </button>
                   )}
                 </div>
-                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1">
-                  {update.text}
+                                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1 flex flex-wrap items-baseline gap-1.5">
+                  {update.text?.startsWith("[FIX]") && (
+                    <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>
+                  )}
+                  {update.text?.startsWith("[FEATURE]") && (
+                    <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>
+                  )}
+                  {update.text?.startsWith("[PERF]") && (
+                    <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>
+                  )}
+                  <span>
+                    {update.text
+                      ? update.text
+                          .replace(/^\[FIX\]\s*/, "")
+                          .replace(/^\[FEATURE\]\s*/, "")
+                          .replace(/^\[PERF\]\s*/, "")
+                      : ""}
+                  </span>
                 </p>
               </div>
             ))}
