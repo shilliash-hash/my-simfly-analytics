@@ -89,12 +89,21 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
 
   const [departure, setDeparture] = useState("");
   const [arrival, setArrival] = useState("");
-  const ready = /^[A-Z0-9]{4}$/.test(departure) && /^[A-Z0-9]{4}$/.test(arrival) && codes.length > 0;
+  const [isSingleMode, setIsSingleMode] = useState(false); // [EDIT 1] Dodany stan dla checkboxa
+
+  // [EDIT 2] Dynamiczna walidacja formularza dla jednego lub dwóch lotnisk
+  const isDepartureValid = /^[A-Z0-9]{4}$/.test(departure);
+  const isArrivalValid = /^[A-Z0-9]{4}$/.test(arrival);
+  const ready = codes.length > 0 && (isSingleMode ? isDepartureValid : (isDepartureValid && isArrivalValid));
+
+  // [EDIT 3] Kopiowanie wartości lotniska, jeśli zaznaczono tryb Single Mode
+  const reqDeparture = departure;
+  const reqArrival = isSingleMode ? departure : arrival;
 
   const q = useQuery({
-    queryKey: ["route-licence-eval", keyTag, departure, arrival, codes.join(",")],
+    queryKey: ["route-licence-eval", keyTag, reqDeparture, reqArrival, codes.join(","), isSingleMode],
     queryFn: () =>
-      fn({ data: { departure, arrival, licences: codes, ...(username ? { username } : {}) } }),
+      fn({ data: { departure: reqDeparture, arrival: reqArrival, licences: codes, ...(username ? { username } : {}) } }),
     enabled: ready,
     staleTime: 30_000,
   });
@@ -105,21 +114,44 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
 
   return (
     <section className="panel mb-6 rounded-xl p-5">
-      <div className="mb-4 flex items-baseline justify-between gap-3">
-        <h2 className="font-display text-lg font-semibold">Route Checker</h2>
+      <div className="mb-4 flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-4">
+          <h2 className="font-display text-lg font-semibold">Route Checker</h2>
+          
+          {/* [EDIT 4] Wizualny checkbox w nagłówku */}
+          <label className="flex items-center gap-2 cursor-pointer select-none rounded-md bg-secondary/50 px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <input
+              type="checkbox"
+              checked={isSingleMode}
+              onChange={(e) => {
+                setIsSingleMode(e.target.checked);
+                if (e.target.checked) setArrival(""); // czyszczenie drugiego pola
+              }}
+              className="accent-runway h-3.5 w-3.5 rounded border-border"
+            />
+            <span>Single Airport Mode</span>
+          </label>
+        </div>
         <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
           Current SimFly week (Mon 00:00 → Sun 23:59 UTC)
         </span>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
-        <AirportField label="Departure" value={departure} onChange={setDeparture} />
-        <AirportField label="Arrival" value={arrival} onChange={setArrival} />
+      {/* [EDIT 5] Dynamiczne ukrywanie i rozciąganie pól tekstowych */}
+      <div className={`grid gap-3 ${isSingleMode ? "grid-cols-1" : "md:grid-cols-2"}`}>
+        <AirportField label={isSingleMode ? "Airport ICAO" : "Departure"} value={departure} onChange={setDeparture} />
+        {!isSingleMode && (
+          <AirportField label="Arrival" value={arrival} onChange={setArrival} />
+        )}
       </div>
 
       {!ready && (
         <div className="mono mt-4 text-[11px] uppercase tracking-widest text-muted-foreground">
-          Enter both ICAO codes — all {codes.length} licenses will be evaluated automatically.
+          {/* [EDIT 6] Dynamiczny komunikat pomocniczy */}
+          {isSingleMode 
+            ? `Enter single ICAO code — all ${codes.length} licenses will be evaluated automatically.`
+            : `Enter both ICAO codes — all ${codes.length} licenses will be evaluated automatically.`
+          }
         </div>
       )}
 
@@ -139,7 +171,8 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
         <>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
             <span className="mono uppercase tracking-widest text-muted-foreground">
-              {result.departure} → {result.arrival}
+              {/* [EDIT 7] Wyświetlanie wyniku dla jednego lub dwóch lotnisk */}
+              {isSingleMode ? `${result.departure}` : `${result.departure} → ${result.arrival}`}
             </span>
             <span className="inline-flex items-center gap-1 rounded-md border border-runway/30 bg-runway/10 px-2 py-0.5 text-runway">
               <CheckCircle2 className="h-3.5 w-3.5" /> {eligibleCount} eligible
@@ -193,10 +226,11 @@ export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
   );
 }
 
-function formatUtc(iso: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+// Org function
+function formatUtc(iso: string) {
+  try {
+    return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  } catch {
+    return iso;
+  }
 }
