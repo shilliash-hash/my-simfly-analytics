@@ -3,7 +3,7 @@ import { useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getLatestChangelog, deleteChangelogEntry } from "@/lib/simfly.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { History, ArrowLeft, Trash2 } from "lucide-react";
+import { History, ArrowLeft, Trash2, ShieldAlert, LogOut } from "lucide-react";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
@@ -29,11 +29,10 @@ function ChangelogPage() {
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
 
-  // Inteligentne sprawdzanie sesji administratora z panelu Backfill Admin przy ładowaniu strony
+  // Synchronizacja sesji z Local Storage
   useEffect(() => {
     if (typeof window !== "undefined") {
-      // Pobieramy token, który Twoja aplikacja zapisuje po kliknięciu "Unlock" w panelu admina
-      const savedToken = localStorage.getItem("simfly_admin_token") || sessionStorage.getItem("simfly:admin_token") || "";
+      const savedToken = localStorage.getItem("simfly:adminToken") || "";
       if (savedToken) {
         setAdminToken(savedToken);
         setIsAuth(true);
@@ -46,6 +45,24 @@ function ChangelogPage() {
     queryFn: () => changelogFn(),
     staleTime: 5 * 60_000,
   });
+
+  function handleAdminLogin() {
+    const token = prompt("Enter Admin Token to unlock developer management tools:");
+    if (token && token.trim()) {
+      const trimmed = token.trim();
+      localStorage.setItem("simfly:adminToken", trimmed);
+      setAdminToken(trimmed);
+      setIsAuth(true);
+      toast.success("Admin Mode Activated permanently");
+    }
+  }
+
+  function handleAdminLogout() {
+    localStorage.removeItem("simfly:adminToken");
+    setAdminToken("");
+    setIsAuth(false);
+    toast.info("Logged out from Admin Mode");
+  }
 
   async function handleDelete(id: number) {
     if (!window.confirm("Are you sure you want to delete this update log permanently?")) return;
@@ -77,9 +94,12 @@ function ChangelogPage() {
         actions={
           <div className="flex flex-wrap items-center gap-3">
             {isAuth && (
-              <span className="mono text-[10px] text-runway bg-runway/10 border border-runway/20 px-2 py-1.5 rounded uppercase tracking-wider animate-pulse">
-                Admin Mode Active
-              </span>
+              <button
+                onClick={handleAdminLogout}
+                className="mono inline-flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-rose-400 transition hover:bg-rose-500/20"
+              >
+                <LogOut className="h-3 w-3" /> Admin Active (Sign Out)
+              </button>
             )}
             <Link to="/" className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary">
               <ArrowLeft className="h-3.5 w-3.5" /> Back to Dashboard
@@ -145,6 +165,18 @@ function ChangelogPage() {
           </div>
         )}
       </div>
+
+      {/* Dyskretny panel logowania dewelopera na samym dole strony */}
+      {!isAuth && (
+        <div className="mt-8 flex justify-center">
+          <button
+            onClick={handleAdminLogin}
+            className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-runway transition"
+          >
+            <ShieldAlert className="h-3 w-3" /> System Operator Login
+          </button>
+        </div>
+      )}
     </AppShell>
   );
 }
