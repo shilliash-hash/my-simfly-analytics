@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getLatestChangelog } from "@/lib/simfly.functions";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
@@ -15,14 +16,6 @@ import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
-
-// ============================================================================
-// RECENT UPDATES (TUTAJ DODAWAJ RĘCZNIE SWOJE WPISY)
-// ============================================================================
-const UPDATES = [
-  { version: "v 0.902", text: "Single Airport License checker added" },
-  { version: "v 0.901", text: "Hub Supporters database sync spam fix" },
-] as const;
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
@@ -97,6 +90,12 @@ function Overview() {
     staleTime: 300_000,
   });
 
+    const changelogFn = useServerFn(getLatestChangelog);
+  const { data: appUpdates = [] } = useQuery({
+    queryKey: ["app-changelog"],
+    queryFn: () => changelogFn(),
+    staleTime: 5 * 60_000, // Pobieraj z bazy maksymalnie raz na 5 minut
+  });
 
   return (
     <AppShell>
@@ -226,7 +225,7 @@ function Overview() {
           </div>
           <div className="overflow-y-auto max-h-64 pr-1">
             <ul className="space-y-3">
-              {UPDATES.map((update, index) => (
+              {appUpdates.map((update: any, index: number) => (
                 <li key={index} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
                   <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
                     {update.version}
@@ -235,7 +234,7 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-              ))}
+              )}
             </ul>
           </div>
         </div>
