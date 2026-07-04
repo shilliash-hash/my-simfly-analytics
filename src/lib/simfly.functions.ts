@@ -1,4 +1,6 @@
-import { createServerFn, getEvent } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
+import { getEvent } from "@tanstack/react-start/server";
+import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
   ActivityEntry,
