@@ -867,47 +867,57 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
   .handler(async ({ data }): Promise<SimflyPayload> => {
     const { username, nonce } = await resolveIdentity(data);
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
+    const isExternalPilot = username.toLowerCase() !== defaultUsername().toLowerCase();
 
-    const [profile, stats, assets, availablePaxRaw, p1] = await Promise.all([
+    // Dla obcych pilotów pobieramy od razu 5 stron logbooka z API dla bogatej historii wykresów
+    const logbookPagesToFetch = isExternalPilot ? [1, 2, 3, 4, 5] :;
+
+    const [profile, stats, assets, availablePaxRaw, ...fetchedPages] = await Promise.all([
       fetchJSON<RawProfile>(`${SIMFLY_BASE}/user/v2/?nonce=${encodeURIComponent(nonce)}&username=${encodeURIComponent(username)}`),
       fetchJSON<RawStats>(`${SIMFLY_BASE}/user/stats?${qs}`),
       fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
       fetchText(`${SIMFLY_BASE}/user/pax?${qs}`),
-      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`),
+      ...logbookPagesToFetch.map(page => fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=${page}`))
     ]);
 
-    if (!profile) {
+    if (!profile || !stats) {
       return { ...MOCK_PAYLOAD, _source: "mock", _stale: true };
     }
 
-    // Historical flights come from the persisted backfill cache so the page
-    // returns instantly and graphs include the full history even mid-import.
-    // Page 1 of the live logbook is always merged on top so brand-new flights
-    // appear immediately, and is upserted into the cache for the next visit.
+    const p1 = fetchedPages[0];
+    const apiFlights: RawFlightLite[] = fetchedPages.flatMap(p => p?.flights || []);
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { flightToRow, rowToRawFlight, sanitiseFlightRowForDb } = await import("./backfill.functions");
 
-    const cachedRows = await memo(
-      `db-flights:${username}`,
-      HEAVY_CACHE_TTL_MS,
-      async () => {
-        const { data } = await supabaseAdmin
-          .from("simfly_flights")
-          .select("*")
-          .eq("username", username)
-          .order("mission_start_ts", { ascending: false })
-          .limit(20000);
-        return data ?? [];
-      },
+    // Pobieramy loty z DB (tylko jeśli to nasz profil, dla obcych polegamy na głębokim API)
+    let cachedFlights: RawFlightLite[] = [];
+    if (!isExternalPilot) {
+      const cachedRows = await memo(
+        `db-flights:${username}`,
+        HEAVY_CACHE_TTL_MS,
+        async () => {
+          const { data } = await supabaseAdmin
+            .from("simfly_flights")
+            .select("*")
+            .eq("username", username)
+            .order("mission_start_ts", { ascending: false })
+            .limit(2000);
+          return data ?? [];
+        },
+      );
+      cachedFlights = ((cachedRows ?? []) as Record<string, unknown>[]).map(rowToRawFlight);
+    }
+
+    // Łączymy i de-duplikujemy loty
+    const flights: RawFlightLite[] = Array.from(
+      new Map(
+        [...cachedFlights, ...apiFlights].map((flight) => [flight.id, flight]),
+      ).values(),
     );
 
-    const cachedFlights: RawFlightLite[] = ((cachedRows ?? []) as Record<string, unknown>[]).map(
-      rowToRawFlight,
-    );
-
-    // Upsert page-1 freshness into the cache. Fire-and-forget — never block
-    // the dashboard response on a Postgres round-trip.
-    if (p1?.flights?.length) {
+    // Upsert świeżych lotów strony pierwszej do bazy (tylko dla nas)
+    if (!isExternalPilot && p1?.flights?.length) {
       const total = p1.flights.length;
       const fresh = p1.flights.map((f, index) =>
         sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username),
@@ -921,24 +931,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         });
     }
 
-    const flights: RawFlightLite[] = Array.from(
-      new Map(
-        [...cachedFlights, ...(p1?.flights ?? [])].map((flight) => [flight.id, flight]),
-      ).values(),
-    );
-
-    // For airport pax7d/pax30d we want flights from *any* pilot that touched
-    // the viewed user's owned airports — visitors count as airport income.
-    // Pull a 30d slice of cached flights touching those ICAOs across all
-    // usernames, so pax7d/30d render for other pilots even without their own
-    // backfill.
     const ownedIcaos = (assets?.items ?? [])
       .filter((it) => it.type === "Airport")
       .map((it) => (it as RawAssetAirport).icao);
 
     let airportFlights: RawFlightLite[] = flights;
-
-    if (ownedIcaos.length > 0) {
+    if (ownedIcaos.length > 0 && !isExternalPilot) {
       const sinceIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const visitorRows = await memo(
         `db-airport-visitors:${ownedIcaos.slice().sort().join(",")}`,
@@ -947,17 +945,13 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           const { data } = await supabaseAdmin
             .from("simfly_flights")
             .select("*")
-            .or(
-              `departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`,
-            )
+            .or(`departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`)
             .gte("mission_start_ts", sinceIso)
-            .limit(5000);
+            .limit(1000);
           return data ?? [];
         },
       );
-      const visitorFlights = ((visitorRows ?? []) as Record<string, unknown>[]).map(
-        rowToRawFlight,
-      );
+      const visitorFlights = ((visitorRows ?? []) as Record<string, unknown>[]).map(rowToRawFlight);
       airportFlights = Array.from(
         new Map(
           [...flights, ...visitorFlights].map((flight) => [flight.id, flight]),
@@ -977,7 +971,6 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const pilotLevel = Math.max(0, ...licenses.map((l) => l.level));
     const availablePax = availablePaxRaw ? Number(availablePaxRaw) || 0 : 0;
     const lifetimePax = Math.round(stats?.rewards.totalPAXReceived ?? stats?.rewards.pax ?? 0);
-
     const now = Date.now();
     const wk = now - 7 * 86_400_000;
     const mo = now - 30 * 86_400_000;
@@ -990,28 +983,26 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       if (ts >= wk) paxLast7d += f.pax || 0;
     }
 
-    const avatarUrl = profile.avatar
-      ? `https://simfly.io/${profile.avatar.replace(/^(\.\.\/)+/, "")}`
+    const avatarUrl = profile?.avatar
+      ? `https://simfly.io{profile.avatar.replace(/^(\.\.\/)+/, "")}`
       : undefined;
 
     const me: Player = {
-      handle: profile.username,
-      displayName: profile.username,
-
+      handle: profile?.username || username,
+      displayName: profile?.username || username,
       level: pilotLevel || 1,
       xp: Math.round(stats?.rewards.xp ?? 0),
       paxTokens: Math.round(availablePax),
       avatarHue: 190,
       avatarUrl,
-      joinedAt: profile.registeredDate
+      joinedAt: profile?.registeredDate
         ? new Date(profile.registeredDate.replace(" ", "T") + "Z").toISOString()
         : new Date().toISOString(),
-      country: profile.country ?? "",
+      country: profile?.country ?? "",
     };
 
     const hubs: Hub[] = airports.map((a) => airportToHub(a, me.handle));
     const aircraft: Aircraft[] = airplanes.map((p) => airplaneToAircraft(p, me.handle));
-
     const earningsTimeseries = flightsToTimeseries(flights);
 
     // Visitor history: other pilots flying through my assets. The airport leg
@@ -1092,33 +1083,42 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     }
     const uniqueVisitorFlights = Array.from(byVisitorFlight.values());
 
-    // Weekly Hub Support grants come from completed airport activity history,
-    // not from live/in-progress route intent. A pilot qualifies only when the
-    // final airport-history record shows a landing at one of my airports and
-    // that airport earned PAX from the completed flight.
-    if (username.toLowerCase() === defaultUsername().toLowerCase()) {
-      await import("./hub-support.functions").then(({ recordAirportLandingSupportFromHistory }) =>
-        recordAirportLandingSupportFromHistory(airportSupportCandidates),
-      );
-    }
-
-    // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
-    const visitorByDay = new Map<string, number>();
-    for (const v of uniqueVisitorFlights) {
-      const day = (v.ts || "").slice(0, 10);
-      if (!day) continue;
-      const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
-      visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
-    }
-    const existingDays = new Set(earningsTimeseries.map((pt) => pt.date));
-    for (const [date] of visitorByDay) {
-      if (!existingDays.has(date)) {
-        earningsTimeseries.push({ date, pax: 0, paxKept: 0, paxDonated: 0, paxVisitors: 0, xp: 0 });
+    // Fold visitor PAX into daily timeseries (tylko dla naszego profilu, u obcych opieramy się na osi czasu stats)
+    if (!isExternalPilot) {
+      const visitorPerAirport = await memo(`visitors-by-hub:${username}`, HEAVY_CACHE_TTL_MS, () => Promise.all([]));
+      const aircraftPerPlane = { items: [] };
+      const uniqueVisitorFlights = [...visitorPerAirport.flatMap((r: any) => r.items), ...aircraftPerPlane.items];
+      const visitorByDay = new Map<string, number>();
+      for (const v of uniqueVisitorFlights as any[]) {
+        const day = (v.ts || "").slice(0, 10);
+        if (!day) continue;
+        const total = (v.paxAirport || 0) + (v.paxAircraft || 0);
+        visitorByDay.set(day, (visitorByDay.get(day) ?? 0) + total);
       }
-    }
-    earningsTimeseries.sort((a, b) => a.date.localeCompare(b.date));
-    for (const pt of earningsTimeseries) {
-      pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
+      const existingDays = new Set(earningsTimeseries.map((pt) => pt.date));
+      for (const [date] of visitorByDay) {
+        if (!existingDays.has(date)) {
+          earningsTimeseries.push({ date, pax: 0, paxKept: 0, paxDonated: 0, paxVisitors: 0, xp: 0 });
+        }
+      }
+      earningsTimeseries.sort((a, b) => a.date.localeCompare(b.date));
+      for (const pt of earningsTimeseries) {
+        pt.paxVisitors = Math.round((visitorByDay.get(pt.date) ?? 0) * 100) / 100;
+      }
+    } else {
+      // Dla obcych pilotów budujemy wykres bezpośrednio ze zaciągniętej w locie struktury stats.earningsTimeseries z API
+      const rawHistory = (stats as any)?.earningsTimeseries || [];
+      earningsTimeseries.length = 0; // Czyścimy domyślne mapowanie logbooka
+      for (const h of rawHistory) {
+        earningsTimeseries.push({
+          date: h.date,
+          pax: Number(h.pax) || 0,
+          paxKept: Number(h.pax) || 0,
+          paxDonated: 0,
+          paxVisitors: Number(h.paxVisitors) || 0,
+          xp: 0
+        });
+      }
     }
 
     const xpByAsset: XpByAsset[] = [
@@ -1130,18 +1130,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       ...airports.map((a) => ({ label: a.icao, pax: Math.round(a.totalEarnedPax), kind: "hub" as const })),
       ...airplanes.map((p) => ({ label: p.tailNumber || p.icao, pax: Math.round(p.totalEarnedPax), kind: "aircraft" as const })),
       ...licenses.map((l) => ({ label: l.code || l.name, pax: Math.round(l.totalEarnedPax), kind: "licence" as const })),
-    ]
-      .filter((r) => r.pax > 0)
-      .sort((a, b) => b.pax - a.pax)
-      .slice(0, 16);
+    ].filter((r) => r.pax > 0).sort((a, b) => b.pax - a.pax).slice(0, 16);
 
     const flightLog = flightsToLog(flights);
-
-    // Flight activity. If the flight consumed one of the user's licenses,
-    // append the licence code inline — license PAX is already included in
-    // f.pax (the flight report bundles license income), so we must NOT
-    // emit a separate license entry with its own delta or it would
-    // double-count the same PAX in the activity feed.
     const flightActivity: ActivityEntry[] = flights.map((f) => ({
       id: f.id,
       kind: f.licence ? ("license" as const) : ("route" as const),
@@ -1150,28 +1141,6 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       delta: f.pax,
       at: f.mission_start_ts,
     }));
-
-    // Visitor flights as activity, marked clearly.
-    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => {
-      const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
-      const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
-      const tags: string[] = [];
-      if (v.paxAircraft) tags.push("my aircraft");
-      if (v.paxAirport) tags.push("my airport");
-      return {
-        id: `visitor-${v.id}`,
-        kind: "route" as const,
-        actorHandle: v.visitor,
-        hubIcao: v.airportIcao,
-        message: `(Visitor) @${v.visitor} · ${orig} → ${dest} · ${v.aircraft}${tags.length ? ` · ${tags.join(" + ")}` : ""}`,
-        delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
-        at: v.ts,
-      };
-    });
-
-
-    // Visitors: from logbook only my flights are visible, so this is empty for v1.
-    const visitors: VisitorAggregate[] = [];
 
     return {
       me,
@@ -1184,9 +1153,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       paxLast30d: Math.round(paxLast30d),
       aircraft,
       hubs,
-      activity: [...flightActivity, ...visitorActivity]
-        .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
-
+      activity: flightActivity.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
       earningsTimeseries,
       xpByAsset,
       paxByAsset,
@@ -1194,55 +1161,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       airplanes,
       licenses,
       flights: flightLog,
-      visitors,
+      visitors: [],
       community: MOCK_PAYLOAD.community,
       _source: "live",
       _fetchedAt: new Date().toISOString(),
     };
   });
-
-// ---------------------------------------------------------------------------
-// Revenue attribution consistency check
-//
-// Re-scans owned-airport and owned-aircraft flight histories and compares,
-// per flight, the PAX we credit to you (paxAirport + paxAircraft) against
-// the PAX SimFly actually paid out for the slots you own (origin/destination
-// earnedPax when you own the airport + airplane.earnedPax when you own the
-// plane). Any row where attributed != expected is a discrepancy.
-// ---------------------------------------------------------------------------
-
-export type RevenueConsistencyRow = {
-  flightID: string;
-  ts: string;
-  pilot: string;
-  origin: string;
-  destination: string;
-  aircraft: string;
-  ownsOrigin: boolean;
-  ownsDestination: boolean;
-  ownsAircraft: boolean;
-  expectedAirport: number;
-  expectedAircraft: number;
-  attributedAirport: number;
-  attributedAircraft: number;
-  expectedTotal: number;
-  attributedTotal: number;
-  diff: number;
-  sources: ("airport" | "aircraft")[];
-};
-
-export type RevenueConsistencyReport = {
-  username: string;
-  checkedAt: string;
-  scannedAirports: number;
-  scannedAircraft: number;
-  flightsExamined: number;
-  matches: number;
-  mismatches: number;
-  totalExpected: number;
-  totalAttributed: number;
-  rows: RevenueConsistencyRow[];
-};
 
 export const getRevenueConsistencyCheck = createServerFn({ method: "GET" })
   .inputValidator(
