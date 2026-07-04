@@ -2,8 +2,6 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
-import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getLatestChangelog } from "@/lib/simfly.functions";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
@@ -781,6 +779,7 @@ function PilotSwitcher({ current }: { current: string | null }) {
     setViewedUser(v || null);
     setOpen(false);
   }
+  
   function reset() {
     setValue("");
     setViewedUser(null);
