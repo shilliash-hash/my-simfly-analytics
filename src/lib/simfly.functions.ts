@@ -2724,13 +2724,17 @@ export const deleteChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: { id: number; token: string }) => d,
   handler: async ({ data }) => {
-    // Weryfikacja tokenu admina bezpośrednio na serwerze
-    const adminToken = process.env.ADMIN_TOKEN || "Twój_Domyślny_Token_Jeśli_Nie_Ma_Env";
-    if (data.token !== adminToken) {
+    // Bezpieczne pobranie zmiennej środowiskowej kompatybilne z Cloudflare i Node.js
+    const adminToken = 
+      (globalThis as any).process?.env?.ADMIN_TOKEN || 
+      (globalThis as any).MINIFLARE_DATA?.env?.ADMIN_TOKEN ||
+      process.env.ADMIN_TOKEN;
+
+    if (!adminToken || data.token !== adminToken) {
       throw new Error("Unauthorized");
     }
 
-   const { error } = await supabaseAdmin
+    const { error } = await supabaseAdmin
       .from("app_changelog")
       .delete()
       .eq("id", Number(data.id));
