@@ -299,13 +299,13 @@ function Overview() {
                   <Stat label="Lifetime PAX" value={formatNumber(Math.round(a.totalEarnedPax))} />
                   <Stat label="PAX 7d" value={formatNumber(Math.round(a.pax7d))} />
                   <Stat label="Rotation" value="" custom={<RotationCell rotation={a.rotation} max={a.maxRotation} />} />
-                </div>
-              </Link>
-            ))}
-        </div>
-      </section>
-    </AppShell>
-  );
+              </div>
+            </Link>
+          ))}
+      </div>
+    </section>
+  </AppShell>
+);
 }
 
 function Stat({ label, value, custom }: { label: string; value: string; custom?: React.ReactNode }) {
