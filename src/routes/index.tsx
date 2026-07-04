@@ -293,7 +293,7 @@ function Overview() {
                 <div className="mono text-xs font-semibold pl-3 shrink-0 text-runway">
                   +{formatNumber(Number(a.delta) || 0)} PAX
                 </div>
-              </td>
+              </li>
             );
           })}
         </ul>
