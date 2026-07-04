@@ -14,6 +14,7 @@ import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import { useSimflyArgs } from "@/lib/viewed-user";
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
@@ -39,39 +40,34 @@ function Overview() {
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000, // Zmiana na 30 minut
-      refetchInterval: 30 * 60_000, // Zmiana na 30 minut
+      staleTime: 30 * 60_000,
+      refetchInterval: 30 * 60_000,
     }),
   );
 
-  // Timers change for Supporters check
   const lastInvalidateRef = useRef<number>(0);
 
-  // Zamień stary useEffect na ten z warunkiem if:
   useEffect(() => {
     const now = Date.now();
     if (now - lastInvalidateRef.current >= 30 * 60_000) {
       qc.invalidateQueries({ queryKey: ["hub-support", keyTag] });
       lastInvalidateRef.current = now;
     }
-  }, [qc, keyTag, data._fetchedAt]
-  );
+  }, [qc, keyTag, data._fetchedAt]);
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
   const myFlightsFn = useServerFn(getMyLiveFlights);
+  
   const icaos = useMemo(
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
+  
   const tails = useMemo(
     () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
     [data.airplanes],
   );
-  // Incoming Traffic refreshes every 5 min — aircraft inbound to hubs are
-  // usually tens of minutes to hours away, so a 30 s cadence wasted Worker,
-  // DB and SimFly API calls without improving UX. The server memoises the
-  // upstream /flights response for 10 s so concurrent tabs / callers share a
-  // single fetch.
+
   const { data: hubTraffic = [] } = useQuery({
     queryKey: ["simfly", "hubTraffic", keyTag, icaos],
     queryFn: () => trafficFn({ data: { icaos, ...(viewedUser ? { username: viewedUser } : {}) } }),
@@ -79,20 +75,20 @@ function Overview() {
     refetchInterval: 300_000,
     staleTime: 20_000,
   });
+
   const { data: myFlights = [] } = useQuery({
     queryKey: ["simfly", "myLiveFlights", keyTag, icaos, tails],
     queryFn: () => myFlightsFn({ data: { icaos, tails, ...(viewedUser ? { username: viewedUser } : {}) } }),
     enabled: icaos.length > 0 || tails.length > 0,
-    // Server refresh every 5 minutes; countdown ticks locally via CurrentFlightHero.
     refetchInterval: 300_000,
     staleTime: 300_000,
   });
 
-    const changelogFn = useServerFn(getLatestChangelog);
+  const changelogFn = useServerFn(getLatestChangelog);
   const { data: appUpdates = [] } = useQuery({
     queryKey: ["app-changelog"],
     queryFn: () => changelogFn(),
-    staleTime: 5 * 60_000, // Pobieraj z bazy maksymalnie raz na 5 minut
+    staleTime: 5 * 60_000,
   });
 
   return (
@@ -117,22 +113,19 @@ function Overview() {
         }
       />
 
-
       <CurrentFlightHero
         live={(() => {
           const completedIds = new Set(data.flights.map((f) => f.id));
           return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
         })()}
         liveMissionIds={useMemo(() => {
-          // Mission IDs SimFly still reports anywhere in our hub feeds.
-          // Primary trigger: when our snapshot id leaves this set, mark ARRIVED.
           const ids = new Set<string>();
           for (const f of myFlights) ids.add(f.id);
           for (const h of hubTraffic) for (const v of h.visitors) ids.add(v.id);
           return ids;
         }, [myFlights, hubTraffic])}
         completedIds={useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights])}
-        lastFlight={data.flights[0] ?? null}
+        lastFlight={data.flights ?? null}
       />
 
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
@@ -203,13 +196,11 @@ function Overview() {
                 <YAxis stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
                 <Tooltip
                   contentStyle={{ background: "var(--popover)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }}
-                  formatter={(v: number, name) =>
-                    [formatNumber(v) + " PAX", name === "paxVisitors" ? "Visitor PAX" : "Your PAX"]
-                  }
+                  formatter={(v: number, name) => [formatNumber(v) + " PAX", name === "paxVisitors" ? "Visitor PAX" : "Your PAX"]}
                 />
                 <Area type="monotone" dataKey="pax" name="paxKept" stroke="var(--runway)" strokeWidth={2} fill="url(#gradPax)" />
                 <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gradVisitors)" />
-                          </AreaChart>
+              </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
@@ -231,14 +222,14 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-           )})}
-          </ul>
+              ))}
+            </ul>
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
 
-      {/* Sekcja ostatnich lotów (Recent flights) */}
-      <div className="panel rounded-xl p-5">
+      {/* Sekcja ostatnich aktywności/lotów */}
+      <div className="panel rounded-xl p-5 mt-6">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">Recent flights</h2>
             <Link to="/activity" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All →</Link>
