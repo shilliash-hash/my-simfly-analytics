@@ -745,3 +745,5 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
     </div>
   );
 }
+
+// router-force-reload: v1
