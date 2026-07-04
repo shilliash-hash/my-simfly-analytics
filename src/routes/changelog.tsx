@@ -28,19 +28,16 @@ function ChangelogPage() {
 
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
-  
-  // Stany dla wbudowanego okna logowania (zamiast zepsutego prompt)
   const [showModal, setShowModal] = useState(false);
   const [modalInput, setModalInput] = useState("");
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Synchronizacja sesji z Local Storage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedToken = localStorage.getItem("simfly:adminToken") || "";
-      if (savedToken) {
-        setAdminToken(savedToken);
-        setIsAuth(true);
-      }
+    setIsMounted(true);
+    const savedToken = localStorage.getItem("simfly:adminToken") || "";
+    if (savedToken) {
+      setAdminToken(savedToken);
+      setIsAuth(true);
     }
   }, []);
 
@@ -50,16 +47,16 @@ function ChangelogPage() {
     staleTime: 5 * 60_000,
   });
 
-  function submitAdminLogin(e?: React.FormEvent) {
-    e?.preventDefault();
-    if (modalInput.trim()) {
-      const trimmed = modalInput.trim();
+  function submitAdminLogin(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = modalInput.trim();
+    if (trimmed) {
       localStorage.setItem("simfly:adminToken", trimmed);
       setAdminToken(trimmed);
       setIsAuth(true);
       setShowModal(false);
       setModalInput("");
-      toast.success("Admin Mode Activated permanently");
+      toast.success("Admin Mode Activated");
     }
   }
 
@@ -71,22 +68,21 @@ function ChangelogPage() {
   }
 
   async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure you want to delete this update log permanently?")) return;
-
+    if (!window.confirm("Are you sure permanently delete?")) return;
     try {
       await deleteFn({ data: { id, token: adminToken } });
-      toast.success("Log entry deleted successfully");
+      toast.success("Log entry deleted");
       queryClient.invalidateQueries({ queryKey: ["app-changelog-full"] });
       queryClient.invalidateQueries({ queryKey: ["app-changelog"] });
     } catch (err) {
-      toast.error("Failed to delete. Invalid token or server error.");
+      toast.error("Failed to delete");
     }
   }
 
-  if (typeof window === "undefined") {
+  if (!isMounted) {
     return (
       <AppShell>
-        <PageHeader eyebrow="System History" title="App Changelog" description="Loading updates..." />
+        <PageHeader eyebrow="History" title="App Changelog" description="Loading..." />
       </AppShell>
     );
   }
@@ -101,6 +97,7 @@ function ChangelogPage() {
           <div className="flex flex-wrap items-center gap-3">
             {isAuth && (
               <button
+                type="button"
                 onClick={handleAdminLogout}
                 className="mono inline-flex items-center gap-2 rounded-md border border-rose-500/20 bg-rose-500/10 px-2.5 py-1.5 text-[10px] uppercase tracking-wider text-rose-400 transition hover:bg-rose-500/20 cursor-pointer"
               >
@@ -113,7 +110,6 @@ function ChangelogPage() {
           </div>
         }
       />
-
       <div className="panel max-w-3xl mx-auto rounded-xl p-6 border border-border/40 bg-background/20 mt-6">
         <div className="mb-6 flex items-center gap-2 border-b border-border/40 pb-4">
           <History className="h-5 w-5 text-runway" />
@@ -126,7 +122,6 @@ function ChangelogPage() {
           <div className="space-y-6">
             {allUpdates.map((update: any) => {
               const rawText = update.text || "";
-              
               const hasFeature = /\[FEATURE\]/i.test(rawText);
               const hasFix = /\[FIX\]/i.test(rawText) && !hasFeature;
               const hasPerf = /\[PERF\]/i.test(rawText) && !hasFeature && !hasFix;
@@ -138,7 +133,7 @@ function ChangelogPage() {
                 .trim();
 
               return (
-                <div key={update.id || update.version} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
+                <div key={update.id} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
                   <div className="flex items-start justify-between">
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="mono text-xs font-bold text-runway bg-runway/10 px-2 py-0.5 rounded border border-runway/25 uppercase tracking-wider">
@@ -154,7 +149,8 @@ function ChangelogPage() {
 
                     {isAuth && (
                       <button
-                        onClick={() => handleDelete(Number(update.id))}
+                        type="button"
+                        onClick={() => handleDelete(update.id)}
                         className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10 cursor-pointer"
                         title="Delete Entry"
                       >
@@ -172,19 +168,18 @@ function ChangelogPage() {
         )}
       </div>
 
-      {/* Dyskretny panel logowania dewelopera na samym dole strony */}
       {!isAuth && (
         <div className="mt-8 flex justify-center">
           <button
-            onClick={() => setShowModal(true)}
-            className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-runway transition cursor-pointer"
+            type="button"
+            onClick={(e) => { e.preventDefault(); setShowModal(true); }}
+            className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-muted-foreground/40 hover:text-runway transition cursor-pointer py-2 px-4"
           >
             <ShieldAlert className="h-3 w-3" /> System Operator Login
           </button>
         </div>
       )}
 
-      {/* Profesjonalne, wbudowane okno modalne zabezpieczone przed blokowaniem mobilnym */}
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
           <form 
@@ -199,7 +194,7 @@ function ChangelogPage() {
               <button 
                 type="button" 
                 onClick={() => { setShowModal(false); setModalInput(""); }} 
-                className="text-muted-foreground hover:text-foreground transition p-0.5 rounded"
+                className="text-muted-foreground hover:text-foreground transition p-0.5 rounded cursor-pointer"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -213,29 +208,29 @@ function ChangelogPage() {
               autoFocus
               type="password"
               placeholder="Paste secret ADMIN_TOKEN..."
-              className="mono w-full rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus:border-runway text-foreground placeholder:text-muted-foreground/40"
+              className="mono w-full rounded-md border border-border bg-background px-3 py-2 text-xs outline-none focus:border-runway text-foreground placeholder:text-muted-foreground/40 mb-4"
               value={modalInput}
               onChange={(e) => setModalInput(e.target.value)}
             />
             
-            <div className="mt-4 flex items-center justify-end gap-2 text-xs">
-            <button 
-              type="button" 
-              onClick={() => { setShowModal(false); setModalInput(""); }} 
-              className="mono rounded px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition"
-            >
-              Cancel
-            </button>
-            <button 
-              type="submit" 
-              className="mono rounded bg-runway/20 border border-runway/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/35"
-            >
-              Confirm Unlock
-            </button>
-          </div>
-        </form>
-      </div>
-    )}
-  </AppShell>
-);
+            <div className="flex items-center justify-end gap-2 text-xs">
+              <button 
+                type="button" 
+                onClick={() => { setShowModal(false); setModalInput(""); }} 
+                className="mono rounded px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="mono rounded bg-runway/20 border border-runway/30 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/35 cursor-pointer"
+              >
+                Confirm Unlock
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+    </AppShell>
+  );
 }
