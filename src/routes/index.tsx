@@ -1,36 +1,6 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
-import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getLatestChangelog } from "@/lib/simfly.functions";
-import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
-import { AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime } from "@/components/app-shell";
-import { HubSupportCard } from "@/components/hub-support";
-import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
-import type { FlightLog } from "@/lib/types";
-import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { useSimflyArgs } from "@/lib/viewed-user";
-
-export const Route = createFileRoute("/")({
-  loader: ({ context }) =>
-    context.queryClient.ensureQueryData(
-      queryOptions({ queryKey: ["simfly", "__self__"], queryFn: () => getSimflyPayload(), staleTime: 30_000 }),
-    ),
-  component: Overview,
-  head: () => ({
-    meta: [
-      { title: "Overview — SimFly Hub" },
-      { name: "description", content: "Your SimFly account at a glance: available PAX, fleet, hubs and recent earnings." },
-      { property: "og:title", content: "SimFly Hub — Overview" },
-      { property: "og:description", content: "Airport Intelligence Hub for SimFly.io players." },
-    ],
-  }),
-});
-
 function Overview() {
   const [isMounted, setIsMounted] = useState(false);
-
+  
   useEffect(() => {
     setIsMounted(true);
   }, []);
@@ -42,7 +12,7 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-  
+
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", pilot || "__self__"],
@@ -51,9 +21,8 @@ function Overview() {
       refetchInterval: 30 * 60_000,
     }),
   );
-  
+ 
   const lastInvalidateRef = useRef<number>(0);
-
   useEffect(() => {
     const now = Date.now();
     if (now - lastInvalidateRef.current >= 30 * 60_000) {
@@ -64,12 +33,12 @@ function Overview() {
 
   const trafficFn = useServerFn(getMyHubsIncomingTraffic);
   const myFlightsFn = useServerFn(getMyLiveFlights);
- 
+
   const icaos = useMemo(
     () => Array.from(new Set(data.airports.map((a) => a.icao).filter(Boolean))),
     [data.airports],
   );
- 
+
   const tails = useMemo(
     () => Array.from(new Set(data.airplanes.map((p) => p.tailNumber).filter(Boolean))),
     [data.airplanes],
@@ -98,7 +67,21 @@ function Overview() {
     staleTime: 5 * 60_000,
   });
 
-  // Hydration Guard: Umieszczony bezpiecznie POD wszystkimi hookami, a przed startem HTML
+  // =========================================================================
+  // HOOKI PRZENIESIONE NA GÓRĘ (PRZED WARUNEK IF)
+  // =========================================================================
+  const liveMissionIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const f of myFlights) ids.add(f.id);
+    for (const h of hubTraffic) for (const v of h.visitors) ids.add(v.id);
+    return ids;
+  }, [myFlights, hubTraffic]);
+
+  const completedIds = useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights]);
+  // =========================================================================
+
+
+  // Hydration Guard: Teraz znajduje się BEZPIECZNIE pod wszystkimi hookami
   if (!isMounted) {
     return (
       <AppShell>
@@ -132,20 +115,21 @@ function Overview() {
           </div>
         }
       />
+
+      {/* ========================================================================= */}
+      {/* NOWY, OCZYSZCZONY KOMPONENT Z CZYSTYMI ZMIENNYMI ZAMIAST HOOKÓW W PROPSACH */}
+      {/* ========================================================================= */}
       <CurrentFlightHero
         live={(() => {
-          const completedIds = new Set(data.flights.map((f) => f.id));
-          return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
+          const completedIdsSet = completedIds;
+          return myFlights.find((f) => !completedIdsSet.has(f.id)) ?? null;
         })()}
-        liveMissionIds={useMemo(() => {
-          const ids = new Set<string>();
-          for (const f of myFlights) ids.add(f.id);
-          for (const h of hubTraffic) for (const v of h.visitors) ids.add(v.id);
-          return ids;
-        }, [myFlights, hubTraffic])}
-        completedIds={useMemo(() => new Set(data.flights.map((f) => f.id)), [data.flights])}
+        liveMissionIds={liveMissionIds}
+        completedIds={completedIds}
         lastFlight={data.flights ?? null}
       />
+      {/* ========================================================================= */}
+
       <section className="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-5">
         <StatCard
           label="Available PAX"
@@ -179,6 +163,9 @@ function Overview() {
         />
         <HubSupportCard username={data.me.handle} />
       </section>
+
+      {/* Dalsza część pliku (IncomingTraffic, PAX earnings, sekcja z błędem </li>, itp.) pozostaje bez zmian */}
+
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
       <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="panel rounded-xl p-5 lg:col-span-2">
