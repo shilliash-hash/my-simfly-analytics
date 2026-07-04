@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
+import { addChangelogEntry } from "@/lib/simfly.functions";
 import {
   adminBackfillAction,
   listBackfills,
@@ -41,6 +42,7 @@ function AdminPage() {
         <div className="space-y-8">
           <AdminTable token={token} />
           <HubSupportAdmin token={token} />
+          <AdminChangelog adminToken={token} />
         </div>
       ) : (
         <TokenForm />
@@ -569,6 +571,75 @@ function HubSupportAdmin({ token }: { token: string }) {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+function AdminChangelog({ adminToken }: { adminToken: string }) {
+  const appendFn = useServerFn(addChangelogEntry);
+  const [version, setVersion] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!version.trim() || !text.trim()) return;
+    setBusy(true);
+    setErr(null);
+    setSuccess(false);
+
+    try {
+      await appendFn({ data: { version: version.trim(), text: text.trim(), adminToken } });
+      setSuccess(true);
+      setVersion("");
+      setText("");
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Publish failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4 mt-8 pt-8 border-t border-border/40">
+      <div>
+        <h2 className="font-display text-xl font-semibold">App Changelog</h2>
+        <p className="text-xs text-muted-foreground">Publish ongoing system update notes directly to the homepage dashboard.</p>
+      </div>
+      {err && <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">{err}</div>}
+      {success && <div className="rounded-md border border-runway/40 bg-runway/10 px-3 py-2 text-xs text-runway">Changelog entry published successfully!</div>}
+      
+      <form onSubmit={handleSubmit} className="space-y-3 rounded-xl border border-border/60 bg-background/40 p-4 max-w-xl shadow-lg">
+        <div>
+          <label className="mono mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">App Version</label>
+          <input
+            value={version}
+            onChange={(e) => setVersion(e.target.value)}
+            placeholder="e.g. v 0.903"
+            className="w-full rounded-md border border-border bg-secondary/20 px-3 py-2 text-sm outline-none focus:border-runway"
+            required
+          />
+        </div>
+        <div>
+          <label className="mono mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">Changes Description</label>
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="What feature or fix was deployed?"
+            rows={3}
+            className="w-full rounded-md border border-border bg-secondary/20 px-3 py-2 text-sm outline-none focus:border-runway resize-none"
+            required
+          />
+        </div>
+        <button
+          type="submit"
+          disabled={busy || !version.trim() || !text.trim()}
+          className="rounded-md bg-runway px-4 py-2 text-sm font-medium text-background hover:bg-runway/90 disabled:opacity-50 flex items-center gap-2 transition-colors"
+        >
+          {busy ? "Publishing..." : "Publish Update"}
+        </button>
+      </form>
     </div>
   );
 }
