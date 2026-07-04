@@ -112,24 +112,22 @@ function Overview() {
                   update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
                   "text-runway bg-runway/15 border-runway/30";
 
-                return (
-                  <div key={update.id} className="flex items-center gap-2 text-xs">
-                    <span className="mono text-runway font-bold shrink-0">{update.version}</span>
-                     className={`mono text-[9px] font-bold px-1 py-0.2 rounded border shrink-0 ${tagColor}`}
-                      {update.type}
-                    </span>
-                    <span className="text-muted-foreground truncate">{update.text}</span>
-                  </div>
-                );
-              })}
-              {remoteUpdates.length === 0 && (
-                <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
-              )}
-            </div>
+              return (
+                    <div key={update.id} className="flex items-center gap-2 text-xs">
+                      <span className="mono text-runway font-bold shrink-0">{update.version}</span>
+                     <span className={`mono text-[9px] font-bold px-1 py-0.2 rounded border shrink-0 ${tagColor}`}>
+                        {update.type}
+                      </span>
+                      <span className="text-muted-foreground truncate">{update.text}</span>
+                    </div>
+                  );
+                         })}
+            {remoteUpdates.length === 0 && (
+              <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
+            )}
           </div>
         }
         actions={
-
           <div className="flex items-center gap-3">
             <PilotSwitcher current={viewedUser} />
             {data.me.avatarUrl ? (
