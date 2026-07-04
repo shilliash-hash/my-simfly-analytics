@@ -205,7 +205,7 @@ function Overview() {
           </div>
         </div>
 
-        {/* NOWA SEKCJA: Recent Updates (Changelog) */}
+              {/* NOWA SEKCJA: Recent Updates (Changelog) */}
         <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
           <div className="mb-4 flex items-center gap-2">
             <History className="h-4 w-4 text-runway" />
@@ -214,20 +214,21 @@ function Overview() {
           <div className="overflow-y-auto max-h-64 pr-1">
             <ul className="space-y-3">
               {appUpdates.map((update: any, index: number) => {
-              return (
-                <li key={index} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
-                  <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
-                    {update.version}
-                  </span>
-                  <span className="text-xs text-foreground/80 leading-relaxed">
-                    {update.text}
-                  </span>
-                </li>
-             );
-            })}
-          </ul>
+                return (
+                  <li key={index} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
+                    <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
+                      {update.version}
+                    </span>
+                    <span className="text-xs text-foreground/80 leading-relaxed">
+                      {update.text}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           </div>
-        </section>
+        </div>
+      </section>
 
       {/* Sekcja ostatnich aktywności/lotów */}
       <div className="panel rounded-xl p-5 mt-6">
