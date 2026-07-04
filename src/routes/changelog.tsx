@@ -3,8 +3,8 @@ import { useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { getLatestChangelog, deleteChangelogEntry } from "@/lib/simfly.functions";
 import { AppShell, PageHeader } from "@/components/app-shell";
-import { History, ArrowLeft, Trash2, ShieldAlert } from "lucide-react";
-import { useState } from "react";
+import { History, ArrowLeft, Trash2 } from "lucide-react";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/changelog")({
@@ -29,6 +29,13 @@ function ChangelogPage() {
   const [inputToken, setInputToken] = useState("");
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
+
+  // Synchronizacja stanu logowania bezpośrednio po zapisaniu tokenu
+  useEffect(() => {
+    if (adminToken) {
+      setIsAuth(true);
+    }
+  }, [adminToken]);
 
   const { data: allUpdates = [] } = useQuery({
     queryKey: ["app-changelog-full"],
@@ -77,9 +84,9 @@ function ChangelogPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    if (inputToken.trim()) {
-                      setAdminToken(inputToken.trim());
-                      setIsAuth(true);
+                    const trimmed = inputToken.trim();
+                    if (trimmed) {
+                      setAdminToken(trimmed);
                       toast.success("Dev Tools enabled");
                     }
                   }}
@@ -111,15 +118,19 @@ function ChangelogPage() {
         ) : (
           <div className="space-y-6">
             {allUpdates.map((update: any) => {
-              const cleanText = update.text?.trim() ?? "";
-              const isFix = cleanText.startsWith("[FIX]");
-              const isFeature = cleanText.startsWith("[FEATURE]");
-              const isPerf = cleanText.startsWith("[PERF]");
+              const rawText = update.text || "";
               
-              const displayText = cleanText
-                .replace(/^\[FIX\]\s*/i, "")
-                .replace(/^\[FEATURE\]\s*/i, "")
-                .replace(/^\[PERF\]\s*/i, "");
+              // Elastyczne wykrywanie tagów w dowolnym miejscu wpisu za pomocą RegExp
+              const hasFeature = /\[FEATURE\]/i.test(rawText);
+              const hasFix = /\[FIX\]/i.test(rawText) && !hasFeature; // Feature ma priorytet
+              const hasPerf = /\[PERF\]/i.test(rawText) && !hasFeature && !hasFix;
+
+              // Oczyszczanie tekstu ze wszystkich znaczników z zachowaniem formatowania i nowych linii
+              const displayText = rawText
+                .replace(/\[FIX\]/gi, "")
+                .replace(/\[FEATURE\]/gi, "")
+                .replace(/\[PERF\]/gi, "")
+                .trim();
 
               return (
                 <div key={update.id || update.version} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
@@ -129,11 +140,11 @@ function ChangelogPage() {
                         {update.version}
                       </span>
                       <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
-                        {typeof window !== "undefined" && update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
+                        {update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
                       </span>
-                      {isFix && <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>}
-                      {isFeature && <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>}
-                      {isPerf && <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>}
+                      {hasFix && <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>}
+                      {hasFeature && <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>}
+                      {hasPerf && <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>}
                     </div>
 
                     {isAuth && (
