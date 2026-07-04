@@ -419,7 +419,7 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
                       <div className="truncate flex-1">You · Outbound ({f.aircraftICAO})</div>
                     </li>
                   ))}
-                  {visitors.slice(0, 2).map((v) => (
+                    {visitors.slice(0, 2).map((v) => (
                     <li key={v.id} className="flex items-center gap-2 text-xs text-foreground">
                       <div className="truncate flex-1">@{v.username} ({v.aircraftICAO})</div>
                     </li>
@@ -433,6 +433,7 @@ function IncomingTraffic({ traffic, myFlights, airports }: { traffic: { icao: st
     </section>
   );
 }
+
 type FlightSnapshot = { id: string; origin: string; destination: string; aircraft: string; tail?: string; licence?: string; sim?: string; etaMs?: number; distanceNm?: number; };
 function snapshotFromLive(f: MyLiveFlight): FlightSnapshot { return { id: f.id, origin: f.origin, destination: f.destination, aircraft: f.aircraftICAO, tail: f.tailNumber, licence: f.licenceCode, sim: f.sim, etaMs: f.etaMs, distanceNm: f.distanceNm, }; }
 
