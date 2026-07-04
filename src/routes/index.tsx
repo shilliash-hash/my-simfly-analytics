@@ -231,7 +231,7 @@ function Overview() {
                     {update.text}
                   </span>
                 </li>
-            ))
+           )})}
           </ul>
         </div>
       </div>
