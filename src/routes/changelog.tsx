@@ -26,6 +26,7 @@ function ChangelogPage() {
   const changelogFn = useServerFn(getLatestChangelog);
   const deleteFn = useServerFn(deleteChangelogEntry);
 
+  const [inputToken, setInputToken] = useState("");
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
 
@@ -41,21 +42,17 @@ function ChangelogPage() {
     try {
       await deleteFn({ data: { id, token: adminToken } });
       toast.success("Log entry deleted successfully");
-      // Natychmiastowe odświeżenie danych na ekranie i dashboardzie
       queryClient.invalidateQueries({ queryKey: ["app-changelog-full"] });
       queryClient.invalidateQueries({ queryKey: ["app-changelog"] });
     } catch (err) {
       toast.error("Failed to delete. Invalid token or server error.");
     }
   }
+
   if (typeof window === "undefined") {
     return (
       <AppShell>
-        <PageHeader
-          eyebrow="System History"
-          title="App Changelog"
-          description="Loading updates..."
-        />
+        <PageHeader eyebrow="System History" title="App Changelog" description="Loading updates..." />
       </AppShell>
     );
   }
@@ -66,7 +63,7 @@ function ChangelogPage() {
         eyebrow="System History"
         title="App Changelog"
         description="Every feature, improvement, and fix deployed to the platform."
-               actions={
+        actions={
           <div className="flex flex-wrap items-center gap-3">
             {!isAuth ? (
               <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-2 py-1">
@@ -74,14 +71,14 @@ function ChangelogPage() {
                   type="password"
                   placeholder="Admin Token"
                   className="mono bg-transparent text-[11px] outline-none text-foreground placeholder:text-muted-foreground w-28"
-                  onChange={(e) => {
-                    setAdminToken(e.target.value);
-                  }}
+                  value={inputToken}
+                  onChange={(e) => setInputToken(e.target.value)}
                 />
                 <button
                   type="button"
                   onClick={() => {
-                    if (adminToken.trim()) {
+                    if (inputToken.trim()) {
+                      setAdminToken(inputToken.trim());
                       setIsAuth(true);
                       toast.success("Dev Tools enabled");
                     }
@@ -113,53 +110,48 @@ function ChangelogPage() {
           <p className="text-sm text-muted-foreground py-4 text-center">No update logs found in the database.</p>
         ) : (
           <div className="space-y-6">
-            {allUpdates.map((update: any) => (
-              <div key={update.id || update.version} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="mono text-xs font-bold text-runway bg-runway/10 px-2 py-0.5 rounded border border-runway/25 uppercase tracking-wider">
-                      {update.version}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
-                    {typeof window !== "undefined" && update.created_at 
-                    ? new Date(update.created_at).toLocaleDateString() 
-                    : "Stable Release"}
-                    </span>
+            {allUpdates.map((update: any) => {
+              const cleanText = update.text?.trim() ?? "";
+              const isFix = cleanText.startsWith("[FIX]");
+              const isFeature = cleanText.startsWith("[FEATURE]");
+              const isPerf = cleanText.startsWith("[PERF]");
+              
+              const displayText = cleanText
+                .replace(/^\[FIX\]\s*/i, "")
+                .replace(/^\[FEATURE\]\s*/i, "")
+                .replace(/^\[PERF\]\s*/i, "");
+
+              return (
+                <div key={update.id || update.version} className="flex flex-col gap-2 border-b border-border/20 pb-5 last:border-0 last:pb-0">
+                  <div className="flex items-start justify-between">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="mono text-xs font-bold text-runway bg-runway/10 px-2 py-0.5 rounded border border-runway/25 uppercase tracking-wider">
+                        {update.version}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground/60 mono uppercase tracking-widest">
+                        {typeof window !== "undefined" && update.created_at ? new Date(update.created_at).toLocaleDateString() : "Stable Release"}
+                      </span>
+                      {isFix && <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>}
+                      {isFeature && <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>}
+                      {isPerf && <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>}
+                    </div>
+
+                    {isAuth && (
+                      <button
+                        onClick={() => handleDelete(Number(update.id))}
+                        className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
+                        title="Delete Entry"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
-
-                  {/* Dynamiczny przycisk usuwania widoczny tylko w trybie deweloperskim */}
-                  {isAuth && (
-                 <button
-                 onClick={() => handleDelete(Number(update.id))} // 👈 TUTAJ dodajemy Number()
-                 className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
-                 title="Delete Entry"
-                  >
-                 <Trash2 className="h-4 w-4" />
-                  </button>
-              )}
-
+                  <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1">
+                    {displayText}
+                  </p>
                 </div>
-                                <p className="text-sm text-foreground/90 leading-relaxed whitespace-pre-wrap pl-1 mt-1 flex flex-wrap items-baseline gap-1.5">
-                  {update.text?.startsWith("[FIX]") && (
-                    <span className="mono rounded bg-rose-500/10 border border-rose-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-rose-400 shrink-0">Fix</span>
-                  )}
-                  {update.text?.startsWith("[FEATURE]") && (
-                    <span className="mono rounded bg-emerald-500/10 border border-emerald-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-400 shrink-0">Feature</span>
-                  )}
-                  {update.text?.startsWith("[PERF]") && (
-                    <span className="mono rounded bg-purple-500/10 border border-purple-500/25 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-purple-400 shrink-0">Perf</span>
-                  )}
-                  <span>
-                    {update.text
-                      ? update.text
-                          .replace(/^\[FIX\]\s*/, "")
-                          .replace(/^\[FEATURE\]\s*/, "")
-                          .replace(/^\[PERF\]\s*/, "")
-                      : ""}
-                  </span>
-                </p>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
