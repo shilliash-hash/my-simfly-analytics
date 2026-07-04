@@ -67,9 +67,12 @@ function ChangelogPage() {
     toast.info("Logged out from Admin Mode");
   }
 
-    async function handleDelete(id: number) {
+      async function handleDelete(update: any) {
+    // Automatycznie dobieramy identyfikator (id, wersja lub tekst) jako bezpiecznik
+    const targetId = update.id || update.version || update.text || "";
+    
     try {
-      await deleteFn({ data: { id, token: adminToken } });
+      await deleteFn({ data: { id: targetId as any, token: adminToken } });
       toast.success("Log entry deleted");
       queryClient.invalidateQueries({ queryKey: ["app-changelog-full"] });
       queryClient.invalidateQueries({ queryKey: ["app-changelog"] });
@@ -77,7 +80,6 @@ function ChangelogPage() {
       toast.error("Failed to delete");
     }
   }
-
 
   if (!isMounted) {
     return (
@@ -150,7 +152,7 @@ function ChangelogPage() {
                     {isAuth && (
                       <button
                         type="button"
-                        onClick={() => handleDelete(update.id)}
+                        onClick={() => handleDelete(update)}
                         className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10 cursor-pointer"
                         title="Delete Entry"
                       >
