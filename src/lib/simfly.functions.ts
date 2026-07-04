@@ -2719,7 +2719,83 @@ export const addChangelogEntry = createServerFn({ method: "POST" })
     if (error) throw new Error(error.message);
     return { success: true, data: row };
   });
+import { createServerFn, getEvent } from "@tanstack/react-start";
+import { createClient } from "@supabase/supabase-js";
 
+export interface ChangelogEntry {
+  id: string;
+  version: string;
+  text: string;
+  type: 'FIX' | 'FEATURE' | 'UPGRADE';
+  created_at: string;
+}
+
+const getSupabaseAdmin = () => {
+  const event = getEvent();
+  const cfEnv = (event?.context as any)?.cloudflare?.env || process.env;
+
+  const url = cfEnv.SUPABASE_URL;
+  const serviceKey = cfEnv.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceKey) {
+    throw new Error("Supabase secrets missing in Cloudflare Environment.");
+  }
+  return createClient(url, serviceKey);
+};
+
+// 1. Pobieranie wpisów z tabeli app_changelog
+export const getChangelogEntries = createServerFn({
+  method: "GET",
+  handler: async () => {
+    const supabase = getSupabaseAdmin();
+    const { data, error } = await supabase
+      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .select("id, version, text, type, created_at")
+      .order("created_at", { ascending: false });
+
+    if (error) throw new Error(error.message);
+    return (data || []) as ChangelogEntry[];
+  },
+});
+
+// 2. Dodawanie nowego wpisu do tabeli app_changelog
+export const addChangelogEntry = createServerFn({
+  method: "POST",
+  validator: (data: { version: string; text: string; type: string }) => data,
+  handler: async ({ data }) => {
+    const supabase = getSupabaseAdmin();
+    const { data: insertedData, error } = await supabase
+      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .insert([
+        {
+          version: data.version,
+          text: data.text,
+          type: data.type,
+        }
+      ])
+      .select()
+      .single();
+
+    if (error) throw new Error(error.message);
+    return { success: true, entry: insertedData };
+  },
+});
+
+// 3. Usuwanie wpisu z tabeli app_changelog
+export const deleteChangelogEntry = createServerFn({
+  method: "POST",
+  validator: (id: string) => id,
+  handler: async ({ data: id }) => {
+    const supabase = getSupabaseAdmin();
+    const { error } = await supabase
+      .from("app_changelog") // Zaktualizowana nazwa tabeli
+      .delete()
+      .eq("id", id);
+
+    if (error) throw new Error(error.message);
+    return { success: true, deletedId: id };
+  },
+});
 
 
 
