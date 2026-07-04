@@ -207,9 +207,14 @@ function Overview() {
 
               {/* NOWA SEKCJA: Recent Updates (Changelog) */}
         <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
-          <div className="mb-4 flex items-center gap-2">
-            <History className="h-4 w-4 text-runway" />
-            <h2 className="font-display text-lg font-semibold">Recent Updates</h2>
+         <div className="mb-4 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-runway" />
+              <h2 className="font-display text-lg font-semibold">Recent Updates</h2>
+            </div>
+            <Link to="/changelog" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">
+              View All →
+            </Link>
           </div>
           <div className="overflow-y-auto max-h-64 pr-1">
             <ul className="space-y-3">
