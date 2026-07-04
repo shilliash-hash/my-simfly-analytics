@@ -36,6 +36,7 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
+    console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
     const { data: liveChangelogFeed = [] } = useQuery({
     queryKey: ["changelog", "list"],
     queryFn: () => getChangelogEntries(),
