@@ -587,10 +587,11 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
   const [type, setType] = useState("FEATURE"); // Domyślny tag
   const [error, setError] = useState<string | null>(null);
 
-  // Pobieranie aktualnej listy wpisów bezpośrednio z tabeli app_changelog
+    // Pobieranie aktualnej listy wpisów bezpośrednio z tabeli app_changelog
   const { data: entries = [], isLoading, isRefetching } = useQuery({
     queryKey: ["admin", "changelog"],
     queryFn: () => getChangelog(),
+    enabled: !!adminToken, // Uruchom zapytanie TYLKO gdy token jest podany
   });
 
   // Mutacja: Dodawanie wpisu do Supabase + automatyczne odświeżenie cache frontendu
