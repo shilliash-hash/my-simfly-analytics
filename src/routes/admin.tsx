@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -31,6 +31,12 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
   const token = useAdminToken();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   return (
     <AppShell>
       <PageHeader
@@ -38,7 +44,7 @@ function AdminPage() {
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
-      {token ? (
+      {mounted && token ? (
         <div className="space-y-8">
           <AdminTable token={token} />
           <HubSupportAdmin token={token} />
