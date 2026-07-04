@@ -67,8 +67,7 @@ function ChangelogPage() {
     toast.info("Logged out from Admin Mode");
   }
 
-  async function handleDelete(id: number) {
-    if (!window.confirm("Are you sure permanently delete?")) return;
+    async function handleDelete(id: number) {
     try {
       await deleteFn({ data: { id, token: adminToken } });
       toast.success("Log entry deleted");
@@ -78,6 +77,7 @@ function ChangelogPage() {
       toast.error("Failed to delete");
     }
   }
+
 
   if (!isMounted) {
     return (
