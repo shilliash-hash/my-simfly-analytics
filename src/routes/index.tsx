@@ -209,12 +209,12 @@ function Overview() {
                 />
                 <Area type="monotone" dataKey="pax" name="paxKept" stroke="var(--runway)" strokeWidth={2} fill="url(#gradPax)" />
                 <Area type="monotone" dataKey="paxVisitors" name="paxVisitors" stroke="var(--instrument)" strokeWidth={2} fill="url(#gradVisitors)" />
-              </AreaChart>
+                          </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
-        
-      {/* NOWA SEKCJA: Recent Updates (Changelog) */}
+
+        {/* NOWA SEKCJA: Recent Updates (Changelog) */}
         <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
           <div className="mb-4 flex items-center gap-2">
             <History className="h-4 w-4 text-runway" />
@@ -234,10 +234,11 @@ function Overview() {
               ))}
             </ul>
           </div>
-          
+        </div>
+      </section>
 
-
-        <div className="panel rounded-xl p-5">
+      {/* Sekcja ostatnich lotów (Recent flights) */}
+      <div className="panel rounded-xl p-5">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">Recent flights</h2>
             <Link to="/activity" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">All →</Link>
