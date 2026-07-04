@@ -227,8 +227,7 @@ function Overview() {
             })}
           </ul>
           </div>
-        </div>
-      </section>
+        </section>
 
       {/* Sekcja ostatnich aktywności/lotów */}
       <div className="panel rounded-xl p-5 mt-6">
