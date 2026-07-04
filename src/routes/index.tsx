@@ -33,6 +33,12 @@ export const Route = createFileRoute("/")({
 });
 
 function Overview() {
+const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Pobieramy pilota bezpośrednio z adresu URL (?pilot=nazwa) lub z pamięci lokalnej
   const pilot = typeof window !== "undefined" 
     ? new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || ""
@@ -50,7 +56,17 @@ function Overview() {
     }),
   );
 
-  const lastInvalidateRef = useRef<number>(0);
+  if (!isMounted) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Welcome back"
+          title="Loading Intel..."
+          description="Fetching live operations from SimFly.io API..."
+        />
+      </AppShell>
+ 
+      const lastInvalidateRef = useRef<number>(0);
 
   useEffect(() => {
     const now = Date.now();
