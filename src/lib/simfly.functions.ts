@@ -1,4 +1,4 @@
-import { createServerFn, getWebRequest } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
@@ -2714,14 +2714,14 @@ export interface ChangelogEntry {
 
 // Bezpieczna funkcja pobierająca instancję klienta Supabase bez wywoływania błędów kompilacji
 const getSupabaseInstance = () => {
-  const request = getWebRequest();
-  const cfContext = (request as any)?.context?.cloudflare?.env || {};
+  // Cloudflare Workers i Nitro (silnik TanStack) wstrzykują sekrety bezpośrednio do globalThis lub process.env
+  const globalEnv = (globalThis as any).process?.env || (globalThis as any).env || {};
   
-  const url = cfContext.SUPABASE_URL || process.env.SUPABASE_URL;
-  const serviceKey = cfContext.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const url = globalEnv.SUPABASE_URL || process.env.SUPABASE_URL;
+  const serviceKey = globalEnv.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Supabase URL or Service Role Key is missing in Cloudflare runtime context.");
+    throw new Error("Supabase URL or Service Role Key is missing in Cloudflare runtime.");
   }
   return createClient(url, serviceKey);
 };
