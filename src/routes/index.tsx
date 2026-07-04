@@ -17,16 +17,9 @@ import {
 import { useSimflyArgs } from "@/lib/viewed-user";
 
 export const Route = createFileRoute("/")({
-  validateSearch: (search: Record<string, unknown>) => ({
-    pilot: (search.pilot as string) || undefined,
-  }),
-  loader: ({ context, search }) =>
+  loader: ({ context }) =>
     context.queryClient.ensureQueryData(
-      queryOptions({ 
-        queryKey: ["simfly", search.pilot || "__self__"], 
-        queryFn: () => getSimflyPayload(search.pilot ? { data: { username: search.pilot } } : undefined), 
-        staleTime: 30_000 
-      }),
+      queryOptions({ queryKey: ["simfly", "__self__"], queryFn: () => getSimflyPayload(), staleTime: 30_000 }),
     ),
   component: Overview,
   head: () => ({
@@ -40,14 +33,18 @@ export const Route = createFileRoute("/")({
 });
 
 function Overview() {
-  const { pilot } = Route.useSearch();
+  // Pobieramy pilota bezpośrednio z adresu URL (?pilot=nazwa) lub z pamięci lokalnej
+  const pilot = typeof window !== "undefined" 
+    ? new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || ""
+    : "";
+
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-    const { data } = useSuspenseQuery(
+     const { data } = useSuspenseQuery(
     queryOptions({
-      queryKey: ["simfly", pilot || keyTag],
-      queryFn: () => fn(pilot ? { data: { username: pilot } } : (payload ? { data: payload } : undefined)),
+      queryKey: ["simfly", pilot || "__self__"],
+      queryFn: () => fn(pilot ? { data: { username: pilot } } : undefined),
       staleTime: 30 * 60_000,
       refetchInterval: 30 * 60_000,
     }),
@@ -802,16 +799,24 @@ function PilotSwitcher({ current }: { current: string | null }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(current ?? "");
 
-  function apply(e?: React.FormEvent) {
+   function apply(e?: React.FormEvent) {
     e?.preventDefault();
-    const v = value.trim();
-    setViewedUser(v || null);
+    const username = value.trim();
+    
+    if (username) {
+      localStorage.setItem("simfly:viewedPilot", username);
+      window.location.href = `/?pilot=${username}`; // 👈 Zmusza przeglądarkę do czystego przeładowania z nowym pilotem
+    } else {
+      localStorage.removeItem("simfly:viewedPilot");
+      window.location.href = "/";
+    }
     setOpen(false);
   }
-  
+
   function reset() {
     setValue("");
-    setViewedUser(null);
+    localStorage.removeItem("simfly:viewedPilot");
+    window.location.href = "/";
     setOpen(false);
   }
 
