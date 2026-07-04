@@ -55,21 +55,31 @@ function ChangelogPage() {
         eyebrow="System History"
         title="App Changelog"
         description="Every feature, improvement, and fix deployed to the platform."
-        actions={
-          <div className="flex items-center gap-3">
+               actions={
+          <div className="flex flex-wrap items-center gap-3">
             {!isAuth ? (
-              <button 
-                onClick={() => {
-                  const tok = prompt("Enter Admin Token to enable developer tools:");
-                  if (tok) {
-                    setAdminToken(tok);
-                    setIsAuth(true);
-                  }
-                }}
-                className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-3 py-1.5 text-[11px] uppercase tracking-widest text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-              >
-                <ShieldAlert className="h-3.5 w-3.5" /> Dev Mode
-              </button>
+              <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-2 py-1">
+                <input
+                  type="password"
+                  placeholder="Admin Token"
+                  className="mono bg-transparent text-[11px] outline-none text-foreground placeholder:text-muted-foreground w-28"
+                  onChange={(e) => {
+                    setAdminToken(e.target.value);
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (adminToken.trim()) {
+                      setIsAuth(true);
+                      toast.success("Dev Tools enabled");
+                    }
+                  }}
+                  className="mono text-[10px] uppercase tracking-widest text-runway hover:text-foreground bg-runway/10 px-2 py-0.5 rounded border border-runway/20"
+                >
+                  Activate
+                </button>
+              </div>
             ) : (
               <span className="mono text-[10px] text-runway bg-runway/10 border border-runway/20 px-2 py-1.5 rounded uppercase tracking-wider">
                 Dev Mode Active
