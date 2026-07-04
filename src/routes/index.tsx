@@ -9,12 +9,20 @@ import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
 } from "@/components/app-shell";
 import { HubSupportCard } from "@/components/hub-support";
-import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard } from "lucide-react";
+import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+
+// ============================================================================
+// RECENT UPDATES (TUTAJ DODAWAJ RĘCZNIE SWOJE WPISY)
+// ============================================================================
+const UPDATES = [
+  { version: "v 0.902", text: "Single Airport License checker added" },
+  { version: "v 0.901", text: "Hub Supporters database sync spam fix" },
+] as const;
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
@@ -208,6 +216,30 @@ function Overview() {
             </ResponsiveContainer>
           </div>
         </div>
+
+        <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
+          <div className="mb-4 flex items-center gap-2">
+            <History className="h-4 w-4 text-runway" />
+            <h2 className="font-display text-lg font-semibold">Recent Updates</h2>
+          </div>
+          <div className="overflow-y-auto max-h-64 pr-1">
+            <ul className="space-y-3">
+              {UPDATES.map((update, index) => (
+                <li key={index} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
+                  <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
+                    {update.version}
+                  </span>
+                  <span className="text-xs text-foreground/80 leading-relaxed">
+                    {update.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+
+        </section>
+            
 
         <div className="panel rounded-xl p-5">
           <div className="mb-3 flex items-center justify-between">
