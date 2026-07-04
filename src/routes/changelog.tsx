@@ -26,16 +26,20 @@ function ChangelogPage() {
   const changelogFn = useServerFn(getLatestChangelog);
   const deleteFn = useServerFn(deleteChangelogEntry);
 
-  const [inputToken, setInputToken] = useState("");
   const [adminToken, setAdminToken] = useState("");
   const [isAuth, setIsAuth] = useState(false);
 
-  // Synchronizacja stanu logowania bezpośrednio po zapisaniu tokenu
+  // Inteligentne sprawdzanie sesji administratora z panelu Backfill Admin przy ładowaniu strony
   useEffect(() => {
-    if (adminToken) {
-      setIsAuth(true);
+    if (typeof window !== "undefined") {
+      // Pobieramy token, który Twoja aplikacja zapisuje po kliknięciu "Unlock" w panelu admina
+      const savedToken = localStorage.getItem("simfly_admin_token") || sessionStorage.getItem("simfly_admin_token") || "";
+      if (savedToken) {
+        setAdminToken(savedToken);
+        setIsAuth(true);
+      }
     }
-  }, [adminToken]);
+  }, []);
 
   const { data: allUpdates = [] } = useQuery({
     queryKey: ["app-changelog-full"],
@@ -72,32 +76,9 @@ function ChangelogPage() {
         description="Every feature, improvement, and fix deployed to the platform."
         actions={
           <div className="flex flex-wrap items-center gap-3">
-            {!isAuth ? (
-              <div className="flex items-center gap-2 rounded-md border border-border bg-secondary/20 px-2 py-1">
-                <input
-                  type="password"
-                  placeholder="Admin Token"
-                  className="mono bg-transparent text-[11px] outline-none text-foreground placeholder:text-muted-foreground w-28"
-                  value={inputToken}
-                  onChange={(e) => setInputToken(e.target.value)}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    const trimmed = inputToken.trim();
-                    if (trimmed) {
-                      setAdminToken(trimmed);
-                      toast.success("Dev Tools enabled");
-                    }
-                  }}
-                  className="mono text-[10px] uppercase tracking-widest text-runway hover:text-foreground bg-runway/10 px-2 py-0.5 rounded border border-runway/20"
-                >
-                  Activate
-                </button>
-              </div>
-            ) : (
-              <span className="mono text-[10px] text-runway bg-runway/10 border border-runway/20 px-2 py-1.5 rounded uppercase tracking-wider">
-                Dev Mode Active
+            {isAuth && (
+              <span className="mono text-[10px] text-runway bg-runway/10 border border-runway/20 px-2 py-1.5 rounded uppercase tracking-wider animate-pulse">
+                Admin Mode Active
               </span>
             )}
             <Link to="/" className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary">
@@ -120,12 +101,10 @@ function ChangelogPage() {
             {allUpdates.map((update: any) => {
               const rawText = update.text || "";
               
-              // Elastyczne wykrywanie tagów w dowolnym miejscu wpisu za pomocą RegExp
               const hasFeature = /\[FEATURE\]/i.test(rawText);
-              const hasFix = /\[FIX\]/i.test(rawText) && !hasFeature; // Feature ma priorytet
+              const hasFix = /\[FIX\]/i.test(rawText) && !hasFeature;
               const hasPerf = /\[PERF\]/i.test(rawText) && !hasFeature && !hasFix;
 
-              // Oczyszczanie tekstu ze wszystkich znaczników z zachowaniem formatowania i nowych linii
               const displayText = rawText
                 .replace(/\[FIX\]/gi, "")
                 .replace(/\[FEATURE\]/gi, "")
@@ -150,7 +129,7 @@ function ChangelogPage() {
                     {isAuth && (
                       <button
                         onClick={() => handleDelete(Number(update.id))}
-                        className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10"
+                        className="text-muted-foreground hover:text-destructive transition p-1 rounded hover:bg-destructive/10 cursor-pointer"
                         title="Delete Entry"
                       >
                         <Trash2 className="h-4 w-4" />
