@@ -257,14 +257,10 @@ export function RotationCell({ rotation, max }: { rotation: number; max: number 
   );
 }
 
-export function formatNumber(n: any): string {
-  if (n === undefined || n === null) return "0";
-  const num = Number(n);
-  if (isNaN(num)) return "0";
-  
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(num >= 10_000_000 ? 1 : 2) + "M";
-  if (num >= 1_000) return (num / 1_000).toFixed(num >= 10_000 ? 0 : 1) + "k";
-  return num.toLocaleString();
+export function formatNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(n >= 10_000_000 ? 1 : 2) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(n >= 10_000 ? 0 : 1) + "k";
+  return n.toLocaleString();
 }
 
 export function relativeTime(iso: string): string {
