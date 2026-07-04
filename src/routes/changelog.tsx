@@ -33,7 +33,7 @@ function ChangelogPage() {
   useEffect(() => {
     if (typeof window !== "undefined") {
       // Pobieramy token, który Twoja aplikacja zapisuje po kliknięciu "Unlock" w panelu admina
-      const savedToken = localStorage.getItem("simfly_admin_token") || sessionStorage.getItem("simfly_admin_token") || "";
+      const savedToken = localStorage.getItem("simfly_admin_token") || sessionStorage.getItem("simfly:admin_token") || "";
       if (savedToken) {
         setAdminToken(savedToken);
         setIsAuth(true);
