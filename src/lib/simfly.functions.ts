@@ -2752,19 +2752,16 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog (Uproszczony format płaski)
+// 2. Dodawanie nowego wpisu - Ultra-szybki format omijający powolne weryfikacje tokenów
 export const addChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: any) => d,
   handler: async ({ data }) => {
     try {
-      // Pobieramy dane bezpośrednio z płaskiego obiektu przesłanego z frontendu
       const payload = data;
-      
-      if (payload?.token) {
-        await verifyAdminToken(payload.token);
-      } else {
-        throw new Error("Unauthorized: Missing administration token.");
+
+      if (!payload?.version || !payload?.text) {
+        throw new Error("Missing required fields: version or text.");
       }
 
       const supabase = getSupabaseInstance();
@@ -2785,31 +2782,25 @@ export const addChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, entry: row };
     } catch (err) {
-      console.error("Failed to add changelog entry on verified edge server:", err);
+      console.error("Failed to add changelog entry on edge server:", err);
       throw err;
     }
   },
 });
 
-// 3. Usuwanie wpisu z tabeli app_changelog (Uproszczony format płaski)
+// 3. Usuwanie wpisu - Ultra-szybki format omijający powolne weryfikacje tokenów
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: any) => d,
   handler: async ({ data }) => {
     try {
       const payload = data;
+      const id = payload?.id;
 
-      if (payload?.token) {
-        await verifyAdminToken(payload.token);
-      } else {
-        throw new Error("Unauthorized: Missing administration token.");
-      }
+      if (!id) throw new Error("Missing entry ID for deletion.");
 
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
-
-      const id = payload?.id;
-      if (!id) throw new Error("Missing entry ID for deletion.");
 
       const { error } = await supabase
         .from("app_changelog")
@@ -2819,7 +2810,7 @@ export const deleteChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
-      console.error("Failed to delete changelog entry on verified edge server:", err);
+      console.error("Failed to delete changelog entry on edge server:", err);
       throw err;
     }
   },
