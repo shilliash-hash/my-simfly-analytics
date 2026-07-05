@@ -14,41 +14,29 @@ import { sweepOwnedAirportsForHubSupport } from "@/lib/simfly.functions";
  * triggers. `/api/public/*` bypasses site auth so the handler enforces it.
  */
 async function runSweep(request: Request) {
-  // 1. POBIERAMY PARAMETRY Z LINKU URL (NAJBEZPIECZNIEJSZA METODA DLA CRONA)
-  const url = new URL(request.url);
-  const providedApiKey = url.searchParams.get("apikey") || request.headers.get("apikey") || "";
-  
-  // Pobieramy oczekiwany token z konfiguracji środowiskowej
-  const expectedAdminToken = process.env.ADMIN_TOKEN || "simfly_secret_hub_sweep_token";
+  const providedKey = request.headers.get("apikey") ?? "";
+  const providedAuth = (request.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  const expectedKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? "";
+  const adminToken = process.env.ADMIN_TOKEN ?? "";
 
-  // 2. WERYFIKACJA: Przepuszczamy, jeśli klucz się zgadza
-  if (!providedApiKey || providedApiKey !== expectedAdminToken) {
-    console.error("[Sweep Auth] Refused connection: Invalid or missing API Key.");
-    return new Response(JSON.stringify({ error: "Unauthorized access" }), { 
-      status: 401,
-      headers: { "Content-Type": "application/json" }
-    });
-  }
+  const ok = = 
+    (expectedKey && (providedKey === expectedKey || providedAuth === expectedKey)) ||
+    (adminToken && (providedKey === adminToken || providedAuth === adminToken));
 
-  try {
-    // Odpalamy bezpieczną pętlę i pobieramy arrivals
-    const result = await sweepOwnedAirportsForHubSupport({ pagesPerAirport: 5 });
-    
-    // Zwracamy leciutki JSON, aby cron-job.org nigdy więcej nie zgłosił błędu wielkości logu!
-    return new Response(JSON.stringify({ success: true, status: "OK" }), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
+  if (!ok) return new Response("Unauthorized", { status: 401 });
+
+  // PANCERNE ROZWIĄZANIE: Odpalamy ciężką funkcję w tle, nie czekając na jej zakończenie (brak await!)
+  sweepOwnedAirportsForHubSupport({ pagesPerAirport: 5 })
+    .then((result) => {
+      console.log("[Sweep Async Success] Process complete:", result);
+    })
+    .catch((err) => {
+      console.error("[Sweep Async Error] Task failed in background:", err);
     });
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error("[hub-support-sweep] failed", err);
-    return new Response(
-      JSON.stringify({ ok: false, error: message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
+
+  // Natychmiast zwracamy mikro-odpowiedź do cron-job.org (czas wykonania: ~1ms, brak ryzyka 524 Timeout)
+  return Response.json({ success: true, trigger: "fired_successfully" });
 }
-
 
 export const Route = createFileRoute("/api/public/hooks/hub-support-sweep")({
   server: {
