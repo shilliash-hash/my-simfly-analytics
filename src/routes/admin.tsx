@@ -605,7 +605,7 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
 
   // 2. POPRAWIONE: Jawne opakowanie danych w { data: vars } dla mutacji POST
   const addMutation = useMutation({
-    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry({ data: vars }),
+    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry({ data: { token: adminToken, ...vars } }),
     onSuccess: () => {
       setVersion("");
       setText("");
@@ -619,7 +619,7 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
 
   // 3. POPRAWIONE: Jawne opakowanie ID w { data: id } dla mutacji POST
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteChangelogEntry({ data: id }),
+    mutationFn: (id: string) => deleteChangelogEntry({ data: { token: adminToken, id } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "changelog"] });
       queryClient.invalidateQueries({ queryKey: ["changelog", "list"] });
