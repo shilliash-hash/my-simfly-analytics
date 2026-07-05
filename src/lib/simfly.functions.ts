@@ -2753,38 +2753,32 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog (Pancerny format)
+// 2. Dodawanie nowego wpisu do tabeli app_changelog (Sprawdzony format)
 export const addChangelogEntry = createServerFn({
   method: "POST",
-  validator: (data: any) => data, // Przyjmujemy surowy obiekt bez rygorystycznej blokady parsera
+  validator: (data: any) => data,
   handler: async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      // Wyciągamy zmienne niezależnie od tego, jak Vinxi opakowało je w locie
-      const version = data?.version || data?.data?.version;
-      const text = data?.text || data?.data?.text;
-      const type = data?.type || data?.data?.type || 'FEATURE';
-
-      if (!version || !text) {
-        throw new Error("Missing version or text payload.");
-      }
-
-      const { data: insertedData, error } = await supabase
+      // Wyciągamy dane z przesłanego obiektu vars
+      const payload = data?.data || data;
+      
+      const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
-          {
-            version: version.trim(),
-            text: text.trim(),
-            type: type,
+          { 
+            version: payload.version, 
+            text: payload.text,
+            type: payload.type || "FEATURE" // Bezpieczny fallback, gdyby typ nie dotarł
           }
         ])
         .select()
         .single();
 
       if (error) throw new Error(error.message);
-      return { success: true, entry: insertedData };
+      return { success: true, entry: row };
     } catch (err) {
       console.error("Failed to add changelog entry:", err);
       throw err;
