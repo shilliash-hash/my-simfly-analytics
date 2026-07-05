@@ -19,7 +19,7 @@ async function runSweep(request: Request) {
   const expectedKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? "";
   const adminToken = process.env.ADMIN_TOKEN ?? "";
 
-  const ok = = 
+  const ok =  
     (expectedKey && (providedKey === expectedKey || providedAuth === expectedKey)) ||
     (adminToken && (providedKey === adminToken || providedAuth === adminToken));
 
