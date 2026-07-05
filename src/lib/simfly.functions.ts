@@ -2760,7 +2760,11 @@ export const addChangelogEntry = createServerFn({
   handler: async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
-      const { data: insertedData, error } = await supabase.from("app_changelog").insert([
+      if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      const { data: insertedData, error } = await supabase
+        .from("app_changelog")
+        .insert([
           {
             version: data.version,
             text: data.text,
@@ -2786,7 +2790,13 @@ export const deleteChangelogEntry = createServerFn({
   handler: async ({ data: id }) => {
     try {
       const supabase = getSupabaseInstance();
-      const { error } = await supabase.from("app_changelog").delete().eq("id", id);
+      if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      const { error } = await supabase
+        .from("app_changelog")
+        .delete()
+        .eq("id", id);
+
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
@@ -2795,4 +2805,3 @@ export const deleteChangelogEntry = createServerFn({
     }
   },
 });
-
