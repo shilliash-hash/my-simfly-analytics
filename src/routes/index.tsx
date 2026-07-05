@@ -132,6 +132,7 @@ function Overview() {
               )}
             </div>
           </div>
+         }                
         actions={
           <div className="flex items-center gap-3">
             <PilotSwitcher current={viewedUser} />
