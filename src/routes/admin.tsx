@@ -711,31 +711,28 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
             {isRefetching && <RefreshCw className="h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
 
-          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-2">
-            {entries.length === 0 && !isLoading && (
-              <p className="text-xs text-muted-foreground italic text-center p-4">No active changelog items found in Supabase.</p>
-            )}
-
-            {entries.map((entry: any) => (
+                <div className="space-y-2 max-h-[340px] overflow-y-auto pr-2">
+          {Array.isArray(entries) && entries.length > 0 ? (
+            entries.map((entry: any) => (
               <div
-                key={entry.id}
+                key={entry?.id || Math.random()}
                 className="flex items-center justify-between p-3 rounded-md border border-border/30 bg-secondary/10 hover:border-border/80 transition"
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20 shrink-0">
-                    {entry.version}
+                    {entry?.version || 'v0.0'}
                   </span>
-                  <span className={`mono text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${getTagStyle(entry.type)}`}>
-                    {entry.type}
+                  <span className={`mono text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${getTagStyle(entry?.type || 'FEATURE')}`}>
+                    {entry?.type || 'FEATURE'}
                   </span>
-                  <p className="text-xs text-foreground truncate">{entry.text}</p>
+                  <p className="text-xs text-foreground truncate">{entry?.text || ''}</p>
                 </div>
                 
                 <button
                   type="button"
                   onClick={() => {
-                    if (window.confirm(`Delete entry ${entry.version} [${entry.type}]?`)) {
-                      deleteMutation.mutate(entry.id);
+                    if (window.confirm(`Delete entry ${entry?.version}?`)) {
+                      deleteMutation.mutate(entry?.id);
                     }
                   }}
                   disabled={deleteMutation.isPending}
@@ -745,12 +742,16 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>
-            ))}
-          </div>
+            ))
+          ) : (
+            <p className="text-xs text-muted-foreground italic text-center p-4">No active changelog items found in Supabase.</p>
+          )}
         </div>
       </div>
     </div>
+  </div>
   );
 }
 
-// router-force-reload: v1
+// router-force-reload: v2
+
