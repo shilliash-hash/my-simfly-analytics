@@ -37,56 +37,12 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-
-  // 1. DYNAMICZNA OBECNOŚĆ UŻYTKOWNIKÓW ONLINE (SUPABASE REALTIME PRESENCE)
-  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
-
-  useEffect(() => {
-    // Importujemy dynamicznie klienta publicznego, aby zachować zgodność ze strukturą SSR Cloudflare
-    let channel: any = null;
-    
-    const initRealtimePresence = async () => {
-      try {
-        const { supabase } = await import("@/integrations/supabase/client");
-        if (!supabase) return;
-
-        const myUsername = viewedUser || data?.me?.displayName || "shill";
-
-        // Tworzymy globalny pokój obecności w pamięci podręcznej WebSockets
-        channel = supabase.channel("global_hub_presence", {
-          config: { presence: { key: myUsername } }
-        });
-
-        channel
-          .on("presence", { event: "sync" }, () => {
-            const state = channel.presenceState();
-            // Wyciągamy unikalne nazwy zalogowanych użytkowników z obecnego stanu kanału
-            const users = Object.keys(state);
-            setOnlineUsers(users.length > 0 ? users : [myUsername]);
-          })
-          .subscribe(async (status: string) => {
-            if (status === "SUBSCRIBED") {
-              // Rejestrujemy naszą obecność na serwerze
-              await channel.track({ online_at: new Date().toISOString() });
-            }
-          });
-      } catch (err) {
-        console.error("Presence system failed to initialize:", err);
-      }
-    };
-
-    initRealtimePresence();
-
-    // Czyszczenie subskrypcji WebSocket po opuszczeniu strony przez użytkownika
-    return () => {
-      if (channel) {
-        channel.untrack();
-      }
-    };
-  }, [viewedUser, data?.me?.displayName]);
-
-console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
-
+    console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
+    const { data: liveChangelogFeed = [] } = useQuery({
+    queryKey: ["changelog", "list"],
+    queryFn: () => getChangelogEntries(),
+    staleTime: 60_000 * 5,
+  });
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -141,33 +97,31 @@ console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   });
 
 
-   return (
+  return (
     <AppShell>
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
-                description={
+                    description={
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
             </p>
           </div>
-        }
-               actions={
-          !data ? null : (
-            <div className="flex items-center gap-3">
-              <PilotSwitcher current={viewedUser} />
-              {data?.me?.avatarUrl ? (
-                <img
-                  src={data.me.avatarUrl}
-                  alt={`@${data.me.handle} avatar`}
-                  width={64}
-                  height={64}
-                  className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
-                />
-              ) : null}
-            </div>
-          )
+         }                
+        actions={
+          <div className="flex items-center gap-3">
+            <PilotSwitcher current={viewedUser} />
+            {data.me.avatarUrl ? (
+              <img
+                src={data.me.avatarUrl}
+                alt={`@${data.me.handle} avatar`}
+                width={64}
+                height={64}
+                className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
+              />
+            ) : null}
+          </div>
         }
       />
 
