@@ -602,7 +602,7 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
 
   // Mutacja: Dodawanie wpisu do Supabase + automatyczne odświeżenie cache frontendu
   const addMutation = useMutation({
-    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry({ data: vars }),
+    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry(vars),
     onSuccess: () => {
       setVersion("");
       setText("");
@@ -617,7 +617,7 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
 
   // Mutacja: Bezpieczne usuwanie wpisu z Supabase
     const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteChangelogEntry({ data: id }),
+   mutationFn: (id: string) => deleteChangelogEntry(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "changelog"] });
       queryClient.invalidateQueries({ queryKey: ["changelog", "list"] });
