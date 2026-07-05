@@ -613,15 +613,17 @@ export function AdminChangelog() {
             <div className="mono text-[10px] bg-secondary/30 border border-border/50 rounded p-2 text-muted-foreground select-all truncate">
               src/lib/changelog-data.ts
             </div>
-            <a 
-              href="https://github.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-runway px-3 py-1.5 text-xs font-medium text-white shadow hover:bg-runway/90 transition"
+             <button 
+              type="button"
+              onClick={() => {
+                navigator.clipboard.writeText("src/lib/changelog-data.ts");
+                alert("File path copied to clipboard! Open this file in your editor to update changelog.");
+              }}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-runway px-3 py-1.5 text-xs font-medium text-white shadow hover:bg-runway/90 transition cursor-pointer"
             >
               <PlusCircle className="h-3.5 w-3.5" />
-              Open Data File on GitHub
-            </a>
+              Copy File Path
+            </button>
           </div>
         </div>
 
