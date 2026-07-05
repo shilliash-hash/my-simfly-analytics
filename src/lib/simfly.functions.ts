@@ -1,4 +1,4 @@
-import { createServerFn, getWebRequest } from "@tanstack/react-start";
+import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
 import type {
@@ -2756,35 +2756,24 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu - Odczyt bezpośrednio ze strumienia żądania HTTP Cloudflare
+// 2. Dodawanie nowego wpisu do tabeli app_changelog
 export const addChangelogEntry = createServerFn({
   method: "POST",
-  handler: async () => {
+  handler: async (args: any) => {
     try {
-      // Wyciągamy natywny obiekt żądania HTTP przesłany z frontendu
-      const request = getWebRequest();
-      if (!request) throw new Error("Web request context is missing.");
-      
-      // Zczytujemy surowy obiekt JSON wysłany w body
-      const body = await request.json();
-      
-      // TanStack Start pakuje zmienne pod klucz 'data' lub przesyła je bezpośrednio
-      const payload = body?.data || body;
-
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      if (!payload?.version || !payload?.text) {
-        throw new Error("Missing required payload fields (version or text).");
-      }
+      // Wyciągamy dane z jawnego payloadu { data: vars }, który wysyła nasz zaktualizowany admin.tsx
+      const payload = args?.data || args;
 
       const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
-            version: String(payload.version).trim(), 
-            text: String(payload.text).trim(),
-            type: payload.type || "FEATURE" 
+            version: String(payload?.version || "").trim(), 
+            text: String(payload?.text || "").trim(),
+            type: payload?.type || "FEATURE" 
           }
         ])
         .select()
@@ -2793,28 +2782,21 @@ export const addChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, entry: row };
     } catch (err) {
-      console.error("Failed to add changelog entry on edge server:", err);
+      console.error("Failed to add changelog entry:", err);
       throw err;
     }
   },
 });
 
-// 3. Usuwanie wpisu - Odczyt bezpośrednio ze strumienia żądania HTTP Cloudflare
+// 3. Usuwanie wpisu z tabeli app_changelog
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
-  handler: async () => {
+  handler: async (args: any) => {
     try {
-      const request = getWebRequest();
-      if (!request) throw new Error("Web request context is missing.");
-      
-      const body = await request.json();
-      const payload = body?.data || body;
-      const id = typeof payload === 'object' ? payload?.id : payload;
-
-      if (!id) throw new Error("Missing entry ID for deletion.");
-
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      const id = typeof args === 'object' ? (args?.data || args?.id) : args;
 
       const { error } = await supabase
         .from("app_changelog")
@@ -2824,8 +2806,9 @@ export const deleteChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
-      console.error("Failed to delete changelog entry on edge server:", err);
+      console.error("Failed to delete changelog entry:", err);
       throw err;
     }
   },
 });
+
