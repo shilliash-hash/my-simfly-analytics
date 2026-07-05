@@ -1,3 +1,4 @@
+import { staticChangelogFeed } from "@/lib/changelog-data";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -10,7 +11,7 @@ import {
 import { HubSupportCard } from "@/components/hub-support";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, getChangelogEntries } from "@/lib/simfly.functions";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -251,28 +252,27 @@ function Overview() {
               <History className="h-4 w-4 text-runway" />
               <h2 className="font-display text-lg font-semibold">Recent Updates</h2>
             </div>
-            
-            <div className="overflow-y-auto max-h-64 pr-1">
+                       <div className="overflow-y-auto max-h-64 pr-1">
               <ul className="space-y-3">
-                {Array.isArray(liveChangelogFeed) && liveChangelogFeed.length > 0 ? (
-                  liveChangelogFeed.map((update) => {
+                {staticChangelogFeed && staticChangelogFeed.length > 0 ? (
+                  staticChangelogFeed.map((update) => {
                     const tagColor = 
-                      update?.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
-                      update?.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
+                      update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
+                      update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
                       "text-runway bg-runway/15 border-runway/30";
 
                     return (
-                      <li key={update?.id} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
+                      <li key={update.id} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
                         <div className="flex items-center gap-2">
                           <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
-                            {update?.version}
+                            {update.version}
                           </span>
                           <span className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${tagColor}`}>
-                            {update?.type || 'FEATURE'}
+                            {update.type}
                           </span>
                         </div>
                         <span className="text-xs text-text-foreground/80 leading-relaxed">
-                          {update?.text}
+                          {update.text}
                         </span>
                       </li>
                     );
