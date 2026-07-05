@@ -10,7 +10,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
  {
     id: "1",
     version: "v 0.904",
-    type: "FEATURE""FIX",
+    type: "UPGRADE",
     text: "Single airport license checker option added. DB traffic from server reduced."
   },
   {
