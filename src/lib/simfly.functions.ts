@@ -2728,18 +2728,20 @@ const getSupabaseInstance = () => {
   return createClient(url, serviceKey);
 };
 
-// 1. Pobieranie wpisów z tabeli app_changelog
-export const getChangelogEntries = createServerFn({
-  method: "GET",
-  handler: async () => {
+// 1. Pobieranie wpisów z tabeli app_changelog (Ujednolicony format łańcuchowy RPC)
+export const getChangelogEntries = createServerFn({ method: "GET" })
+  .handler(async () => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) {
         console.error("Supabase client could not be initialized due to missing secrets.");
-        return []; // Zwracamy czystą tablicę, aby zapobiec awarii b.map()
+        return [];
       }
 
-      const { data, error } = await supabase.from("app_changelog").select("id, version, text, type, created_at").order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("app_changelog")
+        .select("id, version, text, type, created_at")
+        .order("created_at", { ascending: false });
 
       if (error) {
         console.error("Supabase response error:", error.message);
@@ -2748,30 +2750,25 @@ export const getChangelogEntries = createServerFn({
       return Array.isArray(data) ? data : [];
     } catch (err) {
       console.error("Critical error in getChangelogEntries handler:", err);
-      return []; // Zawsze zwracamy tablicę, gwarantując stabilność frontendu
+      return [];
     }
-  },
-});
+  });
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog (Sprawdzony format)
-export const addChangelogEntry = createServerFn({
-  method: "POST",
-  validator: (data: any) => data,
-  handler: async ({ data }) => {
+// 2. Dodawanie nowego wpisu do tabeli app_changelog (Sprawdzony, łańcuchowy format Vinxi RPC)
+export const addChangelogEntry = createServerFn({ method: "POST" })
+  .validator((d: { version: string; text: string; type?: string }) => d)
+  .handler(async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      // Wyciągamy dane z przesłanego obiektu vars
-      const payload = data?.data || data;
-      
       const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
-            version: payload.version, 
-            text: payload.text,
-            type: payload.type || "FEATURE" // Bezpieczny fallback, gdyby typ nie dotarł
+            version: data.version, 
+            text: data.text,
+            type: data.type || "FEATURE" 
           }
         ])
         .select()
@@ -2783,34 +2780,25 @@ export const addChangelogEntry = createServerFn({
       console.error("Failed to add changelog entry:", err);
       throw err;
     }
-  },
-});
+  });
 
-// 3. Usuwanie wpisu z tabeli app_changelog (Pancerny format)
-export const deleteChangelogEntry = createServerFn({
-  method: "POST",
-  validator: (id: any) => id,
-  handler: async ({ data }) => {
+// 3. Usuwanie wpisu z tabeli app_changelog (Sprawdzony, łańcuchowy format Vinxi RPC)
+export const deleteChangelogEntry = createServerFn({ method: "POST" })
+  .validator((id: string) => id)
+  .handler(async ({ data: id }) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      const rawId = typeof data === 'object' ? (data?.id || data?.data) : data;
-
-      if (!rawId) {
-        throw new Error("Missing entry ID for deletion.");
-      }
-
       const { error } = await supabase
         .from("app_changelog")
         .delete()
-        .eq("id", rawId);
+        .eq("id", id);
 
       if (error) throw new Error(error.message);
-      return { success: true, deletedId: rawId };
+      return { success: true, deletedId: id };
     } catch (err) {
       console.error("Failed to delete changelog entry:", err);
       throw err;
     }
-  },
-});
+  });
