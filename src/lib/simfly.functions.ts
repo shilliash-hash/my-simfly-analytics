@@ -2756,7 +2756,7 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog
+// 2. Ostateczne i pancerne dodawanie wpisów do bazy Supabase na Cloudflare Workers
 export const addChangelogEntry = createServerFn({
   method: "POST",
   handler: async (args: any) => {
@@ -2764,16 +2764,26 @@ export const addChangelogEntry = createServerFn({
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      // Wyciągamy dane z jawnego payloadu { data: vars }, który wysyła nasz zaktualizowany admin.tsx
-      const payload = args?.data || args;
+      // Wyciągamy payload ze wszystkich możliwych lokalizacji Vinxi/TanStack RPC
+      const payload = args?.data?.data || args?.data || args?.vars || args;
+      
+      const version = payload?.version;
+      const text = payload?.text;
+      const type = payload?.type || "FEATURE";
+
+      // Jeśli dane nie dotarły w standardowym obiekcie, sprawdzamy surowy kontekst
+      if (!version || !text) {
+        console.error("Data tracking failed. Received payload keys:", Object.keys(payload || {}));
+        throw new Error("Missing required payload fields: version or text.");
+      }
 
       const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
-            version: String(payload?.version || "").trim(), 
-            text: String(payload?.text || "").trim(),
-            type: payload?.type || "FEATURE" 
+            version: String(version).trim(), 
+            text: String(text).trim(),
+            type: String(type).toUpperCase() 
           }
         ])
         .select()
@@ -2782,13 +2792,13 @@ export const addChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, entry: row };
     } catch (err) {
-      console.error("Failed to add changelog entry:", err);
+      console.error("Failed to add changelog entry on edge server:", err);
       throw err;
     }
   },
 });
 
-// 3. Usuwanie wpisu z tabeli app_changelog
+// 3. Ostateczne i pancerne usuwanie wpisów z bazy Supabase na Cloudflare Workers
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
   handler: async (args: any) => {
@@ -2796,7 +2806,10 @@ export const deleteChangelogEntry = createServerFn({
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
-      const id = typeof args === 'object' ? (args?.data || args?.id) : args;
+      const payload = args?.data?.data || args?.data || args;
+      const id = typeof payload === 'object' ? (payload?.id || payload?.data) : payload;
+
+      if (!id) throw new Error("Missing entry ID for deletion.");
 
       const { error } = await supabase
         .from("app_changelog")
@@ -2806,8 +2819,9 @@ export const deleteChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
-      console.error("Failed to delete changelog entry:", err);
+      console.error("Failed to delete changelog entry on edge server:", err);
       throw err;
     }
   },
 });
+
