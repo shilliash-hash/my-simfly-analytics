@@ -2753,22 +2753,31 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog
+// 2. Dodawanie nowego wpisu do tabeli app_changelog (Pancerny format)
 export const addChangelogEntry = createServerFn({
   method: "POST",
-  validator: (data: { version: string; text: string; type: string }) => data,
+  validator: (data: any) => data, // Przyjmujemy surowy obiekt bez rygorystycznej blokady parsera
   handler: async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
+      // Wyciągamy zmienne niezależnie od tego, jak Vinxi opakowało je w locie
+      const version = data?.version || data?.data?.version;
+      const text = data?.text || data?.data?.text;
+      const type = data?.type || data?.data?.type || 'FEATURE';
+
+      if (!version || !text) {
+        throw new Error("Missing version or text payload.");
+      }
+
       const { data: insertedData, error } = await supabase
         .from("app_changelog")
         .insert([
           {
-            version: data.version,
-            text: data.text,
-            type: data.type,
+            version: version.trim(),
+            text: text.trim(),
+            type: type,
           }
         ])
         .select()
@@ -2783,22 +2792,28 @@ export const addChangelogEntry = createServerFn({
   },
 });
 
-// 3. Usuwanie wpisu z tabeli app_changelog
+// 3. Usuwanie wpisu z tabeli app_changelog (Pancerny format)
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
-  validator: (id: string) => id,
-  handler: async ({ data: id }) => {
+  validator: (id: any) => id,
+  handler: async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
+      const rawId = typeof data === 'object' ? (data?.id || data?.data) : data;
+
+      if (!rawId) {
+        throw new Error("Missing entry ID for deletion.");
+      }
+
       const { error } = await supabase
         .from("app_changelog")
         .delete()
-        .eq("id", id);
+        .eq("id", rawId);
 
       if (error) throw new Error(error.message);
-      return { success: true, deletedId: id };
+      return { success: true, deletedId: rawId };
     } catch (err) {
       console.error("Failed to delete changelog entry:", err);
       throw err;
