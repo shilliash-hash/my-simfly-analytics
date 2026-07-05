@@ -1042,7 +1042,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
               for (const f of r.flights ?? []) {
                 const n = normaliseHistFlight(f, ap.icao, username);
                 if (!n) continue;
-                if (n.role === "landing" && n.paxAirport > 0) {
+                // A visitor landing at my airport qualifies for weekly hub
+                // support regardless of the PAX split — the arrival itself
+                // is what matters, not how SimFly divided the payout.
+                if (n.role === "landing") {
                   support.push({
                     id: n.id,
                     visitor: n.visitor,
