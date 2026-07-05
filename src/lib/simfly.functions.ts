@@ -2731,7 +2731,7 @@ const getSupabaseInstance = () => {
   return createClient(url, serviceKey);
 };
 
-// 1. Pobieranie wpisów z tabeli app_changelog (Używa standardowej instancji pobierania)
+// 1. Pobieranie wpisów z tabeli app_changelog
 export const getChangelogEntries = createServerFn({
   method: "GET",
   handler: async () => {
@@ -2752,22 +2752,25 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu - WIERNA KOPIA DZIAŁAJĄCEJ ARCHITEKTURY Z TWOJEGO PROJEKTU
+// 2. Dodawanie nowego wpisu z pełną weryfikacją bezpiecznego tokenu admina
 export const addChangelogEntry = createServerFn({
   method: "POST",
-  handler: async (args: any) => {
+  validator: (d: any) => d,
+  handler: async ({ data }) => {
     try {
-      // Importujemy dedykowany klient serwerowy, którego używają inne działające mutacje w Hubie
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const payload = data?.data || data;
       
-      // Wyciągamy zmienne przesłane w paczce { data: vars } z pliku admin.tsx
-      const payload = args?.data || args;
-
-      if (!payload?.version || !payload?.text) {
-        throw new Error("Missing required fields: version or text.");
+      // WYMUSZENIE WERYFIKACJI: Serwer sprawdza przesłany token za pomocą wbudowanej funkcji Hubu
+      if (payload?.token) {
+        await verifyAdminToken(payload.token);
+      } else {
+        throw new Error("Unauthorized: Missing administration token.");
       }
 
-      const { data: row, error } = await supabaseAdmin
+      const supabase = getSupabaseInstance();
+      if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
@@ -2782,25 +2785,33 @@ export const addChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, entry: row };
     } catch (err) {
-      console.error("Failed to add changelog entry via supabaseAdmin:", err);
+      console.error("Failed to add changelog entry on verified edge server:", err);
       throw err;
     }
   },
 });
 
-// 3. Usuwanie wpisu - WIERNA KOPIA DZIAŁAJĄCEJ ARCHITEKTURY Z TWOJEGO PROJEKTU
+// 3. Usuwanie wpisu z pełną weryfikacją bezpiecznego tokenu admina
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
-  handler: async (args: any) => {
+  validator: (d: any) => d,
+  handler: async ({ data }) => {
     try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      
-      const payload = args?.data || args;
-      const id = typeof payload === 'object' ? payload?.id : payload;
+      const payload = data?.data || data;
 
+      if (payload?.token) {
+        await verifyAdminToken(payload.token);
+      } else {
+        throw new Error("Unauthorized: Missing administration token.");
+      }
+
+      const supabase = getSupabaseInstance();
+      if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      const id = payload?.id;
       if (!id) throw new Error("Missing entry ID for deletion.");
 
-      const { error } = await supabaseAdmin
+      const { error } = await supabase
         .from("app_changelog")
         .delete()
         .eq("id", id);
@@ -2808,9 +2819,8 @@ export const deleteChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
-      console.error("Failed to delete changelog entry via supabaseAdmin:", err);
+      console.error("Failed to delete changelog entry on verified edge server:", err);
       throw err;
     }
   },
 });
-
