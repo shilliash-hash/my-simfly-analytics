@@ -37,7 +37,55 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-    console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
+
+  // 1. DYNAMICZNA OBECNOŚĆ UŻYTKOWNIKÓW ONLINE (SUPABASE REALTIME PRESENCE)
+  const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
+
+  useEffect(() => {
+    // Importujemy dynamicznie klienta publicznego, aby zachować zgodność ze strukturą SSR Cloudflare
+    let channel: any = null;
+    
+    const initRealtimePresence = async () => {
+      try {
+        const { supabase } = await import("@/integrations/supabase/client");
+        if (!supabase) return;
+
+        const myUsername = viewedUser || data?.me?.displayName || "shill";
+
+        // Tworzymy globalny pokój obecności w pamięci podręcznej WebSockets
+        channel = supabase.channel("global_hub_presence", {
+          config: { presence: { key: myUsername } }
+        });
+
+        channel
+          .on("presence", { event: "sync" }, () => {
+            const state = channel.presenceState();
+            // Wyciągamy unikalne nazwy zalogowanych użytkowników z obecnego stanu kanału
+            const users = Object.keys(state);
+            setOnlineUsers(users.length > 0 ? users : [myUsername]);
+          })
+          .subscribe(async (status: string) => {
+            if (status === "SUBSCRIBED") {
+              // Rejestrujemy naszą obecność na serwerze
+              await channel.track({ online_at: new Date().toISOString() });
+            }
+          });
+      } catch (err) {
+        console.error("Presence system failed to initialize:", err);
+      }
+    };
+
+    initRealtimePresence();
+
+    // Czyszczenie subskrypcji WebSocket po opuszczeniu strony przez użytkownika
+    return () => {
+      if (channel) {
+        channel.untrack();
+      }
+    };
+  }, [viewedUser, data?.me?.displayName]);
+
+console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
 
   const { data } = useSuspenseQuery(
     queryOptions({
@@ -104,22 +152,18 @@ function Overview() {
               Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
             </p>
 
-            {/* SEKCJA: ACTIVE PILOTS IN HUB (CAŁKOWICIE ODZYSKANA I BEZPIECZNA) */}
+                       {/* SEKCJA: ACTIVE USERS IN HUB */}
             <div className="flex flex-wrap items-center gap-2 border-t border-border/10 pt-2.5 mt-2 max-w-xl">
               <span className="mono text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mr-1">
                 Active pilots in Hub:
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
-                {(() => {
-                  const mockActive = ["shill", "VFR_Flyer", "Boeing_King", "Cargo_Route"];
-                  const currentPilot = viewedUser || "shill";
-                  const uniqueList = Array.from(new Set([currentPilot, ...mockActive]));
-
-                  return uniqueList.map((pilot) => {
-                    const isMe = String(pilot).toLowerCase() === String(currentPilot).toLowerCase();
+                {onlineUsers && onlineUsers.length > 0 ? (
+                  onlineUsers.map((user) => {
+                    const isMe = String(user).toLowerCase() === String(viewedUser || data?.me?.displayName || "shill").toLowerCase();
                     return (
                       <span
-                        key={pilot}
+                        key={user}
                         className={`mono text-[10px] font-medium px-2 py-0.5 rounded border transition-all ${
                           isMe 
                             ? "bg-runway/10 border-runway/30 text-runway shadow-[0_0_6px_rgba(var(--runway-rgb),0.1)]" 
@@ -127,11 +171,13 @@ function Overview() {
                         }`}
                       >
                         <span className={`inline-block h-1 w-1 rounded-full mr-1.5 ${isMe ? "bg-runway animate-pulse" : "bg-muted-foreground/60"}`} />
-                        @{pilot}
+                        @{user}
                       </span>
                     );
-                  });
-                })()}
+                  })
+                ) : (
+                  <span className="mono text-[10px] text-muted-foreground italic">Connecting to presence server...</span>
+                )}
               </div>
             </div>
           </div>
