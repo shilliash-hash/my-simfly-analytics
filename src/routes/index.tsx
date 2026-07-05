@@ -146,42 +146,11 @@ console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
-        description={
+                description={
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
             </p>
-
-                     {/* SEKCJA: ACTIVE PILOTS IN HUB (W PEŁNI STABILNA WERSJA FRONTENDOWA) */}
-            <div className="flex flex-wrap items-center gap-2 border-t border-border/10 pt-2.5 mt-2 max-w-xl">
-              <span className="mono text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mr-1">
-                Active pilots in Hub:
-              </span>
-              <div className="flex flex-wrap items-center gap-1.5">
-                {(() => {
-                  const mockActive = ["shill", "VFR_Flyer", "Boeing_King", "Cargo_Route"];
-                  const currentPilot = viewedUser || "shill";
-                  const uniqueList = Array.from(new Set([currentPilot, ...mockActive]));
-
-                  return uniqueList.map((pilot) => {
-                    const isMe = String(pilot).toLowerCase() === String(currentPilot).toLowerCase();
-                    return (
-                      <span
-                        key={pilot}
-                        className={`mono text-[10px] font-medium px-2 py-0.5 rounded border transition-all ${
-                          isMe 
-                            ? "bg-runway/10 border-runway/30 text-runway shadow-[0_0_6px_rgba(var(--runway-rgb),0.1)]" 
-                            : "bg-secondary/20 border-border/30 text-muted-foreground"
-                        }`}
-                      >
-                        <span className={`inline-block h-1 w-1 rounded-full mr-1.5 ${isMe ? "bg-runway animate-pulse" : "bg-muted-foreground/60"}`} />
-                        @{pilot}
-                      </span>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
           </div>
         }
                actions={
