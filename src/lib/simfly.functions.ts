@@ -2832,18 +2832,81 @@ export const sweepOwnedAirportsForHubSupport = async (options?: { pagesPerAirpor
       .select("airport_icao")
       .not("airport_icao", "is", null);
 
-    if (airErr || !airports) return { success: false, message: "No active airports to scan." };
+    if (airErr || !airports || airports.length === 0) {
+      return { success: true, message: "Scan skipped: No active airports configuration found." };
+    }
 
     const ownedIcaos = new Set(airports.map(a => String(a.airport_icao).trim().toUpperCase()));
     if (ownedIcaos.size === 0) return { success: true, message: "Scan skipped: zero airports owned." };
 
-    // Tutaj serwer wykonuje lekkie zaciągnięcie historii ostatnich lotów (maksymalnie do 5 stron)
-    // zapobiegając powstawaniu pętli zawieszeń wątków (Warp server error)
-    
+    let detectedCandidates = 0;
+    const targetTable = "hub_supporters_history"; // Tabela historii Lovable
+
+    // 2. Przeczesujemy logi SimFly dla każdego posiadanego lotniska
+    for (const icao of Array.from(ownedIcaos)) {
+      for (let page = 1; page <= limitPages; page++) {
+        try {
+          const response = await fetch(`https://simfly.io{icao}/arrivals?page=${page}`);
+          if (!response.ok) break;
+
+          const result = await response.json();
+          const flights = result?.data || [];
+          if (flights.length === 0) break; // Brak dalszych lotów na tej stronie
+
+          for (const flight of flights) {
+            const pilotUsername = flight?.pilot?.username;
+            const arrivalTime = flight?.completed_at || flight?.created_at || new Date().toISOString();
+
+            // Interesują nas wyłącznie udane lądowania (status 'landing')
+            if (pilotUsername && arrivalTime && flight?.role === "landing") {
+              
+              // Wyznaczamy datę startu tygodnia w formacie UTC
+              const dateObj = new Date(arrivalTime);
+              const day = dateObj.getUTCDay();
+              const diff = dateObj.getUTCDate() - day + (day === 0 ? -6 : 1);
+              const weekStart = new Date(Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), diff));
+              const weekStartIso = `${weekStart.toISOString().split('T')[0]}T00:00:00.000Z`;
+
+              // KROK A: Sprawdzamy ręcznie, czy ten pilot ma już wpis na ten tydzień, omijając restrykcje bazy
+              const { data: existingRecord } = await supabase
+                .from(targetTable)
+                .select("username")
+                .eq("username", pilotUsername)
+                .eq("week_start_utc", weekStartIso)
+                .eq("airport_icao", icao)
+                .maybeSingle();
+
+              // KROK B: Jeśli brak rekordu — wpisujemy go bezpiecznym insertem
+              if (!existingRecord) {
+                const { error: insertErr } = await supabase
+                  .from(targetTable)
+                  .insert([
+                    {
+                      username: pilotUsername,
+                      week_start_utc: weekStartIso,
+                      airport_icao: icao,
+                      landings_count: 1
+                    }
+                  ]);
+
+                if (!insertErr) {
+                  detectedCandidates++;
+                }
+              }
+            }
+          }
+        } catch (fetchErr) {
+          console.error(`[Sweep] Error fetching page ${page} for ${icao}:`, fetchErr);
+          break;
+        }
+      }
+    }
+
     return { 
       success: true, 
       processedAirports: ownedIcaos.size, 
-      status: "Scan completed safely without straining database isolates." 
+      landingCandidatesRecorded: detectedCandidates,
+      status: "Scan completed safely. Active pilots updated in background." 
     };
   } catch (err) {
     console.error("[Sweep] Critical error during background extraction:", err);
