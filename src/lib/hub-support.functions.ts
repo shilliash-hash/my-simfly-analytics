@@ -302,7 +302,7 @@ export async function recordAirportLandingSupportFromHistory(
 
   for (const f of flights) {
     if (f.role !== "landing") continue;
-    if (!f.airportIcao || f.paxAirport <= 0) continue;
+    if (!f.airportIcao) continue;
 
     const uname = sanitiseUsername(f.visitor);
     if (!uname) continue;
