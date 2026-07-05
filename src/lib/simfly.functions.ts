@@ -2752,15 +2752,15 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu z pełną weryfikacją bezpiecznego tokenu admina
+// 2. Dodawanie nowego wpisu do tabeli app_changelog (Uproszczony format płaski)
 export const addChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: any) => d,
   handler: async ({ data }) => {
     try {
-      const payload = data?.data || data;
+      // Pobieramy dane bezpośrednio z płaskiego obiektu przesłanego z frontendu
+      const payload = data;
       
-      // WYMUSZENIE WERYFIKACJI: Serwer sprawdza przesłany token za pomocą wbudowanej funkcji Hubu
       if (payload?.token) {
         await verifyAdminToken(payload.token);
       } else {
@@ -2791,13 +2791,13 @@ export const addChangelogEntry = createServerFn({
   },
 });
 
-// 3. Usuwanie wpisu z pełną weryfikacją bezpiecznego tokenu admina
+// 3. Usuwanie wpisu z tabeli app_changelog (Uproszczony format płaski)
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: any) => d,
   handler: async ({ data }) => {
     try {
-      const payload = data?.data || data;
+      const payload = data;
 
       if (payload?.token) {
         await verifyAdminToken(payload.token);
