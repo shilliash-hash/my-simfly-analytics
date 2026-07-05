@@ -2728,9 +2728,10 @@ const getSupabaseInstance = () => {
   return createClient(url, serviceKey);
 };
 
-// 1. Pobieranie wpisów z tabeli app_changelog (Ujednolicony format łańcuchowy RPC)
-export const getChangelogEntries = createServerFn({ method: "GET" })
-  .handler(async () => {
+// 1. Pobieranie wpisów z tabeli app_changelog
+export const getChangelogEntries = createServerFn({
+  method: "GET",
+  handler: async () => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) {
@@ -2752,23 +2753,27 @@ export const getChangelogEntries = createServerFn({ method: "GET" })
       console.error("Critical error in getChangelogEntries handler:", err);
       return [];
     }
-  });
+  },
+});
 
-// 2. Dodawanie nowego wpisu do tabeli app_changelog (Sprawdzony, łańcuchowy format Vinxi RPC)
-export const addChangelogEntry = createServerFn({ method: "POST" })
-  .validator((d: { version: string; text: string; type?: string }) => d)
-  .handler(async ({ data }) => {
+// 2. Dodawanie nowego wpisu do tabeli app_changelog
+export const addChangelogEntry = createServerFn({
+  method: "POST",
+  handler: async (args: any) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      // Wyciągamy payload bez względu na to, czy Vinxi owinęło go w obiekt 'data' czy przekazało surowo
+      const payload = args?.data || args;
 
       const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
-            version: data.version, 
-            text: data.text,
-            type: data.type || "FEATURE" 
+            version: payload?.version, 
+            text: payload?.text,
+            type: payload?.type || "FEATURE" 
           }
         ])
         .select()
@@ -2780,15 +2785,19 @@ export const addChangelogEntry = createServerFn({ method: "POST" })
       console.error("Failed to add changelog entry:", err);
       throw err;
     }
-  });
+  },
+});
 
-// 3. Usuwanie wpisu z tabeli app_changelog (Sprawdzony, łańcuchowy format Vinxi RPC)
-export const deleteChangelogEntry = createServerFn({ method: "POST" })
-  .validator((id: string) => id)
-  .handler(async ({ data: id }) => {
+// 3. Usuwanie wpisu z tabeli app_changelog
+export const deleteChangelogEntry = createServerFn({
+  method: "POST",
+  handler: async (args: any) => {
     try {
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
+
+      // Wyciągamy ID bez względu na to, czy to surowy string, czy obiekt zagnieżdżony
+      const id = typeof args === 'object' ? (args?.data || args?.id) : args;
 
       const { error } = await supabase
         .from("app_changelog")
@@ -2801,4 +2810,6 @@ export const deleteChangelogEntry = createServerFn({ method: "POST" })
       console.error("Failed to delete changelog entry:", err);
       throw err;
     }
-  });
+  },
+});
+
