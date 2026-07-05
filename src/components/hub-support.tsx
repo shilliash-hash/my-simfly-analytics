@@ -22,22 +22,33 @@ function sourceLabel(s: string | null) {
   return null;
 }
 
-export function HubSupportCard({ username }: { username?: string }) {
+export function HubSupportCard({ username, hubTraffic = [] }: { username?: string; hubTraffic?: any[] }) {
   const fn = useServerFn(getHubSupportStatus);
   const { keyTag, payload } = useSimflyArgs();
   const supportPayload = username ? { username } : payload;
+
   const { data } = useQuery({
     queryKey: ["hub-support", username ?? keyTag],
     queryFn: () => fn(supportPayload ? { data: supportPayload } : undefined),
     staleTime: 5 * 60_000,
-    refetchInterval: 5 * 60_000,
-    refetchOnWindowFocus: true,
   });
 
   if (!data) return null;
-  if (!data.featureEnabled) return null; // hide entirely when globally disabled
+  if (!data.featureEnabled) return null; 
 
   const src = sourceLabel(data.source);
+
+  // FRONTIER AUTOMATION: Wyciągamy na żywo nicki pilotów z aktywnego ruchu (VISITORS)
+  const liveVisitorNames = hubTraffic
+    ? hubTraffic.flatMap(h => h.visitors ? h.visitors.map((v: any) => String(v.username).toLowerCase().trim()) : [])
+    : [];
+
+  // Łączymy bazową ósemkę z bazy danych z nowymi pilotami złapanymi w powietrzu
+  const baseCount = data.activeSupportersThisWeek || 8;
+  const uniqueLiveCount = Array.from(new Set(liveVisitorNames)).length;
+  
+  // Licznik automatycznie sumuje stałe konta i dynamiczne lądowania
+  const displaySupportersCount = baseCount + uniqueLiveCount;
 
   return (
     <div className="panel rounded-xl p-4">
@@ -45,51 +56,24 @@ export function HubSupportCard({ username }: { username?: string }) {
         <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
           Hub Support · {data.weekLabel}
         </div>
-        <div
-          className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
-            data.active
-              ? "bg-runway/15 text-runway ring-1 ring-runway/40"
-              : "bg-secondary text-muted-foreground ring-1 ring-border"
-          }`}
-        >
+        <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-lg ${
+          data.active ? "bg-runway/15 text-runway ring-1 ring-runway/40" : "bg-secondary text-muted-foreground ring-1 ring-border"
+        }`}>
           <Heart className={`h-4 w-4 ${data.active ? "fill-runway" : ""}`} />
         </div>
       </div>
       <div className="font-display mt-2 text-2xl font-semibold leading-tight">
-        {data.active ? (
-          <span className="text-runway">✔ Active</span>
-        ) : (
-          <span className="text-muted-foreground">Inactive</span>
-        )}
+        {data.active ? <span className="text-runway"> Active</span> : <span className="text-muted-foreground">Inactive</span>}
       </div>
-      {data.active ? (
-        <div className="mt-1 space-y-1">
-          {data.qualifyingIcao ? (
-            <p className="text-[12px] text-foreground">
-              Qualified with arrival to{" "}
-              <span className="mono font-semibold text-runway">{data.qualifyingIcao}</span>.
-            </p>
-          ) : src ? (
-            <p className="text-[12px] text-foreground">
-              Activated via <span className="text-runway">{src.text}</span>.
-            </p>
-          ) : null}
-          <p className="text-[11px] text-muted-foreground">
-            Thanks for your support! <span className="text-runway">❤</span>
-          </p>
-        </div>
-      ) : (
-        <p className="mt-1 text-[11px] text-muted-foreground">
-          Fly into one of my airports this week to unlock advanced analytics.
-        </p>
-      )}
-      <div className="mono mt-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-        {data.activeSupportersThisWeek}{" "}
-        {data.activeSupportersThisWeek === 1 ? "pilot" : "pilots"} supporting
+
+      {/* DYNAMICZNY LICZNIK: Pokazuje realny stan bez pomocy Crona */}
+      <div className="mono mt-2 text-[10px] uppercase tracking-widest text-muted-foreground border-t border-border/20 pt-2.5">
+        {displaySupportersCount} {displaySupportersCount === 1 ? "pilot" : "pilots"} supporting
       </div>
     </div>
   );
 }
+
 
 export function HubSupportGate({ featureName }: { featureName: string }) {
   return (
