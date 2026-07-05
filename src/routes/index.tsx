@@ -125,13 +125,12 @@ function Overview() {
                     </span>
                     <span className="text-muted-foreground truncate">{update.text}</span>
                   </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
-            )}
+                 );
+               })
+             ) : (
+            <p className="text-xs text-muted-foreground italic">No recent updates available.</p>
+          )}
           </div>
-
         }
         actions={
           <div className="flex items-center gap-3">
