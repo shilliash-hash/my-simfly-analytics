@@ -27,10 +27,14 @@ export function HubSupportCard({ username, hubTraffic = [] }: { username?: strin
   const { keyTag, payload } = useSimflyArgs();
   const supportPayload = username ? { username } : payload;
 
-  const { data } = useQuery({
-    queryKey: ["hub-support", username ?? keyTag],
+   const { data } = useQuery({
+    // POPRAWKA: Dodanie hubTraffic do klucza cache powoduje natychmiastowe 
+    // przeliczenie licznika w tej samej milisekundzie, w której lot pojawia się na ekranie!
+    queryKey: ["hub-support", username ?? keyTag, hubTraffic],
     queryFn: () => fn(supportPayload ? { data: supportPayload } : undefined),
-    staleTime: 5 * 60_000,
+    staleTime: 10_000, // Skracamy pamięć podręczną do bezpiecznych 10 sekund
+    refetchInterval: 30_000, // Odświeżanie w tle co 30 sekund zamiast 5 minut
+    refetchOnWindowFocus: true,
   });
 
   if (!data) return null;
