@@ -593,16 +593,16 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
   const [type, setType] = useState("FEATURE"); // Domyślny tag
   const [error, setError] = useState<string | null>(null);
 
-    // Pobieranie aktualnej listy wpisów bezpośrednio z tabeli app_changelog
+     // Pobieranie aktualnej listy wpisów bezpośrednio z tabeli app_changelog
   const { data: entries = [], isLoading, isRefetching } = useQuery({
     queryKey: ["admin", "changelog"],
-    queryFn: () => getChangelog(),
+    queryFn: () => getChangelogEntries(),
     enabled: !!adminToken, // Uruchom zapytanie TYLKO gdy token jest podany
   });
 
   // Mutacja: Dodawanie wpisu do Supabase + automatyczne odświeżenie cache frontendu
   const addMutation = useMutation({
-    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelog({ data: vars }),
+    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry({ data: vars }),
     onSuccess: () => {
       setVersion("");
       setText("");
@@ -614,9 +614,10 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
     onError: (err) => setError(err instanceof Error ? err.message : "Failed to add entry"),
   });
 
+
   // Mutacja: Bezpieczne usuwanie wpisu z Supabase
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => deleteChangelog({ data: id }),
+    const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteChangelogEntry({ data: id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "changelog"] });
       queryClient.invalidateQueries({ queryKey: ["changelog", "list"] });
