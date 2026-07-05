@@ -38,14 +38,6 @@ function Overview() {
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
     console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
-    const [activePilots, setActivePilots] = useState<string[]>([]);
-
-  useEffect(() => {
-    const mockActive = ["shill", "VFR_Flyer", "Boeing_King", "Cargo_Route"];
-    const currentPilot = viewedUser || data?.me?.displayName || "shill";
-    const uniqueList = Array.from(new Set([currentPilot, ...mockActive]));
-    setActivePilots(uniqueList);
-  }, [viewedUser, data?.me?.displayName]);
 
   const { data } = useSuspenseQuery(
     queryOptions({
@@ -101,10 +93,10 @@ function Overview() {
   });
 
 
-  return (
+   return (
     <AppShell>
       <PageHeader
-                eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
+        eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
         description={
           <div className="space-y-3">
@@ -112,24 +104,15 @@ function Overview() {
               Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
             </p>
 
-            {/* SEKCJA: ACTIVE PILOTS IN HUB */}
+            {/* SEKCJA: ACTIVE PILOTS IN HUB (CAŁKOWICIE ODZYSKANA I BEZPIECZNA) */}
             <div className="flex flex-wrap items-center gap-2 border-t border-border/10 pt-2.5 mt-2 max-w-xl">
               <span className="mono text-[9px] font-bold text-muted-foreground uppercase tracking-widest block mr-1">
                 Active pilots in Hub:
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
-                  {(() => {
+                {(() => {
                   const mockActive = ["shill", "VFR_Flyer", "Boeing_King", "Cargo_Route"];
-                  
-                  // BEZPIECZNE WYŁUSKANIE AKTUALNEGO NICKU BEZ DOTYKANIA OBIEKTU DATA LUB 'r'
-                  let currentPilot = viewedUser || "shill";
-                  
-                  if (typeof window !== "undefined") {
-                    const params = new URLSearchParams(window.location.search);
-                    const queryPilot = params.get("pilot") || params.get("user");
-                    if (queryPilot) currentPilot = queryPilot;
-                  }
-
+                  const currentPilot = viewedUser || "shill";
                   const uniqueList = Array.from(new Set([currentPilot, ...mockActive]));
 
                   return uniqueList.map((pilot) => {
@@ -149,25 +132,25 @@ function Overview() {
                     );
                   });
                 })()}
-
               </div>
             </div>
           </div>
         }
-                
-        actions={
-          <div className="flex items-center gap-3">
-            <PilotSwitcher current={viewedUser} />
-            {data.me.avatarUrl ? (
-              <img
-                src={data.me.avatarUrl}
-                alt={`@${data.me.handle} avatar`}
-                width={64}
-                height={64}
-                className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
-              />
-            ) : null}
-          </div>
+               actions={
+          !data ? null : (
+            <div className="flex items-center gap-3">
+              <PilotSwitcher current={viewedUser} />
+              {data?.me?.avatarUrl ? (
+                <img
+                  src={data.me.avatarUrl}
+                  alt={`@${data.me.handle} avatar`}
+                  width={64}
+                  height={64}
+                  className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
+                />
+              ) : null}
+            </div>
+          )
         }
       />
 
