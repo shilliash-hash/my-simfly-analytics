@@ -174,7 +174,7 @@ function Overview() {
           hint="Owned airports"
           icon={Building2}
         />
-        <HubSupportCard username={data.me.handle} />
+        <HubSupportCard username={data.me.handle} hubTraffic={hubTraffic} />
       </section>
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
