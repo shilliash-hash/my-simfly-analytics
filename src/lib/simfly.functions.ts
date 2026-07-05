@@ -2731,62 +2731,49 @@ const getSupabaseInstance = () => {
   return createClient(url, serviceKey);
 };
 
-// 1. Pobieranie wpisów z tabeli app_changelog
+// 1. Pobieranie wpisów z tabeli app_changelog (Używa standardowej instancji pobierania)
 export const getChangelogEntries = createServerFn({
   method: "GET",
   handler: async () => {
     try {
       const supabase = getSupabaseInstance();
-      if (!supabase) {
-        console.error("Supabase client could not be initialized due to missing secrets.");
-        return [];
-      }
+      if (!supabase) return [];
 
       const { data, error } = await supabase
         .from("app_changelog")
         .select("id, version, text, type, created_at")
         .order("created_at", { ascending: false });
 
-      if (error) {
-        console.error("Supabase response error:", error.message);
-        return [];
-      }
+      if (error) return [];
       return Array.isArray(data) ? data : [];
     } catch (err) {
-      console.error("Critical error in getChangelogEntries handler:", err);
       return [];
     }
   },
 });
 
-// 2. Ostateczne i pancerne dodawanie wpisów do bazy Supabase na Cloudflare Workers
+// 2. Dodawanie nowego wpisu - WIERNA KOPIA DZIAŁAJĄCEJ ARCHITEKTURY Z TWOJEGO PROJEKTU
 export const addChangelogEntry = createServerFn({
   method: "POST",
   handler: async (args: any) => {
     try {
-      const supabase = getSupabaseInstance();
-      if (!supabase) throw new Error("Supabase client is not initialized.");
-
-      // Wyciągamy payload ze wszystkich możliwych lokalizacji Vinxi/TanStack RPC
-      const payload = args?.data?.data || args?.data || args?.vars || args;
+      // Importujemy dedykowany klient serwerowy, którego używają inne działające mutacje w Hubie
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       
-      const version = payload?.version;
-      const text = payload?.text;
-      const type = payload?.type || "FEATURE";
+      // Wyciągamy zmienne przesłane w paczce { data: vars } z pliku admin.tsx
+      const payload = args?.data || args;
 
-      // Jeśli dane nie dotarły w standardowym obiekcie, sprawdzamy surowy kontekst
-      if (!version || !text) {
-        console.error("Data tracking failed. Received payload keys:", Object.keys(payload || {}));
-        throw new Error("Missing required payload fields: version or text.");
+      if (!payload?.version || !payload?.text) {
+        throw new Error("Missing required fields: version or text.");
       }
 
-      const { data: row, error } = await supabase
+      const { data: row, error } = await supabaseAdmin
         .from("app_changelog")
         .insert([
           { 
-            version: String(version).trim(), 
-            text: String(text).trim(),
-            type: String(type).toUpperCase() 
+            version: String(payload.version).trim(), 
+            text: String(payload.text).trim(),
+            type: payload.type || "FEATURE" 
           }
         ])
         .select()
@@ -2795,26 +2782,25 @@ export const addChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, entry: row };
     } catch (err) {
-      console.error("Failed to add changelog entry on edge server:", err);
+      console.error("Failed to add changelog entry via supabaseAdmin:", err);
       throw err;
     }
   },
 });
 
-// 3. Ostateczne i pancerne usuwanie wpisów z bazy Supabase na Cloudflare Workers
+// 3. Usuwanie wpisu - WIERNA KOPIA DZIAŁAJĄCEJ ARCHITEKTURY Z TWOJEGO PROJEKTU
 export const deleteChangelogEntry = createServerFn({
   method: "POST",
   handler: async (args: any) => {
     try {
-      const supabase = getSupabaseInstance();
-      if (!supabase) throw new Error("Supabase client is not initialized.");
-
-      const payload = args?.data?.data || args?.data || args;
-      const id = typeof payload === 'object' ? (payload?.id || payload?.data) : payload;
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      
+      const payload = args?.data || args;
+      const id = typeof payload === 'object' ? payload?.id : payload;
 
       if (!id) throw new Error("Missing entry ID for deletion.");
 
-      const { error } = await supabase
+      const { error } = await supabaseAdmin
         .from("app_changelog")
         .delete()
         .eq("id", id);
@@ -2822,7 +2808,7 @@ export const deleteChangelogEntry = createServerFn({
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
-      console.error("Failed to delete changelog entry on edge server:", err);
+      console.error("Failed to delete changelog entry via supabaseAdmin:", err);
       throw err;
     }
   },
