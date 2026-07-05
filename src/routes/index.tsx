@@ -118,13 +118,20 @@ function Overview() {
                 Active pilots in Hub:
               </span>
               <div className="flex flex-wrap items-center gap-1.5">
-                {(() => {
+                               {(() => {
                   const mockActive = ["shill", "VFR_Flyer", "Boeing_King", "Cargo_Route"];
-                  const currentPilot = viewedUser || data?.me?.displayName || "shill";
+                  
+                  // BEZPIECZNE POBIERANIE BEZ ODWOŁAŃ DO ZMIENNYCH 'r' LUB 'viewedUser'
+                  let currentPilot = "shill";
+                  if (typeof window !== "undefined") {
+                    const params = new URLSearchParams(window.location.search);
+                    currentPilot = params.get("pilot") || params.get("user") || "shill";
+                  }
+
                   const uniqueList = Array.from(new Set([currentPilot, ...mockActive]));
 
                   return uniqueList.map((pilot) => {
-                    const isMe = pilot === currentPilot;
+                    const isMe = String(pilot).toLowerCase() === currentPilot.toLowerCase();
                     return (
                       <span
                         key={pilot}
