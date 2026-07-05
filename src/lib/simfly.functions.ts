@@ -2752,7 +2752,7 @@ export const getChangelogEntries = createServerFn({
   },
 });
 
-// 2. Dodawanie nowego wpisu - Ultra-szybki format omijający powolne weryfikacje tokenów
+// 2. Maksymalnie uproszczone dodawanie wpisu wykorzystujące domyślne ustawienia tabeli Supabase
 export const addChangelogEntry = createServerFn({
   method: "POST",
   validator: (d: any) => d,
@@ -2767,13 +2767,13 @@ export const addChangelogEntry = createServerFn({
       const supabase = getSupabaseInstance();
       if (!supabase) throw new Error("Supabase client is not initialized.");
 
+      // Wysyłamy TYLKO wersję i opis. Baza sama wygeneruje ID typu UUID oraz wstawi domyślny typ FEATURE
       const { data: row, error } = await supabase
         .from("app_changelog")
         .insert([
           { 
             version: String(payload.version).trim(), 
-            text: String(payload.text).trim(),
-            type: payload.type || "FEATURE" 
+            text: String(payload.text).trim()
           }
         ])
         .select()
@@ -2787,6 +2787,7 @@ export const addChangelogEntry = createServerFn({
     }
   },
 });
+
 
 // 3. Usuwanie wpisu - Ultra-szybki format omijający powolne weryfikacje tokenów
 export const deleteChangelogEntry = createServerFn({
