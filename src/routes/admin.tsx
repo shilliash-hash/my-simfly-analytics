@@ -593,16 +593,19 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
   const [type, setType] = useState("FEATURE"); // Domyślny tag
   const [error, setError] = useState<string | null>(null);
 
-     // Pobieranie aktualnej listy wpisów bezpośrednio z tabeli app_changelog
+  // 1. POPRAWIONE: Prawidłowe wywołanie funkcji serwerowej GET w TanStack Start
   const { data: entries = [], isLoading, isRefetching } = useQuery({
     queryKey: ["admin", "changelog"],
-    queryFn: () => getChangelogEntries(),
+    queryFn: async () => {
+      const res = await getChangelogEntries();
+      return Array.isArray(res) ? res : [];
+    },
     enabled: !!adminToken, // Uruchom zapytanie TYLKO gdy token jest podany
   });
 
-  // Mutacja: Dodawanie wpisu do Supabase + automatyczne odświeżenie cache frontendu
+  // 2. POPRAWIONE: Jawne opakowanie danych w { data: vars } dla mutacji POST
   const addMutation = useMutation({
-    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry(vars),
+    mutationFn: (vars: { version: string; text: string; type: string }) => addChangelogEntry({ data: vars }),
     onSuccess: () => {
       setVersion("");
       setText("");
@@ -614,16 +617,16 @@ function AdminChangelog({ adminToken }: { adminToken: string }) {
     onError: (err) => setError(err instanceof Error ? err.message : "Failed to add entry"),
   });
 
-
-  // Mutacja: Bezpieczne usuwanie wpisu z Supabase
-    const deleteMutation = useMutation({
-   mutationFn: (id: string) => deleteChangelogEntry(id),
+  // 3. POPRAWIONE: Jawne opakowanie ID w { data: id } dla mutacji POST
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => deleteChangelogEntry({ data: id }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["admin", "changelog"] });
       queryClient.invalidateQueries({ queryKey: ["changelog", "list"] });
     },
     onError: (err) => setError(err instanceof Error ? err.message : "Failed to delete entry"),
   });
+
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
