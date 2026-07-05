@@ -2714,14 +2714,16 @@ export interface ChangelogEntry {
 
 // Bezpieczna funkcja pobierająca instancję klienta Supabase bez wywoływania błędów kompilacji
 const getSupabaseInstance = () => {
-  // Cloudflare Workers i Nitro (silnik TanStack) wstrzykują sekrety bezpośrednio do globalThis lub process.env
+  // W Cloudflare Pages/Workers zmienne środowiskowe pobiera się z globalnego kontekstu platformy
   const globalEnv = (globalThis as any).process?.env || (globalThis as any).env || {};
   
+  // Próba odczytu ze wszystkich możliwych lokalizacji środowiskowych Cloudflare
   const url = globalEnv.SUPABASE_URL || process.env.SUPABASE_URL;
   const serviceKey = globalEnv.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!url || !serviceKey) {
-    throw new Error("Supabase URL or Service Role Key is missing in Cloudflare runtime.");
+    // Jeśli brak kluczy na produkcji, zwracamy null, aby nie wywalać aplikacji
+    return null;
   }
   return createClient(url, serviceKey);
 };
@@ -2732,22 +2734,25 @@ export const getChangelogEntries = createServerFn({
   handler: async () => {
     try {
       const supabase = getSupabaseInstance();
-      const { data, error } = await supabase
-        .from("app_changelog")
-        .select("id, version, text, type, created_at")
-        .order("created_at", { ascending: false });
+      if (!supabase) {
+        console.error("Supabase client could not be initialized due to missing secrets.");
+        return []; // Zwracamy czystą tablicę, aby zapobiec awarii b.map()
+      }
+
+      const { data, error } = await supabase.from("app_changelog").select("id, version, text, type, created_at").order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Supabase query error:", error.message);
+        console.error("Supabase response error:", error.message);
         return [];
       }
       return Array.isArray(data) ? data : [];
     } catch (err) {
-      console.error("Failed to fetch changelog entries:", err);
-      return [];
+      console.error("Critical error in getChangelogEntries handler:", err);
+      return []; // Zawsze zwracamy tablicę, gwarantując stabilność frontendu
     }
   },
 });
+
 // 2. Dodawanie nowego wpisu do tabeli app_changelog
 export const addChangelogEntry = createServerFn({
   method: "POST",
@@ -2755,9 +2760,7 @@ export const addChangelogEntry = createServerFn({
   handler: async ({ data }) => {
     try {
       const supabase = getSupabaseInstance();
-      const { data: insertedData, error } = await supabase
-        .from("app_changelog")
-        .insert([
+      const { data: insertedData, error } = await supabase.from("app_changelog").insert([
           {
             version: data.version,
             text: data.text,
@@ -2783,11 +2786,7 @@ export const deleteChangelogEntry = createServerFn({
   handler: async ({ data: id }) => {
     try {
       const supabase = getSupabaseInstance();
-      const { error } = await supabase
-        .from("app_changelog")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.from("app_changelog").delete().eq("id", id);
       if (error) throw new Error(error.message);
       return { success: true, deletedId: id };
     } catch (err) {
