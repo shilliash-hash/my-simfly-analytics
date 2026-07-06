@@ -438,7 +438,6 @@ const active = useMemo(() => {
     .sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
 }, [traffic, myByHub, airportByIcao]);
 
-
   const totalVisitors = active.reduce((s, t) => s + t.visitors.length, 0);
   const totalMine = active.reduce((s, t) => s + t.mine.inbound.length + t.mine.outbound.length, 0);
 
