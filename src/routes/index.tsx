@@ -547,15 +547,18 @@ function IncomingTraffic({
             // POPRAWKA: Sprawdzamy nazwę pilota bezpośrednio z danych Twojego profilu (data.me.handle)
             const myHandle = typeof data !== "undefined" ? String(data?.me?.handle || "").toLowerCase().trim() : "";
             const pilotName = String(v.username || v.pilot?.username || "").toLowerCase().trim();
-            
-            const isMyFlight = pilotName === myHandle || pilotName === String(currentSessionUser || "").toLowerCase().trim();
+                     return (
+            <li key={v.id} className="flex items-center gap-2 text-xs">
+              {(() => {
+                // 1. Dynamicznie pobieramy nazwę aktualnie oglądanego profilu z URL lub profilu
+                const currentProfileHandle = typeof window !== "undefined"
+                  ? (new URLSearchParams(window.location.search).get("pilot") || data?.me?.handle || "shill").toLowerCase().trim()
+                  : "shill";
 
-            return (
-              <li key={v.id} className="flex items-center gap-2 text-xs">
-                          {(() => {
-                const isMyFlight = String(v.username || v.pilot?.username || "")
-                  .toLowerCase()
-                  .trim() === String(currentSessionUser || "").toLowerCase().trim();
+                const pilotName = String(v.username || v.pilot?.username || "").toLowerCase().trim();
+
+                // 2. Warunek pasuje dla Twojego nicku lub tymczasowego oznaczenia testowego
+                const isMyFlight = pilotName === currentProfileHandle || pilotName === "pilot" || pilotName === "unknown pilot";
 
                 return v.userAvatar ? (
                   <img
@@ -575,7 +578,7 @@ function IncomingTraffic({
                   </div>
                 );
               })()}
-              <div className="min-w-0 flex-1">
+               <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
                         {v.etaMs && (
                           <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
