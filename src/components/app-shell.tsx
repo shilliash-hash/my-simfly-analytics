@@ -41,27 +41,27 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
    // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
-    // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
+     // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
   const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Czekamy ułamek sekundy, aby upewnić się, że Lovable zainicjowało globalny obiekt Supabase
-    const timer = setTimeout(() => {
-      // Pobieramy działającą instancję klienta bezpośrednio z okna pamięci aplikacji
-      const globalSupabase = (window as any).supabase || (window as any)._supabaseInstance;
+    // Bezpieczny, dynamiczny import oficjalnego klienta Supabase z Twojego projektu
+    import("../lib/supabase").then((module) => {
+      // Lovable często eksportuje klienta jako domyślny (default) lub jako stałą 'supabase'
+      const globalSupabase = module.supabase || module.default;
       
-      // Wyciągamy unikalny identyfikator urządzenia z localStorage
+      if (!globalSupabase) {
+        console.log("[Presence] Could not extract client from project file");
+        return;
+      }
+
+      // Pobieramy unikalny identyfikator urządzenia z localStorage
       const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
       const finalUserId = savedUser 
         ? savedUser.replace(/"/g, "").trim() 
         : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
-
-      if (!globalSupabase) {
-        console.log("[Presence] Global Supabase instance not found yet");
-        return;
-      }
 
       // Podpinamy się pod żywy kanał WebSocket
       const channel = globalSupabase.channel("hub-online-pilots", {
@@ -76,7 +76,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             presences.forEach(() => { allPresentUsers.push(key); });
           });
           setOnlinePilots(allPresentUsers);
-          // Udostępniamy tablicę dla panelu admina
+          // Udostępniamy tablicę dla panelu admina w pamięci RAM
           (window as any)._hubOnlinePilots = allPresentUsers;
         })
         .subscribe(async (status: string) => {
@@ -84,11 +84,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             await channel.track({ onlineAt: new Date().toISOString() });
           }
         });
-    }, 500);
-
-    return () => clearTimeout(timer);
+    }).catch(err => {
+      console.log("[Presence] Dynamic import file error:", err);
+    });
   }, []);
-
 
 
 
