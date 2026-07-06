@@ -49,8 +49,7 @@ function Overview() {
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
 
-   const liveChangelogFeed = [];
-
+  
   // ZOSTAWIASZ TYLKO JEDEN TAKI BLOK:
   const pingPresenceAction = useServerFn(pingUserPresence);
 
