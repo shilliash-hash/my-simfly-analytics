@@ -406,8 +406,27 @@ function IncomingTraffic({
       .map((icao) => {
         const airport = airportByIcao.get(icao);
         const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-        const mine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-        return airport ? { icao, airport, visitors, mine } : null;
+          // POPRAWKA: Pobieramy argumenty SimFly w locie i filtrujemy listy "mine" po Twoim prawdziwym nicku
+  const active = useMemo(() => {
+  // POPRAWKA: Tutaj wywołanie hooka jest w 100% legalne i zgodne z zasadami Reacta!
+  const { keyTag: currentSessionUser } = useSimflyArgs(); 
+  
+  const hubIcaos = new Set<string>([
+    ...traffic.map((t) => t.icao.toUpperCase()),
+
+   const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+
+   const mine = {
+     inbound: (rawMine.inbound ?? []).filter(f => {
+       const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+       return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+     }),
+     outbound: (rawMine.outbound ?? []).filter(f => {
+       const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+       return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+     })
+   };
+       return airport ? { icao, airport, visitors, mine } : null;
       })
       .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => !!r)
       .sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
