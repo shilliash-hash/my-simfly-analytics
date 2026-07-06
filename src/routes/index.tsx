@@ -466,7 +466,7 @@ function IncomingTraffic({
           <h2 className="font-display text-xl font-semibold">Incoming traffic</h2>
           <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {active.length
-              ? `${totalVisitors} visitor${totalVisitors === 1 ? "" : "s"} · ${totalMine} of mine · ${active.length} hub${active.length === 1 ? "" : "s"}`
+      ? `${totalVisitors} visitor${totalVisitors === 1 ? "" : "s"} · ${active.reduce((acc, hub) => acc + (hub.visitors?.filter((v: any) => v.isMine).length || 0), 0)} of mine · ${active.length} hub${active.length === 1 ? "" : "s"}`
               : "No live traffic right now"}
           </span>
         </div>
