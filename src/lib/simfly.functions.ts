@@ -1,4 +1,5 @@
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { z } from "zod";
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
@@ -3005,17 +3006,16 @@ export const getPilotSupportTimeline = createServerFn("GET", async (payload: any
    DYNAMICZNA LOGIKA OBECNOŚCI PILOTÓW (LIVE PRESENCE RADAR)
    ========================================================================= */
 
+ 
 export const pingUserPresence = createServerFn({
   method: "POST",
-  inputValidator: (d: { username: string }) => d,
+  validator: z.object({ username: z.string() }),
   handler: async ({ data }) => {
     if (!data.username || data.username === "Guest" || data.username === "Pilot") return { success: false };
     try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      if (!supabaseAdmin) return { success: false };
-      
+      // Usunęliśmy zagnieżdżony import – korzystamy bezpośrednio z linii 1!
       await supabaseAdmin
-        .from("app_presence") // Supabase Admin automatycznie szuka w public
+        .from("app_presence")
         .upsert({ 
           username: data.username.trim(), 
           last_seen: new Date().toISOString() 
@@ -3033,11 +3033,9 @@ export const getOnlineUsersList = createServerFn({
   method: "GET",
   handler: async (): Promise<string[]> => {
     try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-      if (!supabaseAdmin) return [];
-      
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
+      // Korzystamy bezpośrednio z linii 1!
       const { data } = await supabaseAdmin
         .from("app_presence")
         .select("username")
