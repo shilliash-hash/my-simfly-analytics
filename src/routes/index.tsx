@@ -239,20 +239,24 @@ function Overview() {
                 <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
                   {update.version}
                 </span>
-                <div className="flex flex-wrap gap-1 mt-0.5">
-                  {Array.isArray(update.type) ? (
-                    update.type.map((tag) => {
-                      const currentTagColor = 
-                        tag === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
-                        tag === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
-                        "text-runway bg-runway/15 border-runway/30";
-                      return (
-                        <span key={tag} className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${currentTagColor}`}>
-                          {tag}
-                        </span>
-                      );
-                    })
-                  ) : (
+                  <div className="flex flex-wrap gap-1.5 ml-1">
+                    {Array.isArray(update.type) ? (
+                      update.type.map((tag) => {
+                        const styleClass = 
+                          tag === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
+                          tag === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
+                          "text-runway bg-runway/15 border-runway/30";
+                        return (
+                          <span 
+                            key={tag} 
+                            className={`mono text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block ${styleClass}`}
+                          >
+                            {tag}
+                          </span>
+                        );
+                      })
+                    ) : (
+
                     <span className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${
                       update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
                       update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
