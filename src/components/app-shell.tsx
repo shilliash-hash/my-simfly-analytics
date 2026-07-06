@@ -41,23 +41,26 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
    // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
-      // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
+       // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
   const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const initPresence = () => {
-      // Pobieramy instancję zapisaną w chmurze przez działający panel admina
-      const globalSupabase = (window as any)._sharedSupabaseInstance;
-      if (!globalSupabase) return false;
+    let activeChannel: any = null;
 
+    // Funkcja uruchamiająca nasłuch obecności WebSocket
+    const startPresence = (supabaseClient: any) => {
+      if (!supabaseClient || activeChannel) return true;
+
+      // Pobieramy unikalny identyfikator urządzenia z localStorage
       const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
       const finalUserId = savedUser 
         ? savedUser.replace(/"/g, "").trim() 
         : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
-      const channel = globalSupabase.channel("hub-online-pilots", {
+      // Rejestrujemy kanał bezpośrednio na działającym kliencie aplikacji
+      const channel = supabaseClient.channel("hub-online-pilots", {
         config: { presence: { key: finalUserId } },
       });
 
@@ -69,6 +72,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             presences.forEach(() => { allPresentUsers.push(key); });
           });
           setOnlinePilots(allPresentUsers);
+          // Udostępniamy tablicę globalnie w RAM dla widżetu
           (window as any)._hubOnlinePilots = allPresentUsers;
         })
         .subscribe(async (status: string) => {
@@ -77,18 +81,31 @@ export function AppShell({ children }: { children: ReactNode }) {
           }
         });
 
+      activeChannel = channel;
+      console.log("[Presence] Realtime tracking successfully initialized!");
       return true;
     };
 
-    // Próbujemy odpalić od razu, a jeśli bazy jeszcze nie ma - sprawdzamy co sekundę, aż się pojawi
-    if (!initPresence()) {
-      const interval = setInterval(() => {
-        if (initPresence()) clearInterval(interval);
-      }, 1000);
-      return () => clearInterval(interval);
-    }
-  }, []);
+    // Pętla sprawdzająca RAM: Szukamy instancji bazy danych, którą Lovable tworzy na start systemu
+    const interval = setInterval(() => {
+      // Sprawdzamy wszystkie możliwe miejsca, w których Lovable ukrywa klienta Supabase
+      const foundClient = 
+        (window as any).supabase || 
+        (window as any)._supabaseInstance || 
+        (window as any)._sharedSupabaseInstance;
 
+      if (foundClient) {
+        if (startPresence(foundClient)) {
+          clearInterval(interval);
+        }
+      }
+    }, 1000);
+
+    return () => {
+      clearInterval(interval);
+      if (activeChannel) activeChannel.unsubscribe();
+    };
+  }, []);
 
 
 
