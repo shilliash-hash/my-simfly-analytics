@@ -41,16 +41,20 @@ function Overview() {
     console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
  const liveChangelogFeed = [];
 
-  // LOGIKA RADARU: Wykonuje się teraz bezpośrednio w głównym cyklu strony
+    // 1. Inicjalizacja funkcji serwerowej na samym początku komponentu (Zgodnie z zasadami Reacta!)
+  const pingPresenceFn = useServerFn(pingUserPresence);
+
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
+  // 2. Bezpieczne zapytanie useQuery, które nie zawiera w sobie zakazanych hooków
   const { data: rawOnlinePilots } = useQuery({
     queryKey: ["public", "live-presence-direct-env"],
     queryFn: async () => {
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        await useServerFn(pingUserPresence)({ data: { username: currentPilot } });
+        // Używamy gotowej zmiennej zainicjalizowanej wyżej:
+        await pingPresenceFn({ data: { username: currentPilot } });
       }
 
       let activeClient = (window as any).supabase;
@@ -79,6 +83,7 @@ function Overview() {
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
 
 
