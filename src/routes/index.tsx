@@ -11,7 +11,7 @@ import {
 import { HubSupportCard } from "@/components/hub-support";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, pingUserPresence, getOnlineUsersList } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -109,20 +109,25 @@ function Overview() {
             </p>
           </div>
          }                
-        actions={
-          <div className="flex items-center gap-3">
-            <PilotSwitcher current={viewedUser} />
-            {data.me.avatarUrl ? (
-              <img
-                src={data.me.avatarUrl}
-                alt={`@${data.me.handle} avatar`}
-                width={64}
-                height={64}
-                className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
-              />
-            ) : null}
-          </div>
-        }
+    actions={
+    <div className="flex items-center gap-4">
+      {/* COMPACT LIVE PRESENCE RADAR */}
+      <LivePresenceWidget />
+
+      <div className="flex items-center gap-3">
+        <PilotSwitcher current={viewedUser} />
+        {data.me.avatarUrl ? (
+          <img
+            src={data.me.avatarUrl}
+            alt={`@${data.me.handle} avatar`}
+            width={64}
+            height={64}
+            className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
+          />
+        ) : null}
+      </div>
+    </div>
+  }
       />
 
 
@@ -938,4 +943,50 @@ function PilotSwitcher({ current }: { current: string | null }) {
     </div>
   );
 }  
- 
+export function LivePresenceWidget() {
+  const pingFn = useServerFn(pingUserPresence);
+  const getOnlineFn = useServerFn(getOnlineUsersList);
+
+  const currentPilot = typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
+    : "Guest";
+
+  const { data: onlinePilots = [] } = useQuery({
+    queryKey: ["public", "live-presence"],
+    queryFn: async () => {
+      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
+        await pingFn({ data: { username: currentPilot } });
+      }
+      return await getOnlineFn();
+    },
+    refetchInterval: 15000, 
+    staleTime: 5000,
+  });
+
+  return (
+    <div className="flex flex-col items-end gap-1.5 bg-secondary/10 border border-border/30 rounded-xl p-2.5 max-w-[240px] text-right shadow-sm backdrop-blur-sm">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-1.5 w-1.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-runway"></span>
+        </span>
+        <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground">Hub Presence Radar</span>
+        <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20">
+          {onlinePilots.length} Online
+        </span>
+      </div>
+      {onlinePilots.length > 0 && (
+        <div className="flex flex-wrap justify-end gap-1 max-w-full overflow-hidden">
+          {onlinePilots.slice(0, 3).map((username) => (
+            <span key={username} className="mono text-[9px] font-semibold bg-background/50 border border-border/40 px-1.5 py-0.5 rounded text-foreground/90">
+              @{username}
+            </span>
+          ))}
+          {onlinePilots.length > 3 && (
+            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{onlinePilots.length - 3}</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
