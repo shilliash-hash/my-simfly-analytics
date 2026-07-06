@@ -185,15 +185,6 @@ function HubAnalyticsSection() {
     setIsMounted(true);
   }, []);
 
-  const statusFn = useServerFn(getHubSupportStatus);
-  const { keyTag, payload } = useSimflyArgs();
-  const { data: status, isLoading } = useQuery({
-    queryKey: ["hub-support", keyTag],
-    queryFn: () => statusFn(payload ? { data: payload } : undefined),
-    staleTime: 5 * 60_000,
-    enabled: isMounted,
-  });
-
   if (!isMounted) {
     return (
       <section className="mt-10">
@@ -204,57 +195,20 @@ function HubAnalyticsSection() {
     );
   }
 
-    // POPRAWKA FRONTENDU: Omijamy zawodny payload i otwieramy kłódkę bezpośrednio w przeglądarce
-  const [isWeeklySupporter, setIsWeeklySupporter] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user") || "";
-      const currentPilot = savedUser.replace(/"/g, "").trim();
-
-      // Jeśli to Ty, Luigi, lub serwer po prostu potwierdził status - brama zostaje otwarta!
-      if (
-        currentPilot === "Captain shill" || 
-        currentPilot === "LuigiThePlumber" || 
-        status?.active === true
-      ) {
-        setIsWeeklySupporter(true);
-      }
-    }
-  }, [status]);
-
-
+  // WERSJA OTWARTA: Całkowicie wycięliśmy kłódkę. Wykresy i Timeline są widoczne od razu dla wszystkich!
   return (
     <section className="mt-10 space-y-6">
       <div className="border-b border-border/40 pb-2">
         <h2 className="font-display text-xl font-bold tracking-tight">Hub Analytics & Intelligence</h2>
         <p className="text-xs text-muted-foreground">
-          Exclusive performance insights reserved for active weekly supporters.
+          Performance insights and comprehensive pilot career timeline.
         </p>
       </div>
 
-      {isWeeklySupporter ? (
-        <div className="grid gap-6 md:grid-cols-2">
-          <HubTrafficChart />
-          <PilotTimeline />
-        </div>
-      ) : (
-        <div className="relative overflow-hidden rounded-xl border border-border/40 bg-gradient-to-b from-background/40 to-background/5 p-8 text-center shadow-lg">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(251,191,36,0.03),transparent_60%)]" />
-          <div className="relative z-10 flex flex-col items-center justify-center space-y-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-runway/10 text-runway ring-4 ring-runway/20">
-              <Lock className="h-5 w-5" />
-            </div>
-            <div className="max-w-md space-y-1.5">
-              <h3 className="font-display text-base font-semibold tracking-tight">Supporter Status Required</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Detailed traffic distribution charts and your comprehensive pilot career timeline are locked. 
-                Complete at least one qualifying arrival to a hub this week to unlock real-time intelligence.
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="grid gap-6 md:grid-cols-2">
+        <HubTrafficChart />
+        <PilotTimeline />
+      </div>
     </section>
   );
 }
@@ -321,6 +275,7 @@ function HubTrafficChart() {
     </div>
   );
 }
+
 function sourceMeta(src: string | null) {
   if (src === "airport") return { icon: <Plane className="h-3.5 w-3.5" />, label: "Airport Visit", tone: "text-runway" };
   if (src === "donation") return { icon: <Coffee className="h-3.5 w-3.5" />, label: "Donation", tone: "text-instrument" };
@@ -428,4 +383,3 @@ export function PilotTimeline() {
     </div>
   );
 }
-
