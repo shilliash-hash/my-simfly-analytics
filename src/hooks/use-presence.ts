@@ -1,34 +1,37 @@
 import { useEffect, useState } from "react";
-import { createClient } from "@supabase/supabase-js";
-
-// Tworzymy lekki, niezależny klient Realtime na podstawie zmiennych globalnych
-// Bezpieczne sprawdzanie środowiska: zapobiega wysypywaniu serwera Cloudflare (SSR)
-const isBrowser = typeof window !== "undefined";
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (isBrowser ? (window as any)._env_?.VITE_SUPABASE_URL : "") || "";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (isBrowser ? (window as any)._env_?.VITE_SUPABASE_ANON_KEY : "") || "";
-
-const localRealtimeClient = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+import { supabase } from "@/lib/supabase"; // Korzystamy z oficjalnego, globalnego klienta aplikacji
 
 export function useOnlineUsers(currentUsername: string) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
 
   useEffect(() => {
-    // Jeśli klient lub nick użytkownika nie są gotowe, przerywamy działanie
-    if (!localRealtimeClient || !currentUsername) return;
+    // Pełne zabezpieczenie przed SSR i pustymi sesjami
+    if (typeof window === "undefined" || !supabase || !currentUsername) return;
 
-    // Podpinamy kanał obecności WebSocket bezpośrednio przez natywną bibliotekę
-    const channel = localRealtimeClient.channel("hub-online-pilots", {
-      config: { presence: { key: currentUsername } },
+    // Podpinamy się pod główny kanał Realtime całej platformy
+    const channel = supabase.channel("hub-online-pilots", {
+      config: { 
+        presence: { key: currentUsername } 
+      },
     });
 
     channel
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState();
-        const usernames = Object.keys(state);
-        setOnlineUsers(usernames);
+        const allPresentUsers: string[] = [];
+        
+        // Zliczamy wszystkie urządzenia i pilotów nadających na tym kanale
+        Object.entries(state).forEach(([key, presences]: [string, any]) => {
+          presences.forEach(() => {
+            allPresentUsers.push(key);
+          });
+        });
+        
+        setOnlineUsers(allPresentUsers);
       })
       .subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
+          // Rozgłaszamy obecność tego urządzenia w głównej sieci
           await channel.track({ onlineAt: new Date().toISOString() });
         }
       });
