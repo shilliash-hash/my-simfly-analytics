@@ -416,20 +416,23 @@ function IncomingTraffic({
         const myInbound = rawMine.inbound ?? [];
         const visitors = [...baseVisitors, ...myInbound];
         
-      const mine = {
+    const mine = {
   inbound: (rawMine.inbound ?? []).filter(f => {
     const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    // Używamy bezpiecznego session usera oraz fallbacku na viewedUser zamiast brakującego 'data'
-    const fallbackUser = String(viewedUser || "").toLowerCase().trim();
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (fallbackUser && pilotName === fallbackUser);
+    // Bezpieczne pobranie nazwy bezpośrednio z przeglądarki i adresu URL:
+    const activePilot = typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").toLowerCase().trim()
+      : "";
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (activePilot && pilotName === activePilot);
   }),
   outbound: (rawMine.outbound ?? []).filter(f => {
     const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    const fallbackUser = String(viewedUser || "").toLowerCase().trim();
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (fallbackUser && pilotName === fallbackUser);
+    const activePilot = typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").toLowerCase().trim()
+      : "";
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (activePilot && pilotName === activePilot);
   })
 };
-
         return airport ? { icao, airport, visitors, mine } : null;
       })
       .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
