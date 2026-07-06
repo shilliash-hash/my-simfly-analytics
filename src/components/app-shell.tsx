@@ -17,7 +17,7 @@ import {
   TrendingUp,
 
 } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
 import { useAdminToken } from "@/lib/admin-token";
 import { useOnlineUsers } from "@/hooks/use-presence";
