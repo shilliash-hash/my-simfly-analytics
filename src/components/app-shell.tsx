@@ -20,7 +20,6 @@ import {
 import { useState, type ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
 import { useAdminToken } from "@/lib/admin-token";
-import { useOnlineUsers } from "@/hooks/use-presence";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
@@ -42,18 +41,45 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
    // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
-  const [sessionUserId] = useState(() => {
-    if (typeof window !== "undefined") {
-      // Jeśli pilot jest zalogowany, Lovable trzyma jego dane w localStorage
-      const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
-      if (savedUser) return savedUser.replace(/"/g, "").trim();
-    }
-    // Dla niezalogowanych urządzeń (lub telefonu) generujemy losowy tag gościa
-    return `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
-  });
+   // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
+  const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
 
-  // Rejestrujemy obecność w chmurze Realtime
-  useOnlineUsers(sessionUserId);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Pobieramy unikalny identyfikator urządzenia z localStorage
+    const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
+    const finalUserId = savedUser 
+      ? savedUser.replace(/"/g, "").trim() 
+      : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Dynamiczny import omija restrykcyjne sprawdzanie ścieżek przez Vite podczas buildu serwera
+    import("../lib/supabase").then(({ supabase }) => {
+      if (!supabase) return;
+
+      const channel = supabase.channel("hub-online-pilots", {
+        config: { presence: { key: finalUserId } },
+      });
+
+      channel
+        .on("presence", { event: "sync" }, () => {
+          const state = channel.presenceState();
+          const allPresentUsers: string[] = [];
+          Object.entries(state).forEach(([key, presences]: [string, any]) => {
+            presences.forEach(() => { allPresentUsers.push(key); });
+          });
+          setOnlinePilots(allPresentUsers);
+          // Zapisujemy listę globalnie w oknie przeglądarki, aby panel admina miał do niej stały dostęp
+          (window as any)._hubOnlinePilots = allPresentUsers;
+        })
+        .subscribe(async (status) => {
+          if (status === "SUBSCRIBED") {
+            await channel.track({ onlineAt: new Date().toISOString() });
+          }
+        });
+    });
+  }, []);
+
 
 
   return (
