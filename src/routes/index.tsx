@@ -951,12 +951,19 @@ export function LivePresenceWidget() {
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
-  const { data: rawOnlinePilots } = useQuery({
+   const { data: rawOnlinePilots } = useQuery({
     queryKey: ["public", "live-presence"],
     queryFn: async () => {
-      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        await pingFn({ data: { username: currentPilot } });
+      if (typeof window !== "undefined") {
+        // 1. Dynamicznie i pewnie wyciągamy Twój login z działających danych profilu na stronie
+        const activeProfileName = (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "shill").trim();
+        
+        // 2. Jeśli nazwa jest poprawna, meldujemy pilota w bazie Supabase
+        if (activeProfileName && activeProfileName !== "Guest" && activeProfileName !== "Pilot") {
+          await pingFn({ data: { username: activeProfileName } });
+        }
       }
+      // 3. Pobieramy świeżą listę aktywnych pilotów
       return await getOnlineFn();
     },
     refetchInterval: 15000, 
