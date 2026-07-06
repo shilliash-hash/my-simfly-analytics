@@ -256,8 +256,9 @@ function HubTrafficChart() {
                 formatter={(v: number, name: string) => [formatNumber(v), name]}
               />
               <Legend wrapperStyle={{ display: "none" }} />
-              <Bar yAxisId="left" dataKey="flights" name="Flights" fill="var(--runway)" radius={[4, 4, 0, 0]} />
-              <Bar yAxisId="right" dataKey="pax" name="PAX" fill="var(--instrument)" radius={[4, 4, 0, 0]} />
+      <Bar yAxisId="left" dataKey="flights" name="Flights" fill="var(--runway)" radius={[4, 4, 0, 0]} />
+      <Bar yAxisId="right" dataKey="pax" name="PAX" fill="var(--instrument)" radius={[4, 4, 0, 0]} />
+
             </BarChart>
           </ResponsiveContainer>
         )}
