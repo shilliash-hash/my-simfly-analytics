@@ -2915,7 +2915,12 @@ export const sweepOwnedAirportsForHubSupport = async (options?: { pagesPerAirpor
 };
 
 
+// ===========================================================================
+// HUB ANALYTICS & INTELLIGENCE EXTENSION 🏆
+// ===========================================================================
+
 // 1. FUNKCJA SPRAWDZANIA STATUSU AKTYWNOŚCI W TYGODNIU
+export const getHubSupportStatus = createServerFn("GET", async (payload: any = {}) => {
   // 1. PANCERNE WYCIĄGANIE TOŻSAMOŚCI: Przeszukujemy każdy możliwy wariant przesyłu z frontu
   let name = (payload?.username || payload?.data?.username || payload?.data?.handle || payload?.data?.me?.handle || "").trim();
 
@@ -2941,10 +2946,8 @@ export const sweepOwnedAirportsForHubSupport = async (options?: { pagesPerAirpor
     .eq("username", name)
     .limit(1);
 
-  return { active: data && data.length > 0 };
-
+  return { active: !!(data && data.length > 0) };
 });
-
 
 // 2. FUNKCJA AGREGACJI DANYCH DO WYKRESU SŁUPKOWEGO (ROZWIĄZANIE DLA LINII 205)
 export const getHubTrafficStats = createServerFn("GET", async () => {
@@ -2973,7 +2976,7 @@ export const getHubTrafficStats = createServerFn("GET", async () => {
 
 // 3. FUNKCJA OSI CZASU KARIERY PILOTA
 export const getPilotSupportTimeline = createServerFn("GET", async (payload: any = {}) => {
-   // Wyciągamy username niezależnie od tego, jak Lovable zapakowało obiekt sesji
+  // Wyciągamy username niezależnie od tego, jak Lovable zapakowało obiekt sesji
   let name = (payload?.username || payload?.data?.username || payload?.data?.handle || payload?.data?.me?.handle || "").trim();
   
   // Bezpiecznik awaryjny dla osi czasu: jeśli front wysłał pusty tekst, podstawiamy profil Luigiego do testów
