@@ -416,19 +416,20 @@ function IncomingTraffic({
         const myInbound = rawMine.inbound ?? [];
         const visitors = [...baseVisitors, ...myInbound];
         
-       const mine = {
+      const mine = {
   inbound: (rawMine.inbound ?? []).filter(f => {
     const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    // Próbujemy dopasować do currentSessionUser LUB do Twojego głównego konta data.me.handle
-    const myHandle = String(data?.me?.handle || "").toLowerCase().trim();
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (myHandle && pilotName === myHandle);
+    // Używamy bezpiecznego session usera oraz fallbacku na viewedUser zamiast brakującego 'data'
+    const fallbackUser = String(viewedUser || "").toLowerCase().trim();
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (fallbackUser && pilotName === fallbackUser);
   }),
   outbound: (rawMine.outbound ?? []).filter(f => {
     const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    const myHandle = String(data?.me?.handle || "").toLowerCase().trim();
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (myHandle && pilotName === myHandle);
+    const fallbackUser = String(viewedUser || "").toLowerCase().trim();
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (fallbackUser && pilotName === fallbackUser);
   })
 };
+
         return airport ? { icao, airport, visitors, mine } : null;
       })
       .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
