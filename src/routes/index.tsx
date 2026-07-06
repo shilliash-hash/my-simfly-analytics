@@ -50,40 +50,32 @@ function Overview() {
   const liveChangelogFeed = [];
 
   
-  // ZOSTAWIASZ TYLKO JEDEN TAKI BLOK:
-    const pingPresenceAction = useServerFn(pingUserPresence);
+   // 1. Dwie bezpieczne akcje serwerowe na samym początku komponentu
+  const pingPresenceAction = useServerFn(pingUserPresence);
+  const fetchOnlineListAction = useServerFn(getOnlineUsersList);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
+  // 2. Czyste, bezbłędne zapytanie oparte w całości o bezpieczny backend simfly.functions
   const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-direct-env"],
+    queryKey: ["public", "live-presence-pure-server"],
     queryFn: async () => {
+      // Meldujemy obecność aktualnego użytkownika na serwerze
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
         await pingPresenceAction({ data: { username: currentPilot } });
       }
-
-      // POPRAWKA: Szukamy klienta Supabase wyłącznie w obiekcie window przeglądarki.
-      // Całkowicie usuwamy słowo 'import', dzięki czemu router przejdzie kompilację bez problemu!
-      const activeClient = typeof window !== "undefined" ? (window as any).supabase : null;
-      if (!activeClient) return [];
-
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       
-      const { data } = await activeClient
-        .from("app_presence")
-        .select("username")
-        .gte("last_seen", fiveMinutesAgo)
-        .limit(100);
-
-      return (data ?? []).map((row: any) => row.username);
+      // Pobieramy listę online z serwera (cała logika bazy wykonuje się w simfly.functions.ts)
+      return await fetchOnlineListAction();
     },
     refetchInterval: 15000, 
     staleTime: 5000,
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
 
 
