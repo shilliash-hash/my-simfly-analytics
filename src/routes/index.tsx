@@ -416,17 +416,19 @@ function IncomingTraffic({
         const myInbound = rawMine.inbound ?? [];
         const visitors = [...baseVisitors, ...myInbound];
         
-        const mine = {
-          inbound: (rawMine.inbound ?? []).filter(f => {
-            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
-          }),
-          outbound: (rawMine.outbound ?? []).filter(f => {
-            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
-          })
-        };
-
+       const mine = {
+  inbound: (rawMine.inbound ?? []).filter(f => {
+    const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+    // Próbujemy dopasować do currentSessionUser LUB do Twojego głównego konta data.me.handle
+    const myHandle = String(data?.me?.handle || "").toLowerCase().trim();
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (myHandle && pilotName === myHandle);
+  }),
+  outbound: (rawMine.outbound ?? []).filter(f => {
+    const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+    const myHandle = String(data?.me?.handle || "").toLowerCase().trim();
+    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (myHandle && pilotName === myHandle);
+  })
+};
         return airport ? { icao, airport, visitors, mine } : null;
       })
       .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
