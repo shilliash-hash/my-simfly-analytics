@@ -20,6 +20,7 @@ import {
 import type { ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
 import { useAdminToken } from "@/lib/admin-token";
+import { useOnlineUsers } from "@/hooks/use-presence";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
@@ -39,6 +40,9 @@ const NAV = [
 
 
 export function AppShell({ children }: { children: ReactNode }) {
+ // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
+ useOnlineUsers("LuigiThePlumber"); // Tymczasowo na sztywno, dopóki nie podepniemy dynamicznej sesji
+
   return (
     <div className="flight-deck-grad min-h-screen text-foreground">
       <div className="mx-auto flex max-w-[1500px] flex-col gap-6 px-4 py-6 lg:flex-row lg:px-8">
