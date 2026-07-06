@@ -1,3 +1,4 @@
+import { useOnlineUsers } from "@/hooks/use-presence";
 import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -45,12 +46,16 @@ function AdminPage() {
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
       {mounted && token ? (
-        <div className="space-y-8">
-          <AdminTable token={token} />
-          <HubSupportAdmin token={token} />
-          <AdminChangelog adminToken={token} />
-        </div>
-      ) : (
+      <div className="space-y-8">
+        {/* WIDŻET ONLINE NA SAMEJ GÓRZE PANELU ADMINA */}
+        <AdminOnlineUsersWidget />
+
+        <AdminTable token={token} />
+        <HubSupportAdmin token={token} />
+        <AdminChangelog adminToken={token} />
+      </div>
+    ) : (
+
         <TokenForm />
       )}
     </AppShell>
@@ -660,6 +665,46 @@ export function AdminChangelog() {
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+export function AdminOnlineUsersWidget() {
+  const { keyTag } = useSimflyArgs(); 
+  const onlinePilots = useOnlineUsers(keyTag || "Admin");
+
+  return (
+    <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+      <div className="flex items-center justify-between border-b border-border/20 pb-2.5">
+        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-runway"></span>
+          </span>
+          Live Presence · Hub Network
+        </div>
+        <span className="mono text-[11px] font-bold text-runway px-2 py-0.5 rounded bg-runway/10 border border-runway/20">
+          {onlinePilots.length} Online
+        </span>
+      </div>
+
+      <div className="mt-3">
+        <div className="text-xs font-medium text-muted-foreground mb-2">Pilots currently browsing:</div>
+        {onlinePilots.length === 0 ? (
+          <p className="text-[11px] text-muted-foreground italic">Gathering network signals...</p>
+        ) : (
+          <ul className="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto pr-1 vertical-scroll">
+            {onlinePilots.map((username) => (
+              <li 
+                key={username} 
+                className="mono text-[10px] font-semibold bg-secondary/60 text-foreground border border-border/40 px-2 py-0.5 rounded-md flex items-center gap-1 hover:border-runway/30 transition-colors"
+              >
+                <span className="text-runway">@</span>{username}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   );
