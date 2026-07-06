@@ -113,10 +113,13 @@ function AirportDetail() {
             </ul>
           )}
         </div>
-      </section>
+            </section>
+
+      {/* KLUCZOWE WYWOŁANIE: Włączamy sekcję analityczną i FOMO na ekranie! */}
+      <HubAnalyticsSection />
 
       <a
-        href={`https://simfly.io/assets/airport/${a.icao}/details`}
+        href={`https://simfly.io{a.icao}/details`}
         target="_blank"
         rel="noreferrer"
         className="mono mt-6 inline-block text-[11px] uppercase tracking-widest text-runway hover:underline"
@@ -126,6 +129,7 @@ function AirportDetail() {
     </AppShell>
   );
 }
+
 
 function HubAnalyticsSection() {
   const [isMounted, setIsMounted] = useState(false);
