@@ -3010,13 +3010,12 @@ export const pingUserPresence = createServerFn({
   inputValidator: (d: { username: string }) => d,
   handler: async ({ data }) => {
     if (!data.username || data.username === "Guest" || data.username === "Pilot") return { success: false };
-    
     try {
-      // Bezpiecznie korzystamy z importu z góry pliku
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       if (!supabaseAdmin) return { success: false };
       
       await supabaseAdmin
-        .from("app_presence")
+        .from("app_presence") // Supabase Admin automatycznie szuka w public
         .upsert({ 
           username: data.username.trim(), 
           last_seen: new Date().toISOString() 
@@ -3034,6 +3033,7 @@ export const getOnlineUsersList = createServerFn({
   method: "GET",
   handler: async (): Promise<string[]> => {
     try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       if (!supabaseAdmin) return [];
       
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -3051,4 +3051,3 @@ export const getOnlineUsersList = createServerFn({
     }
   },
 });
-
