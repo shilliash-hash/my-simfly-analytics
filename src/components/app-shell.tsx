@@ -54,8 +54,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
     // Dynamiczny import omija restrykcyjne sprawdzanie ścieżek przez Vite podczas buildu serwera
-    import("../lib/supabase").then(({ supabase }) => {
-      if (!supabase) return;
+   import("@/lib/supabase.ts").then(({ supabase }) => {
+
+     if (!supabase) return;
 
       const channel = supabase.channel("hub-online-pilots", {
         config: { presence: { key: finalUserId } },
