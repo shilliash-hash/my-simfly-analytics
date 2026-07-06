@@ -27,7 +27,7 @@ type LayerState = {
 };
 
 const DEFAULT_LAYERS: LayerState = {
-  routes: true,
+  routes: false,
   airports: true,
   aircraft: false,
   licenses: false,
