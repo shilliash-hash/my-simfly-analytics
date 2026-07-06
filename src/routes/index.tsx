@@ -538,20 +538,31 @@ function IncomingTraffic({
                   const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
                   return (
                     <li key={v.id} className="flex items-center gap-2 text-xs">
-                      {v.userAvatar ? (
-                        <img
-                          src={v.userAvatar}
-                          alt=""
-                          className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 shrink-0 rounded-full border border-border/40 bg-secondary/40" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">@{v.username}</div>
-                        <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {v.aircraftICAO} · {v.origin ?? "—"} → {v.destination ?? "—"}
-                        </div>
+                          {(() => {
+                const isMyFlight = String(v.username || v.pilot?.username || "")
+                  .toLowerCase()
+                  .trim() === String(currentSessionUser || "").toLowerCase().trim();
+
+                return v.userAvatar ? (
+                  <img
+                    src={v.userAvatar}
+                    alt=""
+                    className={`h-6 w-6 shrink-0 rounded-full border object-cover shadow-sm ${
+                      isMyFlight ? "border-runway" : "border-[var(--instrument)]"
+                    }`}
+                  />
+                ) : (
+                  <div className={`h-6 w-6 shrink-0 rounded-full border flex items-center justify-center text-[9px] font-bold shadow-sm ${
+                    isMyFlight 
+                      ? "bg-runway/20 border-runway text-runway shadow-runway/5" 
+                      : "bg-[var(--instrument)]/15 border-[var(--instrument)] text-[var(--instrument)] shadow-orange-500/5"
+                  }`}>
+                    {isMyFlight ? "M" : "•"}
+                  </div>
+                );
+              })()}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
                         {v.etaMs && (
                           <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
                             ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
