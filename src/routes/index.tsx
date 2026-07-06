@@ -401,16 +401,7 @@ function IncomingTraffic({
     return m;
   }, [myFlights, airportByIcao]);
 
-  const active = useMemo(() => {
-    const hubIcaos = new Set<string>([
-      ...traffic.map((t) => t.icao.toUpperCase()),
-      ...Array.from(myByHub.keys()),
-    ]);
-    return Array.from(hubIcaos)
-      .map((icao) => {
-        const airport = airportByIcao.get(icao);
-        const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-          // POPRAWKA: Pobieramy argumenty SimFly w locie i filtrujemy listy "mine" po Twoim prawdziwym nicku
+  // POPRAWKA: Pobieramy argumenty SimFly w locie i filtrujemy listy "mine" po Twoim prawdziwym nicku
   const active = useMemo(() => {
     const hubIcaos = new Set<string>([
       ...traffic.map((t) => t.icao.toUpperCase()),
