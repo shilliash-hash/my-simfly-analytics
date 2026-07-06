@@ -407,30 +407,37 @@ function IncomingTraffic({
         const airport = airportByIcao.get(icao);
         const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
           // POPRAWKA: Pobieramy argumenty SimFly w locie i filtrujemy listy "mine" po Twoim prawdziwym nicku
-  const active = useMemo(() => {
-  // POPRAWKA: Tutaj wywołanie hooka jest w 100% legalne i zgodne z zasadami Reacta!
+const active = useMemo(() => {
   const { keyTag: currentSessionUser } = useSimflyArgs(); 
   
   const hubIcaos = new Set<string>([
     ...traffic.map((t) => t.icao.toUpperCase()),
+    ...Array.from(myByHub.keys()),
+  ]);
 
-   const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+  return Array.from(hubIcaos)
+    .map((icao) => {
+      const airport = airportByIcao.get(icao);
+      const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+      const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
 
-   const mine = {
-     inbound: (rawMine.inbound ?? []).filter(f => {
-       const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-       return pilotName === String(currentSessionUser || "").toLowerCase().trim();
-     }),
-     outbound: (rawMine.outbound ?? []).filter(f => {
-       const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-       return pilotName === String(currentSessionUser || "").toLowerCase().trim();
-     })
-   };
-       return airport ? { icao, airport, visitors, mine } : null;
-      })
-      .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => !!r)
-      .sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
-  }, [traffic, myByHub, airportByIcao]);
+      const mine = {
+        inbound: (rawMine.inbound ?? []).filter(f => {
+          const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+          return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+        }),
+        outbound: (rawMine.outbound ?? []).filter(f => {
+          const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+          return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+        })
+      };
+
+      return airport ? { icao, airport, visitors, mine } : null;
+    })
+    .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
+    .sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
+}, [traffic, myByHub, airportByIcao]);
+
 
   const totalVisitors = active.reduce((s, t) => s + t.visitors.length, 0);
   const totalMine = active.reduce((s, t) => s + t.mine.inbound.length + t.mine.outbound.length, 0);
