@@ -3013,17 +3013,24 @@ export const pingUserPresence = createServerFn({
   handler: async ({ data }) => {
     if (!data.username || data.username === "Guest" || data.username === "Pilot") return { success: false };
     try {
-      // Usunęliśmy zagnieżdżony import – korzystamy bezpośrednio z linii 1!
-      await supabaseAdmin
-        .from("app_presence")
+      if (!supabaseAdmin) return { success: false };
+      
+      // POPRAWKA: Dodajemy jawne wskazanie na schemat public.
+      const { error } = await supabaseAdmin
+        .from("public.app_presence")
         .upsert({ 
           username: data.username.trim(), 
           last_seen: new Date().toISOString() 
         }, { onConflict: "username" });
 
+      if (error) {
+        console.error("[presence] Supabase internal upsert error:", error);
+        return { success: false };
+      }
+
       return { success: true };
     } catch (error) {
-      console.warn("[presence] ping failed:", error);
+      console.warn("[presence] ping crash:", error);
       return { success: false };
     }
   },
@@ -3033,18 +3040,25 @@ export const getOnlineUsersList = createServerFn({
   method: "GET",
   handler: async (): Promise<string[]> => {
     try {
+      if (!supabaseAdmin) return [];
+      
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
-      // Korzystamy bezpośrednio z linii 1!
-      const { data } = await supabaseAdmin
-        .from("app_presence")
+      // POPRAWKA: Tutaj również jawnie wskazujemy schemat public.
+      const { data, error } = await supabaseAdmin
+        .from("public.app_presence")
         .select("username")
         .gte("last_seen", fiveMinutesAgo)
         .limit(100);
 
+      if (error) {
+        console.error("[presence] Supabase internal fetch error:", error);
+        return [];
+      }
+
       return (data ?? []).map((row: any) => row.username);
     } catch (error) {
-      console.warn("[presence] fetch failed:", error);
+      console.warn("[presence] fetch crash:", error);
       return [];
     }
   },
