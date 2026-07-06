@@ -43,39 +43,30 @@ function Overview() {
   const liveChangelogFeed = [];
 
   // PANCERNA LOGIKA OBECNOŚCI (Zgodna z zasadami React i wolna od wewnętrznych importów)
-  const pingPresenceAction = useServerFn(pingUserPresence);
+    const pingPresenceAction = useServerFn(pingUserPresence);
+  const fetchOnlineListAction = useServerFn(getOnlineUsersList);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
   const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-direct-clean"],
+    queryKey: ["public", "live-presence-pure-server-final"],
     queryFn: async () => {
+      // 1. Zgłaszamy obecność na serwerze
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
         await pingPresenceAction({ data: { username: currentPilot } });
       }
 
-      if (!supabase) return [];
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data, error } = await supabase
-        .from("app_presence")
-        .select("username")
-        .gte("last_seen", fiveMinutesAgo)
-        .limit(100);
-
-      if (error) {
-        console.warn("[presence] direct fetch failed:", error);
-        return [];
-      }
-      return (data ?? []).map((row: any) => row.username);
+      // 2. Pobieramy listę online bezpośrednio z funkcji serwerowej (omijamy frontendowe błędy 404)
+      return await fetchOnlineListAction();
     },
     refetchInterval: 15000, 
     staleTime: 5000,
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
 
 
