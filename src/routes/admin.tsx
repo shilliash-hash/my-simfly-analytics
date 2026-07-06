@@ -37,12 +37,40 @@ function AdminPage() {
     setMounted(true);
   }, []);
 
-      // KROK 2: Udostępniamy działający obiekt bazy danych dla komponentu nadrzędny AppShell
+       // LOGIKA OBECNOŚCI: Skrypt działa bezpośrednio na sprawdzonym kliencie 'supabase'
   useEffect(() => {
-    if (typeof window !== "undefined" && typeof supabase !== "undefined") {
-      (window as any)._sharedSupabaseInstance = supabase;
-      (window as any).supabase = supabase;
-    }
+    if (typeof window === "undefined" || typeof supabase === "undefined") return;
+
+    // Wyciągamy unikalny identyfikator urządzenia z localStorage
+    const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
+    const finalUserId = savedUser 
+      ? savedUser.replace(/"/g, "").trim() 
+      : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
+
+    // Otwieramy kanał WebSocket bezpośrednio w tym pliku
+    const channel = supabase.channel("hub-online-pilots", {
+      config: { presence: { key: finalUserId } },
+    });
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const allPresentUsers: string[] = [];
+        Object.entries(state).forEach(([key, presences]: [string, any]) => {
+          presences.forEach(() => { allPresentUsers.push(key); });
+        });
+        // Zapisujemy listę bezpośrednio w pamięci RAM dla widżetu poniżej
+        (window as any)._hubOnlinePilots = allPresentUsers;
+      })
+      .subscribe(async (status) => {
+        if (status === "SUBSCRIBED") {
+          await channel.track({ onlineAt: new Date().toISOString() });
+        }
+      });
+
+    return () => {
+      channel.unsubscribe();
+    };
   }, []);
 
   
