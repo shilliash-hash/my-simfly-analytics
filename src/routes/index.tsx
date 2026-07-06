@@ -1,3 +1,4 @@
+import { supabase } from "@/integrations/supabase/client";
 import { staticChangelogFeed } from "../lib/changelog-data";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -945,32 +946,52 @@ function PilotSwitcher({ current }: { current: string | null }) {
 }  
 export function LivePresenceWidget() {
   const pingFn = useServerFn(pingUserPresence);
-  const getOnlineFn = useServerFn(getOnlineUsersList);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
-   const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence"],
+  const { data: rawOnlinePilots } = useQuery({
+    queryKey: ["public", "live-presence-direct-env"],
     queryFn: async () => {
-      if (typeof window !== "undefined") {
-        // 1. Dynamicznie i pewnie wyciągamy Twój login z działających danych profilu na stronie
-        const activeProfileName = (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "shill").trim();
-        
-        // 2. Jeśli nazwa jest poprawna, meldujemy pilota w bazie Supabase
-        if (activeProfileName && activeProfileName !== "Guest" && activeProfileName !== "Pilot") {
-          await pingFn({ data: { username: activeProfileName } });
+      // 1. Rejestrujemy naszą obecność na backendzie
+      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
+        await pingFn({ data: { username: currentPilot } });
+      }
+
+      // 2. Bezpiecznie sprawdzamy dostępność klienta globalnego lub integracyjnego
+      let activeClient = (window as any).supabase;
+      
+      // Jeśli nie ma go w oknie, importujemy dynamicznie oficjalny pakiet bez zaśmiecania nagłówka pliku
+      if (!activeClient && typeof window !== "undefined") {
+        try {
+          const { supabase: integrationClient } = await import("@/integrations/supabase/client");
+          activeClient = integrationClient;
+        } catch {
+          console.warn("[presence] Integration client not found, skipping direct fetch");
         }
       }
-      // 3. Pobieramy świeżą listę aktywnych pilotów
-      return await getOnlineFn();
+
+      if (!activeClient) return [];
+
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      const { data, error } = await activeClient
+        .from("app_presence")
+        .select("username")
+        .gte("last_seen", fiveMinutesAgo)
+        .limit(100);
+
+      if (error) {
+        console.warn("[presence] direct query failed:", error);
+        return [];
+      }
+      return (data ?? []).map((row: any) => row.username);
     },
     refetchInterval: 15000, 
     staleTime: 5000,
   });
 
-  // BEZPIECZEŃSTWO: Gwarantujemy, że onlinePilots to zawsze tablica, nawet jeśli serwer zwróci null/obiekt
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
 
   return (
@@ -1000,4 +1021,3 @@ export function LivePresenceWidget() {
     </div>
   );
 }
-
