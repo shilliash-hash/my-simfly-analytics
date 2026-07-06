@@ -147,6 +147,8 @@ function AirportsPage() {
           </table>
         </div>
       </div>
+       {/* TUTAJ WSTRZYKUJEMY WYKRESY I SEKCJĘ FOMO POD TABELĄ */}
+    < HubAnalyticsSection />
     </AppShell>
   );
 }
