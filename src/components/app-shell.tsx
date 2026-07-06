@@ -53,12 +53,16 @@ export function AppShell({ children }: { children: ReactNode }) {
       ? savedUser.replace(/"/g, "").trim() 
       : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // Dynamiczny import omija restrykcyjne sprawdzanie ścieżek przez Vite podczas buildu serwera
-   import("@/lib/supabase.ts").then(({ supabase }) => {
+    // PANCERNY TRICK: Pobieramy gotowego klienta Supabase bezpośrednio z biblioteki npm,
+    // wyciągając klucze ze zmiennych środowiskowych wstrzykniętych do przeglądarki!
+    import("@supabase/supabase-js").then(({ createClient }) => {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (window as any)._env_?.VITE_SUPABASE_URL || "";
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (window as any)._env_?.VITE_SUPABASE_ANON_KEY || "";
 
-     if (!supabase) return;
+      if (!supabaseUrl || !supabaseAnonKey) return;
+      const localClient = createClient(supabaseUrl, supabaseAnonKey);
 
-      const channel = supabase.channel("hub-online-pilots", {
+      const channel = localClient.channel("hub-online-pilots", {
         config: { presence: { key: finalUserId } },
       });
 
@@ -70,7 +74,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             presences.forEach(() => { allPresentUsers.push(key); });
           });
           setOnlinePilots(allPresentUsers);
-          // Zapisujemy listę globalnie w oknie przeglądarki, aby panel admina miał do niej stały dostęp
+          // Zapisujemy listę globalnie w oknie przeglądarki dla widżetu admina
           (window as any)._hubOnlinePilots = allPresentUsers;
         })
         .subscribe(async (status) => {
@@ -80,6 +84,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         });
     });
   }, []);
+
 
 
 
