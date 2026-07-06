@@ -670,50 +670,15 @@ export function AdminChangelog() {
 }
 
 export function AdminOnlineUsersWidget() {
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
-
-  // Dopóki kod wykonuje się na serwerze, rysujemy bezpieczny szkielet (Skeletor)
-  if (!isMounted) {
-    return (
-      <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-        <div className="flex items-center justify-between border-b border-border/20 pb-2.5">
-          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-muted animate-pulse"></span>
-            Initializing Presence...
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // W tym miejscu jesteśmy już na 100% w przeglądarce – bezpiecznie odpalamy Realtime!
-  return <AdminOnlineUsersWidgetContent />;
-}
-
-// WYDZIELONY KOMPONENT WEWNĘTRZNY DO OBSŁUGI TRANSMISJI LIVE
-function AdminOnlineUsersWidgetContent() {
-  const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    
-    // Pobieramy stan sieci obecności co 1.5 sekundy bezpośrednio z pamięci RAM przeglądarki
-    const interval = setInterval(() => {
-      const liveList = (window as any)._hubOnlinePilots || [];
-      setOnlinePilots(liveList);
-    }, 1500);
-
-    return () => clearInterval(interval);
-  }, []);
+  // Sprawdzamy bezpiecznie w przeglądarce dostępność globalnej tablicy obecności
+  const isBrowser = typeof window !== "undefined";
+  const onlinePilots: string[] = isBrowser ? (window as any)._hubOnlinePilots || [] : [];
 
   return (
     <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
       <div className="flex items-center justify-between border-b border-border/20 pb-2.5">
         <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          {/* Aktywna dioda radaru */}
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-runway"></span>
@@ -745,6 +710,5 @@ function AdminOnlineUsersWidgetContent() {
     </div>
   );
 }
-
 
 // router-force-reload: v3
