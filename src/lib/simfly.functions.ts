@@ -3000,3 +3000,56 @@ export const getPilotSupportTimeline = createServerFn("GET", async (payload: any
     qualifyingArrivalAt: r.created_at
   }));
 });
+/* =========================================================================
+   DYNAMICZNA LOGIKA OBECNOŚCI PILOTÓW (LIVE PRESENCE RADAR)
+   ========================================================================= */
+
+export const pingUserPresence = createServerFn({
+  method: "POST",
+  inputValidator: (d: { username: string }) => d,
+  handler: async ({ data }) => {
+    if (!data.username || data.username === "Guest" || data.username === "Pilot") return { success: false };
+    
+    try {
+      // Importujemy bezpieczny serwerowy klient Supabase z client.server
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      
+      // Zapisujemy lub aktualizujemy obecność pilota w tabeli "app_presence"
+      await supabaseAdmin
+        .from("app_presence")
+        .upsert({ 
+          username: data.username.trim(), 
+          last_seen: new Date().toISOString() 
+        }, { onConflict: "username" });
+
+      return { success: true };
+    } catch (error) {
+      console.warn("[presence] ping failed:", error);
+      return { success: false };
+    }
+  },
+});
+
+export const getOnlineUsersList = createServerFn({
+  method: "GET",
+  handler: async (): Promise<string[]> => {
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      
+      // Wyliczamy próg czasowy - piloci aktywni w ciągu ostatnich 5 minut
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+
+      // Pobieramy z bazy listę użytkowników spełniających warunek czasowy
+      const { data } = await supabaseAdmin
+        .from("app_presence")
+        .select("username")
+        .gte("last_seen", fiveMinutesAgo)
+        .limit(100);
+
+      return (data ?? []).map((row: any) => row.username);
+    } catch (error) {
+      console.warn("[presence] fetch failed:", error);
+      return [];
+    }
+  },
+});
