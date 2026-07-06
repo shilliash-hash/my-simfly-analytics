@@ -2914,3 +2914,69 @@ export const sweepOwnedAirportsForHubSupport = async (options?: { pagesPerAirpor
   }
 };
 
+import { createServerFn } from "@tanstack/start";
+import { supabase } from "./supabase"; // Dostosuj ścieżkę do klienta jeśli trzeba
+
+// 1. FUNKCJA SPRAWDZANIA STATUSU AKTYWNOŚCI W TYGODNIU
+export const getHubSupportStatus = createServerFn("GET", async (payload: { username?: string } = {}) => {
+  const name = payload?.username?.trim();
+  if (!name) return { active: false };
+
+  // Sprawdzamy czy istnieje wpis w obecnym tygodniu operacyjnym
+  const { data, error } = await supabase
+    .from("hub_support")
+    .select("id")
+    .eq("username", name)
+    .order("week_start_utc", { ascending: false })
+    .limit(1);
+
+  if (error || !data || data.length === 0) return { active: false };
+  return { active: true };
+});
+
+// 2. FUNKCJA AGREGACJI DANYCH DO WYKRESU SŁUPKOWEGO (ROZWIĄZANIE DLA LINII 205)
+export const getHubTrafficStats = createServerFn("GET", async () => {
+  // Pobieramy dane z bazy hub_support do obliczeń statystycznych
+  const { data, error } = await supabase
+    .from("hub_support")
+    .select("qualifying_icao, flights_count, total_pax");
+
+  if (error || !data) return [];
+
+  // Agregujemy wyniki na wypadek wielu wpisów dla tego samego ICAO
+  const aggMap = new Map<string, { icao: string; flights: number; pax: number }>();
+  for (const r of data) {
+    if (!r.qualifying_icao) continue;
+    const k = r.qualifying_icao.toUpperCase();
+    if (!aggMap.has(k)) {
+      aggMap.set(k, { icao: k, flights: 0, pax: 0 });
+    }
+    const item = aggMap.get(k)!;
+    item.flights += Number(r.flights_count || 1);
+    item.pax += Number(r.total_pax || 0);
+  }
+
+  return Array.from(aggMap.values());
+});
+
+// 3. FUNKCJA OSI CZASU KARIERY PILOTA
+export const getPilotSupportTimeline = createServerFn("GET", async (payload: { username?: string } = {}) => {
+  const name = payload?.username?.trim();
+  if (!name) return [];
+
+  const { data, error } = await supabase
+    .from("hub_support")
+    .select("*")
+    .eq("username", name)
+    .order("week_start_utc", { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map((r, idx) => ({
+    weekStartUtc: r.week_start_utc,
+    weekLabel: `Week ${r.week_number || 'Historical'}`,
+    source: r.support_source || 'airport',
+    qualifyingIcao: r.qualifying_icao,
+    qualifyingArrivalAt: r.created_at
+  }));
+});
