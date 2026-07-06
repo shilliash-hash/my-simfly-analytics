@@ -38,19 +38,11 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-    console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
- const liveChangelogFeed = [];
-
-function Overview() {
-  const fn = useServerFn(getSimflyPayload);
-  const qc = useQueryClient();
-  const { keyTag, payload, username: viewedUser } = useSimflyArgs();
-
+  
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
 
-  
-   // 1. Dwie bezpieczne akcje serwerowe na samym początku komponentu
+  // PANCERNA LOGIKA OBECNOŚCI (Zgodna z zasadami React i wolna od wewnętrznych importów)
   const pingPresenceAction = useServerFn(pingUserPresence);
 
   const currentPilot = typeof window !== "undefined"
@@ -64,7 +56,6 @@ function Overview() {
         await pingPresenceAction({ data: { username: currentPilot } });
       }
 
-      // Bezpiecznie sprawdzamy klienta zaimportowanego w 1. linii pliku
       if (!supabase) return [];
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       
@@ -85,6 +76,7 @@ function Overview() {
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
 
 
