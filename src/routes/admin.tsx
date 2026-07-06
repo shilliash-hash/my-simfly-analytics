@@ -37,18 +37,20 @@ function AdminPage() {
     setMounted(true);
   }, []);
 
-       // LOGIKA OBECNOŚCI: Skrypt działa bezpośrednio na sprawdzonym kliencie 'supabase'
+       // LOGIKA OBECNOŚCI: Pobieramy klienta bezpośrednio z globalnego okna przeglądarki
   useEffect(() => {
-    if (typeof window === "undefined" || typeof supabase === "undefined") return;
+    // Bezpiecznie sprawdzamy, czy okno oraz globalna instancja Supabase są załadowane w przeglądarce
+    const globalSupabase = typeof window !== "undefined" ? (window as any).supabase : null;
+    if (!globalSupabase) return;
 
-    // Wyciągamy unikalny identyfikator urządzenia z localStorage
+    // Pobieramy tożsamość zalogowanego użytkownika
     const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
     const finalUserId = savedUser 
       ? savedUser.replace(/"/g, "").trim() 
       : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // Otwieramy kanał WebSocket bezpośrednio w tym pliku
-    const channel = supabase.channel("hub-online-pilots", {
+    // Otwieramy kanał WebSocket korzystając z odnalezionej globalnie instancji
+    const channel = globalSupabase.channel("hub-online-pilots", {
       config: { presence: { key: finalUserId } },
     });
 
@@ -56,13 +58,18 @@ function AdminPage() {
       .on("presence", { event: "sync" }, () => {
         const state = channel.presenceState();
         const allPresentUsers: string[] = [];
+        
         Object.entries(state).forEach(([key, presences]: [string, any]) => {
-          presences.forEach(() => { allPresentUsers.push(key); });
+          presences.forEach(() => { 
+            if (!allPresentUsers.includes(key)) {
+              allPresentUsers.push(key); 
+            }
+          });
         });
-        // Zapisujemy listę bezpośrednio w pamięci RAM dla widżetu poniżej
+        
         (window as any)._hubOnlinePilots = allPresentUsers;
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status: string) => {
         if (status === "SUBSCRIBED") {
           await channel.track({ onlineAt: new Date().toISOString() });
         }
@@ -72,7 +79,6 @@ function AdminPage() {
       channel.unsubscribe();
     };
   }, []);
-
   
   return (
     <AppShell>
