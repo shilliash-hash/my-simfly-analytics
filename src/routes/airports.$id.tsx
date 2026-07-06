@@ -128,14 +128,33 @@ function AirportDetail() {
 }
 
 function HubAnalyticsSection() {
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const statusFn = useServerFn(getHubSupportStatus);
   const { keyTag, payload } = useSimflyArgs();
   const { data: status, isLoading } = useQuery({
     queryKey: ["hub-support", keyTag],
     queryFn: () => statusFn(payload ? { data: payload } : undefined),
     staleTime: 5 * 60_000,
+    enabled: isMounted, // <- ZAPOBIEGA URUCHAMIANIU ZAPYTANIA NA SERWERZE (SSR)
   });
+
+  if (!isMounted) {
+    return (
+      <section className="mt-10">
+        <div className="panel rounded-xl border border-border/40 bg-background/30 p-6 text-center text-xs text-muted-foreground animate-pulse">
+          Syncing analytics data...
+        </div>
+      </section>
+    );
+  }
+
   return (
+
     <section className="mt-10">
       <div className="mb-4 flex items-baseline justify-between gap-3">
         <div>
@@ -185,8 +204,15 @@ function LockedGate() {
   );
 }
 function HubTrafficChart() {
+  const [isMounted, setIsMounted] = useState(false);
+  
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   const fn = useServerFn(getHubTrafficStats);
   const { data, isLoading } = useQuery({
+
     queryKey: ["hub-support", "traffic-stats"],
     queryFn: () => fn(),
     staleTime: 5 * 60_000,
@@ -215,9 +241,13 @@ function HubTrafficChart() {
           <div className="grid h-full place-items-center text-sm text-muted-foreground">Loading traffic…</div>
         ) : rows.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">No qualifying arrivals recorded yet.</div>
-        ) : (
-          <ResponsiveContainer>
-            <BarChart data={rows} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
+         ) : (
+    (!isMounted ? (
+      <div className="grid h-full place-items-center text-sm text-muted-foreground animate-pulse">Initializing charts...</div>
+    ) : (
+      <ResponsiveContainer>
+        <BarChart data={rows} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
+
               <CartesianGrid stroke="var(--border)" vertical={false} />
               <XAxis dataKey="icao" stroke="var(--muted-foreground)" fontSize={11} />
               <YAxis yAxisId="left" stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
@@ -232,7 +262,7 @@ function HubTrafficChart() {
               <Bar yAxisId="right" dataKey="pax" name="PAX" fill="var(--instrument)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        )}
+        ))
       </div>
     </div>
   );
