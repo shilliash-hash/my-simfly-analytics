@@ -49,7 +49,9 @@ function Overview() {
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
 
-  // PRAWIDŁOWY BLOK (Każda zmienna zadeklarowana tylko raz):
+   const liveChangelogFeed = [];
+
+  // ZOSTAWIASZ TYLKO JEDEN TAKI BLOK:
   const pingPresenceAction = useServerFn(pingUserPresence);
 
   const currentPilot = typeof window !== "undefined"
@@ -89,6 +91,7 @@ function Overview() {
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
   // DALSZA CZĘŚĆ (Zostawiasz oryginalne useSuspenseQuery bez zmian poniżej):
  
