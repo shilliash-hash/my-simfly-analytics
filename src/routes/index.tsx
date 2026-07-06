@@ -1,5 +1,4 @@
 import { staticChangelogFeed } from "../lib/changelog-data";
-import { cn } from "@/lib/utils";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -412,28 +411,20 @@ function IncomingTraffic({
     return Array.from(hubIcaos)
       .map((icao) => {
         const airport = airportByIcao.get(icao);
+        const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
         const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-        const baseVisitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-        const myInbound = rawMine.inbound ?? [];
-        const visitors = [...baseVisitors, ...myInbound];
-        
-    const mine = {
-  inbound: (rawMine.inbound ?? []).filter(f => {
-    const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    // Bezpieczne pobranie nazwy bezpośrednio z przeglądarki i adresu URL:
-    const activePilot = typeof window !== "undefined"
-      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").toLowerCase().trim()
-      : "";
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (activePilot && pilotName === activePilot);
-  }),
-  outbound: (rawMine.outbound ?? []).filter(f => {
-    const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
-    const activePilot = typeof window !== "undefined"
-      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").toLowerCase().trim()
-      : "";
-    return pilotName === String(currentSessionUser || "").toLowerCase().trim() || (activePilot && pilotName === activePilot);
-  })
-};
+
+        const mine = {
+          inbound: (rawMine.inbound ?? []).filter(f => {
+            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+          }),
+          outbound: (rawMine.outbound ?? []).filter(f => {
+            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+          })
+        };
+
         return airport ? { icao, airport, visitors, mine } : null;
       })
       .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
@@ -543,58 +534,45 @@ function IncomingTraffic({
                     <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
                 ))}
-                   {visitors.slice(0, 4).map((v: any) => {
-            const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
-            
-            const isMyFlight = String(v.username || v.pilot?.username || "")
-              .toLowerCase()
-              .trim() === String(currentSessionUser || "").toLowerCase().trim();
-
-            return (
-              <li key={v.id} className="flex items-center gap-2 text-xs">
-                {v.userAvatar ? (
-                  <img
-                    src={v.userAvatar}
-                    alt=""
-                    className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover"
-                  />
-                ) : (
-                  <div className={cn(
-                    "h-6 w-6 shrink-0 rounded-full border flex items-center justify-center text-[9px] font-bold shadow-sm",
-                    isMyFlight 
-                      ? "bg-runway/20 border-runway text-runway" 
-                      : "bg-secondary border-border text-muted-foreground"
-                  )}>
-                    {isMyFlight ? "M" : "•"}
-                  </div>
+                {visitors.slice(0, 4).map((v) => {
+                  const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
+                  return (
+                    <li key={v.id} className="flex items-center gap-2 text-xs">
+                      {v.userAvatar ? (
+                        <img
+                          src={v.userAvatar}
+                          alt=""
+                          className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover"
+                        />
+                      ) : (
+                        <div className="h-6 w-6 shrink-0 rounded-full border border-border/40 bg-secondary/40" />
+                      )}
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-medium">@{v.username}</div>
+                        <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+                          {v.aircraftICAO} · {v.origin ?? "—"} → {v.destination ?? "—"}
+                        </div>
+                        {v.etaMs && (
+                          <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
+                            ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
+                          </div>
+                        )}
+                      </div>
+                      {arriving ? (
+                        <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
+                      ) : (
+                        <PlaneTakeoff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                      )}
+                    </li>
+                  );
+                })}
+                {visitors.length > 4 && (
+                  <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    + {visitors.length - 4} more
+                  </li>
                 )}
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
-                  <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {v.aircraftICAO} • {v.origin ?? "—"} → {v.destination ?? "—"}
-                  </div>
-                </div>
-                {v.etaMs && (
-  <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
-    ETA: {new Date(v.etaMs).toISOString().substring(11, 16)} UTC
-  </div>
-)}
-                {arriving ? (
-                  <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
-                ) : (
-                  <PlaneTakeoff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                )}
-              </li>
-            );
-          })}
-
-          {visitors.length > 4 && (
-            <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground pt-1">
-              + {visitors.length - 4} more
-            </li>
-          )}
-        </ul>
-      </Link>
+              </ul>
+            </Link>
             );
           })}
         </div>
