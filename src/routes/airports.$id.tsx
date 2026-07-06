@@ -236,18 +236,16 @@ function HubTrafficChart() {
           </span>
         </div>
       </div>
-      <div className="h-80 w-full">
+           <div className="h-80 w-full">
         {isLoading ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">Loading traffic…</div>
         ) : rows.length === 0 ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">No qualifying arrivals recorded yet.</div>
-         ) : (
-    (!isMounted ? (
-      <div className="grid h-full place-items-center text-sm text-muted-foreground animate-pulse">Initializing charts...</div>
-    ) : (
-      <ResponsiveContainer>
-        <BarChart data={rows} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
-
+        ) : !isMounted ? (
+          <div className="grid h-full place-items-center text-sm text-muted-foreground animate-pulse">Initializing charts...</div>
+        ) : (
+          <ResponsiveContainer>
+            <BarChart data={rows} margin={{ left: -10, right: 6, top: 6, bottom: 0 }}>
               <CartesianGrid stroke="var(--border)" vertical={false} />
               <XAxis dataKey="icao" stroke="var(--muted-foreground)" fontSize={11} />
               <YAxis yAxisId="left" stroke="var(--muted-foreground)" fontSize={11} tickFormatter={(v) => formatNumber(Number(v))} />
@@ -262,22 +260,25 @@ function HubTrafficChart() {
               <Bar yAxisId="right" dataKey="pax" name="PAX" fill="var(--instrument)" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        ))
+        )}
       </div>
     </div>
   );
 }
+
 function sourceMeta(src: string | null) {
   if (src === "airport") return { icon: <Plane className="h-3.5 w-3.5" />, label: "Airport Visit", tone: "text-runway" };
   if (src === "donation") return { icon: <Coffee className="h-3.5 w-3.5" />, label: "Donation", tone: "text-instrument" };
   if (src === "admin") return { icon: <ShieldCheck className="h-3.5 w-3.5" />, label: "Admin Grant", tone: "text-muted-foreground" };
   return { icon: <Heart className="h-3.5 w-3.5" />, label: "Support", tone: "text-runway" };
 }
+
 function fmtDateUtc(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 }
+
 function milestoneAt(n: number): string | null {
   if (n === 1) return "First Active Week";
   if (n === 4) return "One Month Supporter";
@@ -287,7 +288,8 @@ function milestoneAt(n: number): string | null {
   if (n > 0 && n % 52 === 0) return `${n / 52}-Year Legend`;
   return null;
 }
-function PilotTimeline() {
+
+export function PilotTimeline() {
   const fn = useServerFn(getPilotSupportTimeline);
   const { keyTag, payload, username } = useSimflyArgs();
   const { data, isLoading } = useQuery({
@@ -295,9 +297,11 @@ function PilotTimeline() {
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 5 * 60_000,
   });
-  const rows: PilotTimelineRow[] = data ?? [];
+
+  const rows = data ?? [];
   const totalWeeks = rows.length;
   const uniqueIcaos = new Set(rows.map((r) => r.qualifyingIcao).filter(Boolean)).size;
+
   return (
     <div className="panel rounded-xl p-5">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -359,7 +363,7 @@ function PilotTimeline() {
                   </div>
                   {milestone ? (
                     <div className="mono mt-2 inline-flex items-center gap-1.5 rounded bg-instrument/10 px-2 py-1 text-[10px] uppercase tracking-widest text-instrument ring-1 ring-instrument/30">
-                      🏆 {milestone}
+                      {milestone} 🏆
                     </div>
                   ) : null}
                 </div>
@@ -371,3 +375,4 @@ function PilotTimeline() {
     </div>
   );
 }
+
