@@ -951,7 +951,7 @@ export function LivePresenceWidget() {
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
-  const { data: onlinePilots = [] } = useQuery({
+  const { data: rawOnlinePilots } = useQuery({
     queryKey: ["public", "live-presence"],
     queryFn: async () => {
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
@@ -963,30 +963,34 @@ export function LivePresenceWidget() {
     staleTime: 5000,
   });
 
+  // BEZPIECZEŃSTWO: Gwarantujemy, że onlinePilots to zawsze tablica, nawet jeśli serwer zwróci null/obiekt
+  const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
   return (
-    <div className="flex flex-col items-end gap-1.5 bg-secondary/10 border border-border/30 rounded-xl p-2.5 max-w-[240px] text-right shadow-sm backdrop-blur-sm">
+    <div className="flex flex-col items-end gap-1 bg-secondary/10 border border-border/30 rounded-xl p-2 max-w-[200px] text-right shadow-sm backdrop-blur-sm shrink-0">
       <div className="flex items-center gap-2">
         <span className="relative flex h-1.5 w-1.5">
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
           <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-runway"></span>
         </span>
-        <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground">Hub Presence Radar</span>
+        <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/80">Presence</span>
         <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20">
-          {onlinePilots.length} Online
+          {onlinePilots.length} Live
         </span>
       </div>
       {onlinePilots.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1 max-w-full overflow-hidden">
-          {onlinePilots.slice(0, 3).map((username) => (
-            <span key={username} className="mono text-[9px] font-semibold bg-background/50 border border-border/40 px-1.5 py-0.5 rounded text-foreground/90">
+          {onlinePilots.slice(0, 2).map((username) => (
+            <span key={username} className="mono text-[9px] font-semibold bg-background/50 border border-border/40 px-1 py-0.5 rounded text-foreground/90">
               @{username}
             </span>
           ))}
-          {onlinePilots.length > 3 && (
-            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{onlinePilots.length - 3}</span>
+          {onlinePilots.length > 2 && (
+            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{onlinePilots.length - 2}</span>
           )}
         </div>
       )}
     </div>
   );
 }
+
