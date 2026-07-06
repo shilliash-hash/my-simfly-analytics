@@ -411,8 +411,15 @@ function IncomingTraffic({
     return Array.from(hubIcaos)
       .map((icao) => {
         const airport = airportByIcao.get(icao);
-        const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-        const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+          const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+    const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+    
+    // Pobieramy Twoje własne loty powiązane z tym konkretnym lotniskiem
+    const myInbound = rawMine.inbound ?? [];
+    const myOutbound = rawMine.outbound ?? [];
+
+    // Łączymy ruch obcy z Twoimi przylotami i odlotami w jedną tablicę
+    const visitors = [...baseTraffic, ...myInbound, ...myOutbound];
 
         const mine = {
           inbound: (rawMine.inbound ?? []).filter(f => {
