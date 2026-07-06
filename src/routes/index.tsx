@@ -542,10 +542,9 @@ function IncomingTraffic({
                     <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
                 ))}
-          {visitors.slice(0, 4).map((v) => {
+                   {visitors.slice(0, 4).map((v: any) => {
             const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
             
-            // Sprawdzamy, czy to jest Twój lot, porównując nazwę pilota
             const isMyFlight = String(v.username || v.pilot?.username || "")
               .toLowerCase()
               .trim() === String(currentSessionUser || "").toLowerCase().trim();
@@ -559,7 +558,6 @@ function IncomingTraffic({
                     className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover"
                   />
                 ) : (
-                  /* Jaskrawe kółko dla Twojego lotu, a widoczne tło dla reszty bez awatara */
                   <div className={cn(
                     "h-6 w-6 shrink-0 rounded-full border flex items-center justify-center text-[9px] font-bold shadow-sm",
                     isMyFlight 
@@ -570,33 +568,32 @@ function IncomingTraffic({
                   </div>
                 )}
                 <div className="min-w-0 flex-1">
-                  {/* Wyświetlanie nazwy z bezpiecznym fallbackiem na Twoje dane */}
                   <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
                   <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                     {v.aircraftICAO} • {v.origin ?? "—"} → {v.destination ?? "—"}
                   </div>
                 </div>
-                        {v.etaMs && (
-                          <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
-                            ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
-                          </div>
-                        )}
-                      </div>
-                      {arriving ? (
-                        <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
-                      ) : (
-                        <PlaneTakeoff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                      )}
-                    </li>
-                  );
-                })}
-                {visitors.length > 4 && (
-                  <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    + {visitors.length - 4} more
-                  </li>
+                {v.etaMs && (
+                  <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-text-runway/90">
+                    ETA {formatEtaUtc(v.etaMs)} • {formatRemainingFromNow(v.etaMs)}
+                  </div>
                 )}
-              </ul>
-            </Link>
+                {arriving ? (
+                  <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
+                ) : (
+                  <PlaneTakeoff className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                )}
+              </li>
+            );
+          })}
+
+          {visitors.length > 4 && (
+            <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground pt-1">
+              + {visitors.length - 4} more
+            </li>
+          )}
+        </ul>
+      </Link>
             );
           })}
         </div>
