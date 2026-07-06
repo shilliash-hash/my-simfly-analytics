@@ -670,15 +670,50 @@ export function AdminChangelog() {
 }
 
 export function AdminOnlineUsersWidget() {
-  // Sprawdzamy bezpiecznie w przeglądarce dostępność globalnej tablicy obecności
-  const isBrowser = typeof window !== "undefined";
-  const onlinePilots: string[] = isBrowser ? (window as any)._hubOnlinePilots || [] : [];
+  const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
+  const [isMounted, setIsMounted] = useState(false);
 
+  useEffect(() => {
+    setIsMounted(true);
+    if (typeof window === "undefined") return;
+
+    // Pobieramy sygnały z RAMu przeglądarki od razu po wejściu na stronę
+    const initialList = (window as any)._hubOnlinePilots || [];
+    setOnlinePilots(initialList);
+
+    // Następnie co 2 sekundy automatycznie odświeżamy listę na żywo
+    const interval = setInterval(() => {
+      const liveList = (window as any)._hubOnlinePilots || [];
+      // Aktualizujemy stan Reacta tylko wtedy, gdy zmieniła się liczba osób, aby nie zapętlić przeglądarki
+      setOnlinePilots((prev) => {
+        if (JSON.stringify(prev) !== JSON.stringify(liveList)) {
+          return liveList;
+        }
+        return prev;
+      });
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Dopóki serwer Cloudflare buduje stronę (SSR), rysujemy lekki szkielet bezpieczeństwa
+  if (!isMounted) {
+    return (
+      <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+          <span className="h-2 w-2 rounded-full bg-muted animate-pulse"></span>
+          Syncing Presence radar...
+        </div>
+      </div>
+    );
+  }
+
+  // Gdy jesteśmy bezpiecznie w przeglądarce, rysujemy pełny, żywy widżet
   return (
     <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
       <div className="flex items-center justify-between border-b border-border/20 pb-2.5">
         <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          {/* Aktywna dioda radaru */}
+          {/* Aktywna, pulsująca dioda sieciowa */}
           <span className="relative flex h-2 w-2">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-runway"></span>
@@ -693,7 +728,7 @@ export function AdminOnlineUsersWidget() {
       <div className="mt-3">
         <div className="text-xs font-medium text-muted-foreground mb-2">Pilots currently browsing:</div>
         {onlinePilots.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic">Gathering network signals...</p>
+          <p className="text-[11px] text-muted-foreground italic text-muted-foreground/60">Gathering network signals...</p>
         ) : (
           <ul className="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto pr-1 vertical-scroll">
             {onlinePilots.map((username) => (
