@@ -51,7 +51,7 @@ function Overview() {
 
   
   // ZOSTAWIASZ TYLKO JEDEN TAKI BLOK:
-  const pingPresenceAction = useServerFn(pingUserPresence);
+    const pingPresenceAction = useServerFn(pingUserPresence);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
@@ -64,17 +64,11 @@ function Overview() {
         await pingPresenceAction({ data: { username: currentPilot } });
       }
 
-      let activeClient = (window as any).supabase;
-      if (!activeClient && typeof window !== "undefined") {
-        try {
-          const { supabase: integrationClient } = await import("@/integrations/supabase/client");
-          activeClient = integrationClient;
-        } catch {
-          return [];
-        }
-      }
-
+      // POPRAWKA: Szukamy klienta Supabase wyłącznie w obiekcie window przeglądarki.
+      // Całkowicie usuwamy słowo 'import', dzięki czemu router przejdzie kompilację bez problemu!
+      const activeClient = typeof window !== "undefined" ? (window as any).supabase : null;
       if (!activeClient) return [];
+
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       
       const { data } = await activeClient
@@ -90,6 +84,7 @@ function Overview() {
   });
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
 
 
   // DALSZA CZĘŚĆ (Zostawiasz oryginalne useSuspenseQuery bez zmian poniżej):
