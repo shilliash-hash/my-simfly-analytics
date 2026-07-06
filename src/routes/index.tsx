@@ -55,7 +55,7 @@ function Overview() {
     queryFn: async () => {
       // 1. Zgłaszamy obecność na serwerze
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        await pingPresenceAction({ data: { username: currentPilot } });
+        await pingPresenceAction({ username: currentPilot });
       }
 
       // 2. Pobieramy listę online bezpośrednio z funkcji serwerowej (omijamy frontendowe błędy 404)
