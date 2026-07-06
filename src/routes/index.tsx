@@ -40,6 +40,49 @@ function Overview() {
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
     console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
  const liveChangelogFeed = [];
+
+  // LOGIKA RADARU: Wykonuje się teraz bezpośrednio w głównym cyklu strony
+  const currentPilot = typeof window !== "undefined"
+    ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
+    : "Guest";
+
+  const { data: rawOnlinePilots } = useQuery({
+    queryKey: ["public", "live-presence-direct-env"],
+    queryFn: async () => {
+      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
+        await useServerFn(pingUserPresence)({ data: { username: currentPilot } });
+      }
+
+      let activeClient = (window as any).supabase;
+      if (!activeClient && typeof window !== "undefined") {
+        try {
+          const { supabase: integrationClient } = await import("@/integrations/supabase/client");
+          activeClient = integrationClient;
+        } catch {
+          return [];
+        }
+      }
+
+      if (!activeClient) return [];
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+      
+      const { data } = await activeClient
+        .from("app_presence")
+        .select("username")
+        .gte("last_seen", fiveMinutesAgo)
+        .limit(100);
+
+      return (data ?? []).map((row: any) => row.username);
+    },
+    refetchInterval: 15000, 
+    staleTime: 5000,
+  });
+
+  const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
+
+
+
+  
  const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -106,13 +149,16 @@ function Overview() {
             </p>
           </div>
          }                
-    actions={
+     actions={
     <div className="flex items-center gap-4">
-      {/* COMPACT LIVE PRESENCE RADAR */}
-      <LivePresenceWidget />
+      {/* PRZEKAZUJEMY TABLICĘ PILOTÓW JAKO PROP */}
+      <LivePresenceWidget pilots={onlinePilots} />
 
       <div className="flex items-center gap-3">
         <PilotSwitcher current={viewedUser} />
+       
+        {/* twój awatar */}
+
         {data.me.avatarUrl ? (
           <img
             src={data.me.avatarUrl}
@@ -940,56 +986,7 @@ function PilotSwitcher({ current }: { current: string | null }) {
     </div>
   );
 }  
-export function LivePresenceWidget() {
-  const pingFn = useServerFn(pingUserPresence);
-
-  const currentPilot = typeof window !== "undefined"
-    ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
-    : "Guest";
-
-  const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-direct-env"],
-    queryFn: async () => {
-      // 1. Rejestrujemy naszą obecność na backendzie
-      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        await pingFn({ data: { username: currentPilot } });
-      }
-
-      // 2. Bezpiecznie sprawdzamy dostępność klienta globalnego lub integracyjnego
-      let activeClient = (window as any).supabase;
-      
-      // Jeśli nie ma go w oknie, importujemy dynamicznie oficjalny pakiet bez zaśmiecania nagłówka pliku
-      if (!activeClient && typeof window !== "undefined") {
-        try {
-          const { supabase: integrationClient } = await import("@/integrations/supabase/client");
-          activeClient = integrationClient;
-        } catch {
-          console.warn("[presence] Integration client not found, skipping direct fetch");
-        }
-      }
-
-      if (!activeClient) return [];
-
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data, error } = await activeClient
-        .from("app_presence")
-        .select("username")
-        .gte("last_seen", fiveMinutesAgo)
-        .limit(100);
-
-      if (error) {
-        console.warn("[presence] direct query failed:", error);
-        return [];
-      }
-      return (data ?? []).map((row: any) => row.username);
-    },
-    refetchInterval: 15000, 
-    staleTime: 5000,
-  });
-
-  const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
-
+export function LivePresenceWidget({ pilots }: { pilots: string[] }) {
   return (
     <div className="flex flex-col items-end gap-1 bg-secondary/10 border border-border/30 rounded-xl p-2 max-w-[200px] text-right shadow-sm backdrop-blur-sm shrink-0">
       <div className="flex items-center gap-2">
@@ -999,18 +996,18 @@ export function LivePresenceWidget() {
         </span>
         <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/80">Presence</span>
         <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20">
-          {onlinePilots.length} Live
+          {pilots.length} Live
         </span>
       </div>
-      {onlinePilots.length > 0 && (
+      {pilots.length > 0 && (
         <div className="flex flex-wrap justify-end gap-1 max-w-full overflow-hidden">
-          {onlinePilots.slice(0, 2).map((username) => (
+          {pilots.slice(0, 2).map((username) => (
             <span key={username} className="mono text-[9px] font-semibold bg-background/50 border border-border/40 px-1 py-0.5 rounded text-foreground/90">
               @{username}
             </span>
           ))}
-          {onlinePilots.length > 2 && (
-            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{onlinePilots.length - 2}</span>
+          {pilots.length > 2 && (
+            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{pilots.length - 2}</span>
           )}
         </div>
       )}
