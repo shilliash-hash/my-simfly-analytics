@@ -52,23 +52,33 @@ function Overview() {
   
    // 1. Dwie bezpieczne akcje serwerowe na samym początku komponentu
   const pingPresenceAction = useServerFn(pingUserPresence);
-  const fetchOnlineListAction = useServerFn(getOnlineUsersList);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
-  // 2. Czyste, bezbłędne zapytanie oparte w całości o bezpieczny backend simfly.functions
   const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-pure-server"],
+    queryKey: ["public", "live-presence-direct-clean"],
     queryFn: async () => {
-      // Meldujemy obecność aktualnego użytkownika na serwerze
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
         await pingPresenceAction({ data: { username: currentPilot } });
       }
+
+      // Bezpiecznie sprawdzamy klienta zaimportowanego w 1. linii pliku
+      if (!supabase) return [];
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
       
-      // Pobieramy listę online z serwera (cała logika bazy wykonuje się w simfly.functions.ts)
-      return await fetchOnlineListAction();
+      const { data, error } = await supabase
+        .from("app_presence")
+        .select("username")
+        .gte("last_seen", fiveMinutesAgo)
+        .limit(100);
+
+      if (error) {
+        console.warn("[presence] direct fetch failed:", error);
+        return [];
+      }
+      return (data ?? []).map((row: any) => row.username);
     },
     refetchInterval: 15000, 
     staleTime: 5000,
@@ -985,6 +995,7 @@ function PilotSwitcher({ current }: { current: string | null }) {
     </div>
   );
 }  
+  
 export function LivePresenceWidget({ pilots }: { pilots: string[] }) {
   return (
     <div className="flex flex-col items-end gap-1 bg-secondary/10 border border-border/30 rounded-xl p-2 max-w-[200px] text-right shadow-sm backdrop-blur-sm shrink-0">
