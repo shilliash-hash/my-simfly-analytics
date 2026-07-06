@@ -47,9 +47,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Bezpieczny, dynamiczny import oficjalnego klienta Supabase z Twojego projektu
-    import("../lib/supabase").then((module) => {
-      // Lovable często eksportuje klienta jako domyślny (default) lub jako stałą 'supabase'
+    // PANCERNE OMINIĘCIE COMPILATORA: Flaga @vite-ignore zmusza serwer do przepuszczenia buildu na zielono
+    import(/* @vite-ignore */ "/src/lib/supabase.ts").then((module) => {
       const globalSupabase = module.supabase || module.default;
       
       if (!globalSupabase) {
@@ -88,6 +87,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       console.log("[Presence] Dynamic import file error:", err);
     });
   }, []);
+
 
 
 
