@@ -41,61 +41,25 @@ function Overview() {
     console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
  const liveChangelogFeed = [];
 
-  // 1. Definiujemy hook serwerowy na samym początku komponentu (ZGODNIE Z ZASADAMI REACTA)
+function Overview() {
+  const fn = useServerFn(getSimflyPayload);
+  const qc = useQueryClient();
+  const { keyTag, payload, username: viewedUser } = useSimflyArgs();
+
+  console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
+  const liveChangelogFeed = [];
+
+  // PRAWIDŁOWY BLOK (Każda zmienna zadeklarowana tylko raz):
   const pingPresenceAction = useServerFn(pingUserPresence);
 
   const currentPilot = typeof window !== "undefined"
     ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
     : "Guest";
 
-  // 2. Zapytanie useQuery używa już tylko czystej, zdefiniowanej wyżej funkcji
   const { data: rawOnlinePilots } = useQuery({
     queryKey: ["public", "live-presence-direct-env"],
     queryFn: async () => {
       if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        // WYWOŁANIE POPRAWNE: Bez słowa "useServerFn" w środku asynchronicznej pętli!
-        await pingPresenceAction({ data: { username: currentPilot } });
-      }
-
-      let activeClient = (window as any).supabase;
-      if (!activeClient && typeof window !== "undefined") {
-        try {
-          const { supabase: integrationClient } = await import("@/integrations/supabase/client");
-          activeClient = integrationClient;
-        } catch {
-          return [];
-        }
-      }
-
-      if (!activeClient) return [];
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-      
-      const { data } = await activeClient
-        .from("app_presence")
-        .select("username")
-        .gte("last_seen", fiveMinutesAgo)
-        .limit(100);
-
-      return (data ?? []).map((row: any) => row.username);
-    },
-    refetchInterval: 15000, 
-    staleTime: 5000,
-  });
-
-  const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
-  // 1. Definiujemy hook serwerowy na samym początku komponentu (ZGODNIE Z ZASADAMI REACTA)
-  const pingPresenceAction = useServerFn(pingUserPresence);
-
-  const currentPilot = typeof window !== "undefined"
-    ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
-    : "Guest";
-
-  // 2. Zapytanie useQuery używa już tylko czystej, zdefiniowanej wyżej funkcji
-  const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-direct-env"],
-    queryFn: async () => {
-      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        // WYWOŁANIE POPRAWNE: Bez słowa "useServerFn" w środku asynchronicznej pętli!
         await pingPresenceAction({ data: { username: currentPilot } });
       }
 
@@ -126,10 +90,8 @@ function Overview() {
 
   const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
 
-
-
-
-
+  // DALSZA CZĘŚĆ (Zostawiasz oryginalne useSuspenseQuery bez zmian poniżej):
+ 
   
  const { data } = useSuspenseQuery(
     queryOptions({
