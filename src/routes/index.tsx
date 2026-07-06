@@ -414,26 +414,31 @@ function IncomingTraffic({
               const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
     const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
     
-    // Dynamicznie wyciągamy nick aktualnie aktywnego pilota/profilu ze struktury URL
-    const activeHandle = typeof window !== "undefined"
-      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").trim()
+       const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+    const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+    
+    // POPRAWKA: Pobieramy login bezpośrednio z pewnego obiektu danych profilu (data.me.handle)
+    // Jeśli z jakiegoś powodu jest niedostępny, system sprawdzi parametr URL ?pilot=
+    const activeHandle = typeof data !== "undefined"
+      ? (data?.me?.handle || new URLSearchParams(window.location.search).get("pilot") || "").trim()
       : "";
 
-    // Mapujemy Twoje loty, wstrzykując im poprawny login profilu oraz flagę bezpieczeństwa isMine
+    // Mapujemy loty, wstrzykując im Twój prawdziwy, dynamiczny login z profilu
     const myInbound = (rawMine.inbound ?? []).map(f => ({ 
       ...f, 
-      username: f.username || f.pilot?.username || activeHandle || "Pilot", 
+      username: f.username || f.pilot?.username || activeHandle || "shill", 
       isMine: true 
     }));
     
     const myOutbound = (rawMine.outbound ?? []).map(f => ({ 
       ...f, 
-      username: f.username || f.pilot?.username || activeHandle || "Pilot", 
+      username: f.username || f.pilot?.username || activeHandle || "shill", 
       isMine: true 
     }));
 
-    // Łączymy ruch obcych pilotów z Twoimi dynamicznie oznaczonymi lotami
+    // Łączymy ruch obcych pilotów z Twoimi poprawnie podpisanymi lotami
     const visitors = [...baseTraffic, ...myInbound, ...myOutbound];
+
 
         const mine = {
           inbound: (rawMine.inbound ?? []).filter(f => {
