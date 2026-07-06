@@ -482,12 +482,19 @@ function IncomingTraffic({
                         {visitors.length} visitor{visitors.length === 1 ? "" : "s"}
                       </span>
                     )}
-   {mineTotal > 0 && (
-     <span className="mono inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest text-amber-400 shadow-[0_0_12px_rgba(245,158,11,0.15)]">
-       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-500 shadow-[0_0_8px_var(--instrument)]" />
-       {mineTotal} mine
-     </span>
-   )}
+                    {mineTotal > 0 && (
+                      <span
+                        className="mono inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-widest"
+                        style={{
+                          borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)",
+                          background: "color-mix(in oklab, var(--instrument) 12%, transparent)",
+                          color: "var(--instrument)",
+                        }}
+                      >
+                        <span className="h-1.5 w-1.5 animate-pulse rounded-full" style={{ background: "var(--instrument)", boxShadow: "0 0 8px var(--instrument)" }} />
+                        {mineTotal} mine
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
