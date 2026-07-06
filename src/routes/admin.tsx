@@ -1,4 +1,3 @@
-import { useOnlineUsers } from "@/hooks/use-presence";
 import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -697,7 +696,19 @@ export function AdminOnlineUsersWidget() {
 
 // WYDZIELONY KOMPONENT WEWNĘTRZNY DO OBSŁUGI TRANSMISJI LIVE
 function AdminOnlineUsersWidgetContent() {
-  const onlinePilots = useOnlineUsers("Admin");
+  const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    
+    // Pobieramy stan sieci obecności co 1.5 sekundy bezpośrednio z pamięci RAM przeglądarki
+    const interval = setInterval(() => {
+      const liveList = (window as any)._hubOnlinePilots || [];
+      setOnlinePilots(liveList);
+    }, 1500);
+
+    return () => clearInterval(interval);
+  }, []);
 
   return (
     <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
@@ -734,5 +745,6 @@ function AdminOnlineUsersWidgetContent() {
     </div>
   );
 }
+
 
 // router-force-reload: v3
