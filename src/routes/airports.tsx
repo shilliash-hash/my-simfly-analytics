@@ -298,7 +298,7 @@ function milestoneAt(n: number): string | null {
   return null;
 }
 
-export function PilotTimeline() {
+function PilotTimeline() {
   const [isMounted, setIsMounted] = useState(false);
   
   useEffect(() => {
