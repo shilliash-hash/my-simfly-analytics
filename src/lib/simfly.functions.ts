@@ -1,3 +1,4 @@
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import { MOCK_PAYLOAD } from "./mock-data";
@@ -3011,10 +3012,9 @@ export const pingUserPresence = createServerFn({
     if (!data.username || data.username === "Guest" || data.username === "Pilot") return { success: false };
     
     try {
-      // Importujemy bezpieczny serwerowy klient Supabase z client.server
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      // Bezpiecznie korzystamy z importu z góry pliku
+      if (!supabaseAdmin) return { success: false };
       
-      // Zapisujemy lub aktualizujemy obecność pilota w tabeli "app_presence"
       await supabaseAdmin
         .from("app_presence")
         .upsert({ 
@@ -3034,12 +3034,10 @@ export const getOnlineUsersList = createServerFn({
   method: "GET",
   handler: async (): Promise<string[]> => {
     try {
-      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      if (!supabaseAdmin) return [];
       
-      // Wyliczamy próg czasowy - piloci aktywni w ciągu ostatnich 5 minut
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
 
-      // Pobieramy z bazy listę użytkowników spełniających warunek czasowy
       const { data } = await supabaseAdmin
         .from("app_presence")
         .select("username")
@@ -3053,3 +3051,4 @@ export const getOnlineUsersList = createServerFn({
     }
   },
 });
+
