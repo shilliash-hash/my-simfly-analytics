@@ -37,6 +37,14 @@ function AdminPage() {
     setMounted(true);
   }, []);
 
+    // KROK 2: Przekazujemy działającą instancję bazy do pamięci RAM dla radaru obecności
+  useEffect(() => {
+    if (typeof window !== "undefined" && typeof supabase !== "undefined") {
+      (window as any)._sharedSupabaseInstance = supabase;
+    }
+  }, []);
+
+  
   return (
     <AppShell>
       <PageHeader
