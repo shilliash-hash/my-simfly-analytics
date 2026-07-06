@@ -37,10 +37,11 @@ function AdminPage() {
     setMounted(true);
   }, []);
 
-    // KROK 2: Przekazujemy działającą instancję bazy do pamięci RAM dla radaru obecności
+      // KROK 2: Udostępniamy działający obiekt bazy danych dla komponentu nadrzędny AppShell
   useEffect(() => {
     if (typeof window !== "undefined" && typeof supabase !== "undefined") {
       (window as any)._sharedSupabaseInstance = supabase;
+      (window as any).supabase = supabase;
     }
   }, []);
 
