@@ -232,21 +232,37 @@ function Overview() {
               <ul className="space-y-3">
                 {staticChangelogFeed && staticChangelogFeed.length > 0 ? (
                   staticChangelogFeed.map((update) => {
-                    const tagColor = 
-                      update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
-                      update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
-                      "text-runway bg-runway/15 border-runway/30";
-
-                    return (
-                      <li key={update.id} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
-                        <div className="flex items-center gap-2">
-                          <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
-                            {update.version}
-                          </span>
-                          <span className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${tagColor}`}>
-                            {update.type}
-                          </span>
-                        </div>
+                              // Kod czysty: Stary 'tagColor' i stara struktura nagłówka wersji zostały usunięte
+          return (
+            <li key={update.id} className="flex flex-col gap-1 border-b border-border/20 pb-2 last:border-0 last:pb-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="mono text-[10px] font-bold text-runway uppercase tracking-wider">
+                  {update.version}
+                </span>
+                <div className="flex flex-wrap gap-1 mt-0.5">
+                  {Array.isArray(update.type) ? (
+                    update.type.map((tag) => {
+                      const currentTagColor = 
+                        tag === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
+                        tag === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
+                        "text-runway bg-runway/15 border-runway/30";
+                      return (
+                        <span key={tag} className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${currentTagColor}`}>
+                          {tag}
+                        </span>
+                      );
+                    })
+                  ) : (
+                    <span className={`mono text-[9px] font-bold px-1.5 py-0.2 rounded border shrink-0 ${
+                      update.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
+                      update.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
+                      "text-runway bg-runway/15 border-runway/30"
+                    }`}>
+                      {String(update.type)}
+                    </span>
+                  )}
+                </div>
+              </div>
                         <span className="text-xs text-text-foreground/80 leading-relaxed">
                           {update.text}
                         </span>
