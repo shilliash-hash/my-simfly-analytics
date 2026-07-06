@@ -671,8 +671,8 @@ export function AdminChangelog() {
 }
 
 export function AdminOnlineUsersWidget() {
-  const { keyTag } = useSimflyArgs(); 
-  const onlinePilots = useOnlineUsers(keyTag || "Admin");
+  // Ponieważ to panel zarządzania, podpisujesz sesję Realtime jako Admin nadrzędny
+  const onlinePilots = useOnlineUsers("Admin");
 
   return (
     <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
