@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase } from "../lib/supabase.ts";
+
 
 export function useOnlineUsers(currentUsername: string) {
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
