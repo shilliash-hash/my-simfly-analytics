@@ -411,9 +411,11 @@ function IncomingTraffic({
     return Array.from(hubIcaos)
       .map((icao) => {
         const airport = airportByIcao.get(icao);
-        const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
         const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-
+        const baseVisitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+        const myInbound = rawMine.inbound ?? [];
+        const visitors = [...baseVisitors, ...myInbound];
+        
         const mine = {
           inbound: (rawMine.inbound ?? []).filter(f => {
             const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
