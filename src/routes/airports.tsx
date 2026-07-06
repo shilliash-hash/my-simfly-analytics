@@ -314,9 +314,15 @@ function PilotTimeline() {
     enabled: isMounted,
   });
 
-  const rows = data ?? [];
+ // PANCERNA WERYFIKACJA STRUKTURY DANYCH (URATUJE PRZED TYPE_ERROR):
+  // Sprawdzamy czy data to tablica, czy jest zagnieżdżona w obiekcie, czy jeszcze się ładuje
+  const rawRows = Array.isArray(data) ? data : (data as any)?.data || [];
+  const rows = Array.isArray(rawRows) ? rawRows : [];
+  
   const totalWeeks = rows.length;
-  const uniqueIcaos = new Set(rows.map((r) => r.qualifyingIcao).filter(Boolean)).size;
+  const uniqueIcaos = rows.length > 0 
+    ? new Set(rows.map((r) => r.qualifyingIcao).filter(Boolean)).size 
+    : 0;
 
   return (
     <div className="panel rounded-xl p-5 border border-border/40 bg-background/20">
