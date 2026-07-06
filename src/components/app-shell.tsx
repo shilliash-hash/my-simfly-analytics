@@ -41,28 +41,30 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
    // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
-   // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
+    // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
   const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // Pobieramy unikalny identyfikator urządzenia z localStorage
-    const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
-    const finalUserId = savedUser 
-      ? savedUser.replace(/"/g, "").trim() 
-      : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
+    // Czekamy ułamek sekundy, aby upewnić się, że Lovable zainicjowało globalny obiekt Supabase
+    const timer = setTimeout(() => {
+      // Pobieramy działającą instancję klienta bezpośrednio z okna pamięci aplikacji
+      const globalSupabase = (window as any).supabase || (window as any)._supabaseInstance;
+      
+      // Wyciągamy unikalny identyfikator urządzenia z localStorage
+      const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
+      const finalUserId = savedUser 
+        ? savedUser.replace(/"/g, "").trim() 
+        : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
-    // PANCERNY TRICK: Pobieramy gotowego klienta Supabase bezpośrednio z biblioteki npm,
-    // wyciągając klucze ze zmiennych środowiskowych wstrzykniętych do przeglądarki!
-    import("@supabase/supabase-js").then(({ createClient }) => {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (window as any)._env_?.VITE_SUPABASE_URL || "";
-      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (window as any)._env_?.VITE_SUPABASE_ANON_KEY || "";
+      if (!globalSupabase) {
+        console.log("[Presence] Global Supabase instance not found yet");
+        return;
+      }
 
-      if (!supabaseUrl || !supabaseAnonKey) return;
-      const localClient = createClient(supabaseUrl, supabaseAnonKey);
-
-      const channel = localClient.channel("hub-online-pilots", {
+      // Podpinamy się pod żywy kanał WebSocket
+      const channel = globalSupabase.channel("hub-online-pilots", {
         config: { presence: { key: finalUserId } },
       });
 
@@ -74,16 +76,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             presences.forEach(() => { allPresentUsers.push(key); });
           });
           setOnlinePilots(allPresentUsers);
-          // Zapisujemy listę globalnie w oknie przeglądarki dla widżetu admina
+          // Udostępniamy tablicę dla panelu admina
           (window as any)._hubOnlinePilots = allPresentUsers;
         })
-        .subscribe(async (status) => {
+        .subscribe(async (status: string) => {
           if (status === "SUBSCRIBED") {
             await channel.track({ onlineAt: new Date().toISOString() });
           }
         });
-    });
+    }, 500);
+
+    return () => clearTimeout(timer);
   }, []);
+
 
 
 
