@@ -41,7 +41,20 @@ const NAV = [
 
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
- useOnlineUsers("LuigiThePlumber"); // Tymczasowo na sztywno, dopóki nie podepniemy dynamicznej sesji
+   // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
+  const [sessionUserId] = useState(() => {
+    if (typeof window !== "undefined") {
+      // Jeśli pilot jest zalogowany, Lovable trzyma jego dane w localStorage
+      const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
+      if (savedUser) return savedUser.replace(/"/g, "").trim();
+    }
+    // Dla niezalogowanych urządzeń (lub telefonu) generujemy losowy tag gościa
+    return `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
+  });
+
+  // Rejestrujemy obecność w chmurze Realtime
+  useOnlineUsers(sessionUserId);
+
 
   return (
     <div className="flight-deck-grad min-h-screen text-foreground">
