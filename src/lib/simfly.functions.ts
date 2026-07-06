@@ -2914,8 +2914,6 @@ export const sweepOwnedAirportsForHubSupport = async (options?: { pagesPerAirpor
   }
 };
 
-import { createServerFn } from "@tanstack/start";
-import { supabase } from "./supabase"; // Dostosuj ścieżkę do klienta jeśli trzeba
 
 // 1. FUNKCJA SPRAWDZANIA STATUSU AKTYWNOŚCI W TYGODNIU
 export const getHubSupportStatus = createServerFn("GET", async (payload: { username?: string } = {}) => {
