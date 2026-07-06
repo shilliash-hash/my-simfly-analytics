@@ -411,14 +411,28 @@ function IncomingTraffic({
     return Array.from(hubIcaos)
       .map((icao) => {
         const airport = airportByIcao.get(icao);
-          const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+              const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
     const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
     
-    // Pobieramy Twoje własne loty powiązane z tym konkretnym lotniskiem
-    const myInbound = rawMine.inbound ?? [];
-    const myOutbound = rawMine.outbound ?? [];
+    // Dynamicznie wyciągamy nick aktualnie aktywnego pilota/profilu ze struktury URL
+    const activeHandle = typeof window !== "undefined"
+      ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "").trim()
+      : "";
 
-    // Łączymy ruch obcy z Twoimi przylotami i odlotami w jedną tablicę
+    // Mapujemy Twoje loty, wstrzykując im poprawny login profilu oraz flagę bezpieczeństwa isMine
+    const myInbound = (rawMine.inbound ?? []).map(f => ({ 
+      ...f, 
+      username: f.username || f.pilot?.username || activeHandle || "Pilot", 
+      isMine: true 
+    }));
+    
+    const myOutbound = (rawMine.outbound ?? []).map(f => ({ 
+      ...f, 
+      username: f.username || f.pilot?.username || activeHandle || "Pilot", 
+      isMine: true 
+    }));
+
+    // Łączymy ruch obcych pilotów z Twoimi dynamicznie oznaczonymi lotami
     const visitors = [...baseTraffic, ...myInbound, ...myOutbound];
 
         const mine = {
@@ -550,15 +564,8 @@ function IncomingTraffic({
                      return (
             <li key={v.id} className="flex items-center gap-2 text-xs">
               {(() => {
-                // 1. Dynamicznie pobieramy nazwę aktualnie oglądanego profilu z URL lub profilu
-                const currentProfileHandle = typeof window !== "undefined"
-                  ? (new URLSearchParams(window.location.search).get("pilot") || data?.me?.handle || "shill").toLowerCase().trim()
-                  : "shill";
-
-                const pilotName = String(v.username || v.pilot?.username || "").toLowerCase().trim();
-
-                // 2. Warunek pasuje dla Twojego nicku lub tymczasowego oznaczenia testowego
-                const isMyFlight = pilotName === currentProfileHandle || pilotName === "pilot" || pilotName === "unknown pilot";
+                            // Odczytujemy bezpieczną flagę, którą wstrzyknęliśmy na górze pliku
+                const isMyFlight = !!v.isMine;
 
                 return v.userAvatar ? (
                   <img
