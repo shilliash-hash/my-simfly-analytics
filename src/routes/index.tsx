@@ -39,12 +39,8 @@ function Overview() {
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
     console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
-    const { data: liveChangelogFeed = [] } = useQuery({
-    queryKey: ["changelog", "list"],
-    queryFn: () => getChangelogEntries(),
-    staleTime: 60_000 * 5,
-  });
-  const { data } = useSuspenseQuery(
+ const liveChangelogFeed = [];
+ const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
