@@ -2,8 +2,10 @@ import { useEffect, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 
 // Tworzymy lekki, niezależny klient Realtime na podstawie zmiennych globalnych
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (window as any)._env_?.VITE_SUPABASE_URL || "";
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (window as any)._env_?.VITE_SUPABASE_ANON_KEY || "";
+// Bezpieczne sprawdzanie środowiska: zapobiega wysypywaniu serwera Cloudflare (SSR)
+const isBrowser = typeof window !== "undefined";
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (isBrowser ? (window as any)._env_?.VITE_SUPABASE_URL : "") || "";
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (isBrowser ? (window as any)._env_?.VITE_SUPABASE_ANON_KEY : "") || "";
 
 const localRealtimeClient = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
