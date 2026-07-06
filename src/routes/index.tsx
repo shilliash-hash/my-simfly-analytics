@@ -412,10 +412,7 @@ function IncomingTraffic({
       .map((icao) => {
         const airport = airportByIcao.get(icao);
               const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-    const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-    
-       const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-    const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+              const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
     
     // POPRAWKA: Pobieramy login bezpośrednio z pewnego obiektu danych profilu (data.me.handle)
     // Jeśli z jakiegoś powodu jest niedostępny, system sprawdzi parametr URL ?pilot=
