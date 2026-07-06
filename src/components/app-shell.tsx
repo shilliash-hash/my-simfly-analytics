@@ -41,28 +41,22 @@ const NAV = [
 export function AppShell({ children }: { children: ReactNode }) {
  // KROK 2: Każda aktywna przeglądarka automatycznie zgłasza obecność użytkownika w sieci
    // POPRAWKA: Tworzymy unikalny identyfikator sesji urządzenia w przeglądarce
-     // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
+      // STAN OBECNOŚCI: Przechowujemy listę użytkowników online bezpośrednio w layoucie
   const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    // PANCERNE OMINIĘCIE COMPILATORA: Flaga @vite-ignore zmusza serwer do przepuszczenia buildu na zielono
-    import(/* @vite-ignore */ "/src/lib/supabase.ts").then((module) => {
-      const globalSupabase = module.supabase || module.default;
-      
-      if (!globalSupabase) {
-        console.log("[Presence] Could not extract client from project file");
-        return;
-      }
+    const initPresence = () => {
+      // Pobieramy instancję zapisaną w chmurze przez działający panel admina
+      const globalSupabase = (window as any)._sharedSupabaseInstance;
+      if (!globalSupabase) return false;
 
-      // Pobieramy unikalny identyfikator urządzenia z localStorage
       const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
       const finalUserId = savedUser 
         ? savedUser.replace(/"/g, "").trim() 
         : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
 
-      // Podpinamy się pod żywy kanał WebSocket
       const channel = globalSupabase.channel("hub-online-pilots", {
         config: { presence: { key: finalUserId } },
       });
@@ -75,7 +69,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             presences.forEach(() => { allPresentUsers.push(key); });
           });
           setOnlinePilots(allPresentUsers);
-          // Udostępniamy tablicę dla panelu admina w pamięci RAM
           (window as any)._hubOnlinePilots = allPresentUsers;
         })
         .subscribe(async (status: string) => {
@@ -83,10 +76,19 @@ export function AppShell({ children }: { children: ReactNode }) {
             await channel.track({ onlineAt: new Date().toISOString() });
           }
         });
-    }).catch(err => {
-      console.log("[Presence] Dynamic import file error:", err);
-    });
+
+      return true;
+    };
+
+    // Próbujemy odpalić od razu, a jeśli bazy jeszcze nie ma - sprawdzamy co sekundę, aż się pojawi
+    if (!initPresence()) {
+      const interval = setInterval(() => {
+        if (initPresence()) clearInterval(interval);
+      }, 1000);
+      return () => clearInterval(interval);
+    }
   }, []);
+
 
 
 
