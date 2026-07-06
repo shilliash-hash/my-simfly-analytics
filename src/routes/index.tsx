@@ -574,10 +574,10 @@ function IncomingTraffic({
                   </div>
                 </div>
                 {v.etaMs && (
-                  <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-text-runway/90">
-                    ETA {formatEtaUtc(v.etaMs)} • {formatRemainingFromNow(v.etaMs)}
-                  </div>
-                )}
+  <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
+    ETA: {new Date(v.etaMs).toISOString().substring(11, 16)} UTC
+  </div>
+)}
                 {arriving ? (
                   <PlaneLanding className="h-3.5 w-3.5 shrink-0 text-runway" />
                 ) : (
