@@ -31,6 +31,7 @@ const NAV = [
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
   { to: "/upgrade-advisor", label: "Upgrade Advisor", icon: TrendingUp },
+  { to: "/historical-hub-analysis", label: "Historical Hub Analysis", icon: BarChart3 },
   { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
