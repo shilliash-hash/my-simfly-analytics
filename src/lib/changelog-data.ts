@@ -13,6 +13,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
     version: "v 0.905 STABLE 17.Jul.24",
     type: ["UPGRADE", "FEATURE", "FiX"],
     text: "Visitors traffic cards visual changes for clarity. Hub-analysis supporter page added. Robustness of Hub-supporters weekly logic improvements."
+  },
   {
     id: "1",
     version: "v 0.904",
