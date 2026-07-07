@@ -43,7 +43,7 @@ function HistoricalHubAnalysisPage() {
       <PageHeader
         eyebrow="Analytics"
         title="Historical Hub Analysis"
-        description="CCoverage: Analytics are based on currently indexed pilot histories and improve automatically as the Hub indexes more flights."
+        description="Analytical Data Coverage: Analytics are based on currently indexed pilot histories and improve automatically as the Hub indexes more flights."
       />
       {isLoading ? (
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Loading…</div>
