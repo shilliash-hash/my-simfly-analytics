@@ -150,6 +150,7 @@ function TopVisitorsChart() {
     queryFn: () => fn(payload ? { data: { ...payload, pages: 10 } } : { data: { pages: 10 } }),
     staleTime: 5 * 60_000,
   });
+
   const visitors = data?.visitors ?? [];
   const topAll = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe).slice(0, 15);
   const top30 = [...visitors].sort((a, b) => b.paxForMe30d - a.paxForMe30d).slice(0, 15);
@@ -176,40 +177,23 @@ function TopVisitorsChart() {
           </div>
         </div>
       </div>
-     {/* ... górna część kodu komponentu TopVisitorsChart ... */}
-      {isLoading ? (
-        <div className="grid h-72 place-items-center text-sm text-muted-foreground">Scanning airport history…</div>
-      ) : topAll.length === 0 ? (
-        <div className="grid h-72 place-items-center text-sm text-muted-foreground">No visitor flights recorded yet.</div>
-      ) : (
-        <>
-          <div className="grid gap-6 lg:grid-cols-2">
-            <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
-            <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
-          </div>
-          
-          {/* NOWA TABELA POD WYKRESAMI - PRZEKAZUJEMY DOSTĘPNĄ JUŻ TABLICĘ VISITORS */}
-          <FrequentFlyersCard flyers={visitors} />
-        </>
-      )}
-    </div>
-  );
-}
 
       {isLoading ? (
         <div className="grid h-72 place-items-center text-sm text-muted-foreground">Scanning airport history…</div>
       ) : topAll.length === 0 ? (
         <div className="grid h-72 place-items-center text-sm text-muted-foreground">No visitor flights recorded yet.</div>
       ) : (
-            <div className="grid gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          <div className="grid gap-6 lg:grid-cols-2">
             <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
             <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
           </div>
-           )}
-          {/* NOWA TABELA POD WYKRESAMI - PRZEKAZUJEMY DOSTĘPNĄ JUŻ TABLICĘ VISITORS */}
-          {!isLoading && <FrequentFlyersCard flyers={visitors} />}
-        </>
-      </div>
+          
+          {/* POPRAWNE I BEZPIECZNE WYWOŁANIE TABELI WE WŁAŚCIWYM MIEJSCU */}
+          <FrequentFlyersTable visitors={visitors} />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -348,9 +332,9 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
   const topFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe).slice(0, 8);
 
   return (
-    <Card className="panel rounded-xl p-5 bg-background/40">
+    <Card className="panel rounded-xl p-5 bg-background/40 border-border/60">
       <div className="mb-4">
-        <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2 text-foreground">
           <Award className="h-5 w-5 text-amber-500" /> Frequent Flyers Ranking
         </h3>
         <p className="text-xs text-muted-foreground">
@@ -378,7 +362,7 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
             ) : (
               topFlyers.map((pilot, index) => (
                 <TableRow key={pilot.handle} className="border-border/60 hover:bg-muted/20 transition-colors">
-                  <TableCell className="text-center font-bold">
+                  <TableCell className="text-center font-bold text-sm">
                     {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
                   </TableCell>
                   <TableCell className="font-semibold text-foreground">
