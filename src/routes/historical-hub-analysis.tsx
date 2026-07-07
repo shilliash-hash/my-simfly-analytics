@@ -328,7 +328,6 @@ function PilotTimeline() {
   );
 }
 
-import { useState } from "react";
 // Jeśli używasz Shadcn Dialog, zaimportuj go na górze pliku:
 // import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
