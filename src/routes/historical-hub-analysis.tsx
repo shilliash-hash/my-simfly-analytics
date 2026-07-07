@@ -328,8 +328,6 @@ function PilotTimeline() {
   );
 }
 
-import { useState } from "react";
-
 export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
   // Stan kontrolujący, czy tabela jest rozwinięta
   const [isExpanded, setIsExpanded] = useState(false);
@@ -366,7 +364,7 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No visitor flights recorded yet.
-                </td>
+                </TableCell>
               </TableRow>
             ) : (
               visibleFlyers.map((pilot, index) => (
@@ -397,6 +395,7 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
       {sortedFlyers.length > 8 && (
         <div className="mt-4 flex justify-center">
           <button
+            type="button"
             onClick={() => setIsExpanded(!isExpanded)}
             className="rounded-lg border border-border/80 bg-background/50 px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors shadow-sm cursor-pointer"
           >
