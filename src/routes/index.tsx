@@ -272,9 +272,9 @@ function Overview() {
                   )}
                 </div>
               </div>
-                        <span className="text-xs text-text-foreground/80 leading-relaxed">
-                          {update.text}
-                        </span>
+ <span className="text-xs text-text-foreground/80 leading-relaxed whitespace-pre-line">
+  {update.text}
+</span>
                       </li>
                     );
                   })
