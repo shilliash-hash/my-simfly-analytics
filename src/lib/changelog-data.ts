@@ -20,24 +20,25 @@ export const staticChangelogFeed: ChangelogItem[] = [
     id: "2",
     version: "v 0.904",
     type: ["UPGRADE", "FIX"],
-    text: "Single airport license checker option added. DB traffic from server reduced."
+    text: `•Single airport license checker option added. 
+    •DB traffic from server reduced.`
   },
   {
     id: "3",
     version: "v 0.903",
     type: ["FEATURE"],
-    text: "Dynamic database architecture optimized and cloud sweeps operational."
+    text: `•Dynamic database architecture optimized and cloud sweeps operational.`
   },
   {
     id: "4",
     version: "v 0.902",
     type: ["FIX"],
-    text: "Fixed hydration mismatches and stabilized dashboard components."
+    text: `•Fixed hydration mismatches and stabilized dashboard components.`
   },
   {
     id: "5",
     version: "v 0.901",
     type: ["UPGRADE"],
-    text: "Upgraded edge server transport layers for smoother performance."
+    text: `•Upgraded edge server transport layers for smoother performance.`
   }
 ];
