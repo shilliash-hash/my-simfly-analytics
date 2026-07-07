@@ -10,9 +10,11 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
   {
     id: "1",
-    version: "v 0.905 STABLE 17.Jul.24",
+    version: "v 0.905 STABLE 7.Jul.24",
     type: ["UPGRADE", "FEATURE", "FIX"],
-    text: "Visitors cards changes for clarity. Hub-analysis supporter page added. Robustness of Hub-supporters weekly logic improvements."
+    text: `• Improved visitor cards for better readability.
+• Added the Hub Analysis supporter page.
+• Improved the robustness of the weekly Hub Support logic.`
   },
   {
     id: "2",
