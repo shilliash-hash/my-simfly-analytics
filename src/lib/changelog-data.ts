@@ -10,6 +10,12 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
   {
     id: "1",
+    version: "v 0.905 STABLE",
+    type: ["UPGRADE", "FEATURE"],
+    text: "Visitors traffic cards visual changes for clarity. Hub-analysis supporter page added. Hub Supporters weekly logic robustness improved"
+  },
+  {
+    id: "1",
     version: "v 0.904",
     // PRZYKŁAD: Teraz możesz podać jeden lub kilka tagów w tablicy []
     type: ["UPGRADE", "FIX"],
