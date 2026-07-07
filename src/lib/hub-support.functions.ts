@@ -572,3 +572,48 @@ export const getPilotSupportTimeline = createServerFn({ method: "GET" })
     }));
   });
 
+export interface FrequentFlyerPilot {
+  username: string;
+  totalOperations: number;
+  paxGenerated: number;
+  lastVisitedAt: string;
+}
+
+/**
+ * Agreguje dane lotów gości i zwraca ranking lojalnościowy pilotów.
+ */
+export function getFrequentFlyers(uniqueVisitorFlights: any[]): FrequentFlyerPilot[] {
+  const pilotMap = new Map<string, { totalOps: number; totalPax: number; lastSeen: string }>();
+
+  for (const flight of uniqueVisitorFlights) {
+    const pilotName = flight.visitor;
+    if (!pilotName) continue;
+
+    // Sumujemy czysty zysk wygenerowany dla sieci (lotnisko + wypożyczenie samolotu)
+    const profit = (flight.paxAirport || 0) + (flight.paxAircraft || 0);
+    const flightDate = flight.ts || "";
+
+    const existing = pilotMap.get(pilotName) ?? { totalOps: 0, totalPax: 0, lastSeen: flightDate };
+    
+    existing.totalOps += 1;
+    existing.totalPax += profit;
+    
+    // Aktualizujemy datę ostatniej wizyty, jeśli ta jest nowsza
+    if (new Date(flightDate).getTime() > new Date(existing.lastSeen).getTime()) {
+      existing.lastSeen = flightDate;
+    }
+
+    pilotMap.set(pilotName, existing);
+  }
+
+  // Mapujemy mapę na tablicę i sortujemy od pilota generującego największy zysk
+  return Array.from(pilotMap.entries())
+    .map(([username, stats]) => ({
+      username,
+      totalOperations: stats.totalOps,
+      paxGenerated: Math.round(stats.totalPax * 100) / 100,
+      lastVisitedAt: stats.lastSeen,
+    }))
+    .sort((a, b) => b.paxGenerated - a.paxGenerated);
+}
+
