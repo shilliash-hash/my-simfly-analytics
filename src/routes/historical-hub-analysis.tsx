@@ -201,17 +201,15 @@ function TopVisitorsChart() {
       ) : topAll.length === 0 ? (
         <div className="grid h-72 place-items-center text-sm text-muted-foreground">No visitor flights recorded yet.</div>
       ) : (
-        <>
-          <div className="grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-2">
             <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
             <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
           </div>
-          
+           )}
           {/* NOWA TABELA POD WYKRESAMI - PRZEKAZUJEMY DOSTĘPNĄ JUŻ TABLICĘ VISITORS */}
-          <FrequentFlyersCard flyers={visitors} />
+          {!isLoading && <FrequentFlyersCard flyers={visitors} />}
         </>
-      )}
-    </div>
+      </div>
   );
 }
 
