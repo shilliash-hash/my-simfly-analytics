@@ -1,5 +1,6 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card } from "@/components/ui/card";
+import { useState } from "react";
 
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
@@ -327,9 +328,17 @@ function PilotTimeline() {
   );
 }
 
+import { useState } from "react";
+
 export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
-  // Bierzemy top 8 najbardziej dochodowych pilotów
-  const topFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe).slice(0, 8);
+  // Stan kontrolujący, czy tabela jest rozwinięta
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Sortujemy wszystkich pilotów od najbardziej dochodowego
+  const sortedFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe);
+  
+  // Jeśli tabela jest rozwinięta, pokazujemy wszystkich (max 50), w przeciwnym wypadku tylko top 8
+  const visibleFlyers = isExpanded ? sortedFlyers.slice(0, 50) : sortedFlyers.slice(0, 8);
 
   return (
     <Card className="panel rounded-xl p-5 bg-background/40 border-border/60">
@@ -353,14 +362,14 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {topFlyers.length === 0 ? (
+            {visibleFlyers.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No visitor flights recorded yet.
-                </TableCell>
+                </td>
               </TableRow>
             ) : (
-              topFlyers.map((pilot, index) => (
+              visibleFlyers.map((pilot, index) => (
                 <TableRow key={pilot.handle} className="border-border/60 hover:bg-muted/20 transition-colors">
                   <TableCell className="text-center font-bold text-sm">
                     {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
@@ -383,6 +392,18 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
           </TableBody>
         </Table>
       </div>
+
+      {/* DYNAMICZNY PRZYCISK POKAZUJĄCY SIĘ TYLKO GDY MAMY WIĘCEJ NIŻ 8 PILOTÓW */}
+      {sortedFlyers.length > 8 && (
+        <div className="mt-4 flex justify-center">
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="rounded-lg border border-border/80 bg-background/50 px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors shadow-sm cursor-pointer"
+          >
+            {isExpanded ? "Show Less" : `Show More (${sortedFlyers.length - 8} more)`}
+          </button>
+        </div>
+      )}
     </Card>
   );
 }
