@@ -328,14 +328,17 @@ function PilotTimeline() {
   );
 }
 
-export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
-  // Stan kontrolujący, czy tabela jest rozwinięta
-  const [isExpanded, setIsExpanded] = useState(false);
+import { useState } from "react";
+// Jeśli używasz Shadcn Dialog, zaimportuj go na górze pliku:
+// import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
-  // Sortujemy wszystkich pilotów od najbardziej dochodowego
-  const sortedFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe);
+export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   
-  // Jeśli tabela jest rozwinięta, pokazujemy wszystkich (max 50), w przeciwnym wypadku tylko top 8
+  // Stan przechowujący obiekt pilota, którego loty chcemy wyświetlić w pop-upie
+  const [selectedPilot, setSelectedPilot] = useState<any | null>(null);
+
+  const sortedFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe);
   const visibleFlyers = isExpanded ? sortedFlyers.slice(0, 50) : sortedFlyers.slice(0, 8);
 
   return (
@@ -345,7 +348,7 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
           <Award className="h-5 w-5 text-amber-500" /> Frequent Flyers Ranking
         </h3>
         <p className="text-xs text-muted-foreground">
-          Top visiting pilots ranked by total operations and cumulative PAX brought to your hubs.
+          Top visiting pilots ranked by total operations. Click on a pilot to view their flight log.
         </p>
       </div>
       <div className="rounded-md border border-border/60 overflow-hidden bg-background/20">
@@ -368,11 +371,15 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
               </TableRow>
             ) : (
               visibleFlyers.map((pilot, index) => (
-                <TableRow key={pilot.handle} className="border-border/60 hover:bg-muted/20 transition-colors">
+                <TableRow 
+                  key={pilot.handle} 
+                  className="border-border/60 hover:bg-muted/20 transition-colors cursor-pointer"
+                  onClick={() => setSelectedPilot(pilot)} // KLIKNIĘCIE OTWIERA POP-UP
+                >
                   <TableCell className="text-center font-bold text-sm">
                     {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
                   </TableCell>
-                  <TableCell className="font-semibold text-foreground">
+                  <TableCell className="font-semibold text-foreground hover:text-runway transition-colors">
                     @{pilot.handle}
                   </TableCell>
                   <TableCell className="text-center text-muted-foreground mono text-xs">
@@ -391,18 +398,77 @@ export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
         </Table>
       </div>
 
-      {/* DYNAMICZNY PRZYCISK POKAZUJĄCY SIĘ TYLKO GDY MAMY WIĘCEJ NIŻ 8 PILOTÓW */}
       {sortedFlyers.length > 8 && (
         <div className="mt-4 flex justify-center">
           <button
             type="button"
-            onClick={() => setIsExpanded(!isExpanded)}
+            onClick={(e) => {
+              e.stopPropagation(); // Zapobiega triggerowaniu modala przy kliknięciu w button
+              setIsExpanded(!isExpanded);
+            }}
             className="rounded-lg border border-border/80 bg-background/50 px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/40 transition-colors shadow-sm cursor-pointer"
           >
             {isExpanded ? "Show Less" : `Show More (${sortedFlyers.length - 8} more)`}
           </button>
         </div>
       )}
+
+      {/* POP-UP / MODAL (WŁASNY TAILWIND DLA DOPASOWANIA STYLU) */}
+      {selectedPilot && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={() => setSelectedPilot(null)}>
+          <div className="panel border border-border/60 bg-slate-950 rounded-xl max-w-2xl w-full p-6 shadow-2xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-border/60 pb-3">
+              <div>
+                <h4 className="font-display text-lg font-bold text-foreground">Flight Log: @{selectedPilot.handle}</h4>
+                <p className="text-xs text-muted-foreground">Historical breakdown of visits and generated traffic.</p>
+              </div>
+              <button 
+                onClick={() => setSelectedPilot(null)}
+                className="text-muted-foreground hover:text-foreground text-sm font-semibold p-1.5 rounded hover:bg-muted/40 transition-colors cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-80 overflow-y-auto rounded-lg border border-border/60 bg-background/20 text-xs">
+              <Table>
+                <TableHeader className="bg-muted/40 sticky top-0 z-10">
+                  <TableRow className="border-border/60 hover:bg-transparent">
+                    <TableHead>Activity / Hub</TableHead>
+                    <TableHead className="text-center">Total Visits</TableHead>
+                    <TableHead className="text-right">PAX Generated</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {/* Mapujemy szczegółowe statystyki przypisane do obiektu pilota */}
+                  <TableRow className="border-border/60">
+                    <TableCell className="font-medium text-slate-200 flex items-center gap-1.5">
+                      <Plane className="h-3.5 w-3.5 text-runway" /> Combined Operations
+                    </TableCell>
+                    <TableCell className="text-center font-mono">{selectedPilot.visits}</TableCell>
+                    <TableCell className="text-right font-mono text-runway font-semibold">+{formatNumber(Math.round(selectedPilot.paxForMe))} PAX</TableCell>
+                  </TableRow>
+                  <TableRow className="border-border/60 text-muted-foreground bg-muted/5">
+                    <TableCell className="pl-6">Recent 30 Days Activity</TableCell>
+                    <TableCell className="text-center font-mono">—</TableCell>
+                    <TableCell className="text-right font-mono text-instrument">+{formatNumber(Math.round(selectedPilot.paxForMe30d))} PAX</TableCell>
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setSelectedPilot(null)}
+                className="rounded-lg bg-muted px-4 py-2 text-xs font-medium text-foreground hover:bg-muted/80 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
+
