@@ -12,7 +12,7 @@ import {
 import { HubSupportCard } from "@/components/hub-support";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
-import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, pingUserPresence, getOnlineUsersList } from "@/lib/simfly.functions";
+import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -41,40 +41,8 @@ function Overview() {
   
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
-
-  // PANCERNA LOGIKA OBECNOŚCI (Zgodna z zasadami React i wolna od wewnętrznych importów)
-    const pingPresenceAction = useServerFn(pingUserPresence);
-  const fetchOnlineListAction = useServerFn(getOnlineUsersList);
-
-  const currentPilot = typeof window !== "undefined"
-    ? (new URLSearchParams(window.location.search).get("pilot") || localStorage.getItem("simfly:viewedPilot") || "Guest").trim()
-    : "Guest";
-
-  const { data: rawOnlinePilots } = useQuery({
-    queryKey: ["public", "live-presence-pure-server-final"],
-    queryFn: async () => {
-      // 1. Zgłaszamy obecność na serwerze
-      if (typeof window !== "undefined" && currentPilot !== "Guest" && currentPilot !== "Pilot" && currentPilot !== "") {
-        await pingPresenceAction({ username: currentPilot });
-      }
-
-      // 2. Pobieramy listę online bezpośrednio z funkcji serwerowej (omijamy frontendowe błędy 404)
-      return await fetchOnlineListAction();
-    },
-    refetchInterval: 15000, 
-    staleTime: 5000,
-  });
-
-  const onlinePilots = Array.isArray(rawOnlinePilots) ? rawOnlinePilots : [];
-
-
-
-
-
-
-  // DALSZA CZĘŚĆ (Zostawiasz oryginalne useSuspenseQuery bez zmian poniżej):
- 
-  
+ // stala powyzej blokuje tabele na gorze (zle miejsce wyswietalania updejtow)
+   
  const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["simfly", keyTag],
@@ -143,10 +111,7 @@ function Overview() {
          }                
      actions={
     <div className="flex items-center gap-4">
-      {/* PRZEKAZUJEMY TABLICĘ PILOTÓW JAKO PROP */}
-      <LivePresenceWidget pilots={onlinePilots} />
-
-      <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3">
         <PilotSwitcher current={viewedUser} />
        
         {/* twój awatar */}
@@ -979,31 +944,3 @@ function PilotSwitcher({ current }: { current: string | null }) {
   );
 }  
   
-export function LivePresenceWidget({ pilots }: { pilots: string[] }) {
-  return (
-    <div className="flex flex-col items-end gap-1 bg-secondary/10 border border-border/30 rounded-xl p-2 max-w-[200px] text-right shadow-sm backdrop-blur-sm shrink-0">
-      <div className="flex items-center gap-2">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-runway"></span>
-        </span>
-        <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/80">Presence</span>
-        <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20">
-          {pilots.length} Live
-        </span>
-      </div>
-      {pilots.length > 0 && (
-        <div className="flex flex-wrap justify-end gap-1 max-w-full overflow-hidden">
-          {pilots.slice(0, 2).map((username) => (
-            <span key={username} className="mono text-[9px] font-semibold bg-background/50 border border-border/40 px-1 py-0.5 rounded text-foreground/90">
-              @{username}
-            </span>
-          ))}
-          {pilots.length > 2 && (
-            <span className="mono text-[9px] text-muted-foreground pt-0.5">+{pilots.length - 2}</span>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
