@@ -1,3 +1,6 @@
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Card } from "@/components/ui/card";
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -12,7 +15,7 @@ import { getVisitorHistory } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { HubSupportGate } from "@/components/hub-support";
-import { Plane, Coffee, ShieldCheck, Heart, Calendar, MapPin, Users } from "lucide-react";
+import { Plane, Coffee, ShieldCheck, Heart, Calendar, MapPin, Users, Award } from "lucide-react";
 
 
 export const Route = createFileRoute("/historical-hub-analysis")({
@@ -173,15 +176,40 @@ function TopVisitorsChart() {
           </div>
         </div>
       </div>
+     {/* ... górna część kodu komponentu TopVisitorsChart ... */}
       {isLoading ? (
         <div className="grid h-72 place-items-center text-sm text-muted-foreground">Scanning airport history…</div>
       ) : topAll.length === 0 ? (
         <div className="grid h-72 place-items-center text-sm text-muted-foreground">No visitor flights recorded yet.</div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-2">
-          <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
-          <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
-        </div>
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
+            <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
+          </div>
+          
+          {/* NOWA TABELA POD WYKRESAMI - PRZEKAZUJEMY DOSTĘPNĄ JUŻ TABLICĘ VISITORS */}
+          <FrequentFlyersCard flyers={visitors} />
+        </>
+      )}
+    </div>
+  );
+}
+
+      {isLoading ? (
+        <div className="grid h-72 place-items-center text-sm text-muted-foreground">Scanning airport history…</div>
+      ) : topAll.length === 0 ? (
+        <div className="grid h-72 place-items-center text-sm text-muted-foreground">No visitor flights recorded yet.</div>
+      ) : (
+        <>
+          <div className="grid gap-6 lg:grid-cols-2">
+            <VisitorBarPanel title="All-time" data={topAll} dataKey="paxForMe" visitsKey="visits" />
+            <VisitorBarPanel title="Last 30 days" data={top30} dataKey="paxForMe30d" visitsKey="visits" />
+          </div>
+          
+          {/* NOWA TABELA POD WYKRESAMI - PRZEKAZUJEMY DOSTĘPNĄ JUŻ TABLICĘ VISITORS */}
+          <FrequentFlyersCard flyers={visitors} />
+        </>
       )}
     </div>
   );
@@ -314,5 +342,65 @@ function PilotTimeline() {
         </ol>
       )}
     </div>
+  );
+}
+
+export function FrequentFlyersTable({ visitors }: { visitors: any[] }) {
+  // Bierzemy top 8 najbardziej dochodowych pilotów
+  const topFlyers = [...visitors].sort((a, b) => b.paxForMe - a.paxForMe).slice(0, 8);
+
+  return (
+    <Card className="panel rounded-xl p-5 bg-background/40">
+      <div className="mb-4">
+        <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+          <Award className="h-5 w-5 text-amber-500" /> Frequent Flyers Ranking
+        </h3>
+        <p className="text-xs text-muted-foreground">
+          Top visiting pilots ranked by total operations and cumulative PAX brought to your hubs.
+        </p>
+      </div>
+      <div className="rounded-md border border-border/60 overflow-hidden bg-background/20">
+        <Table>
+          <TableHeader className="bg-muted/40">
+            <TableRow className="border-border/60 hover:bg-transparent">
+              <TableHead className="w-[80px] text-center font-bold text-muted-foreground">Rank</TableHead>
+              <TableHead className="text-muted-foreground">Pilot Handle</TableHead>
+              <TableHead className="text-center text-muted-foreground">Operations</TableHead>
+              <TableHead className="text-right text-muted-foreground">Profit Generated</TableHead>
+              <TableHead className="text-right text-muted-foreground">Last 30 Days Contribution</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {topFlyers.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  No visitor flights recorded yet.
+                </TableCell>
+              </TableRow>
+            ) : (
+              topFlyers.map((pilot, index) => (
+                <TableRow key={pilot.handle} className="border-border/60 hover:bg-muted/20 transition-colors">
+                  <TableCell className="text-center font-bold">
+                    {index === 0 ? "🥇" : index === 1 ? "🥈" : index === 2 ? "🥉" : `#${index + 1}`}
+                  </TableCell>
+                  <TableCell className="font-semibold text-foreground">
+                    @{pilot.handle}
+                  </TableCell>
+                  <TableCell className="text-center text-muted-foreground mono text-xs">
+                    {pilot.visits} visits
+                  </TableCell>
+                  <TableCell className="text-right mono text-xs font-semibold text-runway">
+                    +{formatNumber(Math.round(pilot.paxForMe))} PAX
+                  </TableCell>
+                  <TableCell className="text-right mono text-xs text-instrument">
+                    +{formatNumber(Math.round(pilot.paxForMe30d))} PAX
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
