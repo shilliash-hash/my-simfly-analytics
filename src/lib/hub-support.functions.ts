@@ -485,3 +485,90 @@ export const adminRevokeHubSupport = createServerFn({ method: "POST" })
       .eq("week_start_utc", weekIso);
     return { ok: true as const };
   });
+
+// ---------- Analytics for /stats ----------
+
+export type HubTrafficRow = { icao: string; flights: number; pax: number };
+export type PilotTimelineRow = {
+  weekStartUtc: string;
+  weekLabel: string;
+  source: SupportSource | null;
+  qualifyingIcao: string | null;
+  qualifyingFlightId: string | null;
+  qualifyingArrivalAt: string | null;
+  activatedAt: string;
+};
+
+export const getHubTrafficStats = createServerFn({ method: "GET" })
+  .handler(async (): Promise<HubTrafficRow[]> => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("hub_support")
+      .select("qualifying_icao,qualifying_flight_id")
+      .not("qualifying_icao", "is", null);
+    if (error) throw error;
+
+    const flightIds: string[] = [];
+    const flightsPerIcao = new Map<string, number>();
+    const flightIdToIcao = new Map<string, string>();
+    for (const r of rows ?? []) {
+      const icao = (r.qualifying_icao ?? "").toUpperCase();
+      if (!icao) continue;
+      flightsPerIcao.set(icao, (flightsPerIcao.get(icao) ?? 0) + 1);
+      if (r.qualifying_flight_id) {
+        flightIds.push(r.qualifying_flight_id);
+        flightIdToIcao.set(r.qualifying_flight_id, icao);
+      }
+    }
+
+    const paxPerIcao = new Map<string, number>();
+    // Batch flight_id lookups
+    const CHUNK = 200;
+    for (let i = 0; i < flightIds.length; i += CHUNK) {
+      const slice = flightIds.slice(i, i + CHUNK);
+      const { data: flights, error: fErr } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("flight_id,pax")
+        .in("flight_id", slice);
+      if (fErr) throw fErr;
+      for (const f of flights ?? []) {
+        const icao = flightIdToIcao.get(f.flight_id);
+        if (!icao) continue;
+        paxPerIcao.set(icao, (paxPerIcao.get(icao) ?? 0) + Number(f.pax ?? 0));
+      }
+    }
+
+    const out: HubTrafficRow[] = [];
+    for (const [icao, flights] of flightsPerIcao) {
+      out.push({ icao, flights, pax: Math.round(paxPerIcao.get(icao) ?? 0) });
+    }
+    out.sort((a, b) => b.flights - a.flights);
+    return out;
+  });
+
+export const getPilotSupportTimeline = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string }) => d ?? {})
+  .handler(async ({ data }): Promise<PilotTimelineRow[]> => {
+    const uname =
+      sanitiseUsername(data?.username) ||
+      sanitiseUsername(process.env.SIMFLY_USERNAME) ||
+      sanitiseUsername(DEFAULT_USERNAME);
+    if (!uname) return [];
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: rows, error } = await supabaseAdmin
+      .from("hub_support")
+      .select("week_start_utc,support_source,qualifying_icao,qualifying_flight_id,qualifying_arrival_at,activated_at")
+      .eq("username", normUser(uname))
+      .order("week_start_utc", { ascending: false });
+    if (error) throw error;
+    return (rows ?? []).map((r) => ({
+      weekStartUtc: r.week_start_utc as string,
+      weekLabel: weekLabel(new Date(r.week_start_utc as string)),
+      source: (r.support_source as SupportSource) ?? null,
+      qualifyingIcao: r.qualifying_icao ?? null,
+      qualifyingFlightId: r.qualifying_flight_id ?? null,
+      qualifyingArrivalAt: r.qualifying_arrival_at ?? null,
+      activatedAt: r.activated_at as string,
+    }));
+  });
+
