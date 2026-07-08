@@ -17,6 +17,9 @@ import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from "recharts";
+import { CounterVisitModal } from "@/components/counter-visit-modal";
+import { Search } from "lucide-react";
+
 
 export const Route = createFileRoute("/")({
   loader: ({ context }) =>
@@ -881,6 +884,7 @@ function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enrou
 
 
 function PilotSwitcher({ current }: { current: string | null }) {
+  const [counterPilot, setCounterPilot] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(current ?? "");
 
@@ -937,7 +941,21 @@ function PilotSwitcher({ current }: { current: string | null }) {
             >
               Reset to me
             </button>
+
+             {value.trim() && (
             <button
+              type="button"
+              onClick={() => {
+                setCounterPilot(value.trim());
+                setOpen(false);
+              }}
+              className="mono rounded-md bg-instrument/25 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-instrument transition hover:bg-instrument/35 flex items-center gap-1"
+            >
+              <Search className="h-3 w-3" /> Hubs
+            </button>
+         )}
+                 
+           <button
               type="submit"
               className="mono rounded-md bg-runway/20 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/30"
             >
