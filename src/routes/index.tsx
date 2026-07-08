@@ -594,6 +594,12 @@ function IncomingTraffic({
               })()}
                <div className="min-w-0 flex-1">
                 <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
+
+                 {/* DODANA LINIA: DETALE TRASY I SAMOLOTU DLA GOŚCIA / TWOJEGO LOTU NA LIŚCIE TRAFFIC */}
+  <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+    {v.aircraftICAO || v.aircraft || "—"} · {v.origin ?? "—"} → {v.destination ?? "—"}
+  </div>
+                 
                         {v.etaMs && (
                           <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
                             ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
