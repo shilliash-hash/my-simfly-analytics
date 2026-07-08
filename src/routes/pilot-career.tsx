@@ -314,3 +314,4 @@ function TierDistributionCard({ data }: PropsData) {
     </div>
   );
 }
+
