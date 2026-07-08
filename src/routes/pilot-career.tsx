@@ -117,10 +117,18 @@ function CountriesCard({ data }: PropsData) {
               title={`${c.name} · ${c.visits} visits`}
             >
               <span className="font-semibold text-foreground">{c.code}</span>
-              <span className="text-muted-foreground flex items-center gap-1">
-              <span>{c.flag}</span>
+                         <span className="text-muted-foreground flex items-center gap-1.5">
+              <img
+                src={`https://flagcdn.com{c.code.toLowerCase()}.svg`}
+                alt={`${c.name} flag`}
+                className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/40"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
               <span>{c.name}</span>
-              </span>
+            </span>
+
             </span>
           ))}
         </div>
