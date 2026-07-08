@@ -160,6 +160,10 @@ function MostVisitedCard({ data }: PropsData) {
 }
 function LongestFlightCard({ data }: PropsData) {
   const f = data.longestFlight;
+  
+  // OTO LINIA DIAGNOSTYCZNA – WPISZ JĄ TUTAJ:
+  console.log("=== DIAGNOSTYKA REKORDU ===", f);
+  
   return (
     <div className="panel rounded-xl p-5">
       <div className="mb-3 flex items-center gap-2">
