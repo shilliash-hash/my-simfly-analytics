@@ -117,7 +117,10 @@ function CountriesCard({ data }: PropsData) {
               title={`${c.name} · ${c.visits} visits`}
             >
               <span className="font-semibold text-foreground">{c.code}</span>
-              <span className="text-muted-foreground">{c.name}</span>
+              <span className="text-muted-foreground flex items-center gap-1">
+              <span>{c.flag}</span>
+              <span>{c.name}</span>
+              </span>
             </span>
           ))}
         </div>
