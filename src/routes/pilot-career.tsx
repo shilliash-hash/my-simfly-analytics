@@ -156,9 +156,6 @@ function CountriesCard({ data }: PropsData) {
                   src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
                   alt={`${c.name} flag`}
                   className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/20"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                  }}
                 />
                 <span>{c.name}</span>
               </span>
