@@ -130,6 +130,27 @@ const ICAO_TO_ISO: Record<string, string> = {
   AN: "nr", AY: "pg", SC_: "cl"
 };
 
+// Zamienia kod ISO (np. "pl") na fizyczne emoji flagi (🇵🇱) bezpośrednio w pamięci
+function getEmojiFlag(icaoCode: string): string {
+  const iso = (ICAO_TO_ISO[icaoCode.toUpperCase()] || icaoCode).toLowerCase();
+  
+  // Jeśli kod to specjalny przypadek, jak Canary Islands (IC) lub USA rozbite na regiony
+  if (iso === "us") return "🇺🇸";
+  if (iso === "de") return "🇩🇪";
+  if (iso === "gb") return "🇬🇧";
+  
+  const codePoints = iso
+    .toUpperCase()
+    .split("")
+    .map(char =>  127397 + char.charCodeAt(0));
+    
+  try {
+    return String.fromCodePoint(...codePoints);
+  } catch (e) {
+    return "🌐"; // Fallback w razie błędu
+  }
+}
+
 function CountriesCard({ data }: PropsData) {
   // Mapujemy bezpośrednio całą tablicę z danymi bez ucinania jej przez .slice
   return (
@@ -152,15 +173,10 @@ function CountriesCard({ data }: PropsData) {
             >
               <span className="font-semibold text-foreground">{c.code}</span>
               <span className="text-muted-foreground flex items-center gap-1.5">
-             <img
-                src={`https://netlify.app{encodeURIComponent(c.name.toLowerCase())}.png`}
-                alt={`${c.name} flag`}
-                className="h-3 w-4.5 rounded-sm object-cover inline-block border border-border/40 shadow-sm"
-                onError={(e) => {
-                  // Jeśli jakieś nietypowe małe terytorium nie zostanie dopasowane, ukrywamy ikonę błędu
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
+              <span className="text-sm inline-block min-w-[18px] text-center">
+                {getEmojiFlag(c.code)}
+              </span>
+
 
                 <span>{c.name}</span>
               </span>
