@@ -968,6 +968,11 @@ function PilotSwitcher({ current }: { current: string | null }) {
             </button>
           </div>
         </form>
+            {counterPilot && (
+        <CounterVisitModal
+          username={counterPilot}
+          onClose={() => setCounterPilot(null)}
+        />
       )}
     </div>
   );
