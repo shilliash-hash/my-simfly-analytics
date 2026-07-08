@@ -955,26 +955,29 @@ function PilotSwitcher({ current }: { current: string | null }) {
             }}
             className="mono rounded-md bg-instrument/25 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-instrument transition hover:bg-instrument/35 flex items-center gap-1"
           >
-            <Search className="h-3 w-3" /> Hubs
+                      <Search className="h-3 w-3" /> Hubs
           </button>
+        )}
+        
+        <button
+          type="submit"
+          className="mono rounded-md bg-runway/20 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/30"
+        >
+          View pilot
+        </button>
+      </div>
+    </form>
+  )}
+  
+  {/* MODAL UMIESZCZONY W BEZPIECZNYM MIEJSCU NA SAMYM DOLE KOMPONENTU */}
+  {counterPilot && (
+    <CounterVisitModal
+      username={counterPilot}
+      onClose={() => setCounterPilot(null)}
+    />
+  )}
+</div>
+);
+}
 
-         )}
-                 
-           <button
-              type="submit"
-              className="mono rounded-md bg-runway/20 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-runway transition hover:bg-runway/30"
-            >
-              View pilot
-            </button>
-          </div>
-        </form>
-            {counterPilot && (
-        <CounterVisitModal
-          username={counterPilot}
-          onClose={() => setCounterPilot(null)}
-        />
-      )}
-    </div>
-  );
-}  
   
