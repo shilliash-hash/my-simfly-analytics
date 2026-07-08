@@ -162,7 +162,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       total_distance: number | null;
     };
     const all: Row[] = [];
-    const PAGE = 1000;
+    const PAGE = 100;
     for (let from = 0; ; from += PAGE) {
       const { data: page, error } = await supabaseAdmin
         .from("simfly_flights")
