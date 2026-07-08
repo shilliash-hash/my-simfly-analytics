@@ -10,6 +10,15 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
   {
   id: "1",
+  version: "v 0.907 STABLE 08.Jul.26",
+  type: ["FEATURE"],
+  text: `• Introduced Counter-Visit Finder widget to plan return flights to other pilots' hubs
+  • Integrated dynamic "Hubs" search button directly into the View as Pilot panel.
+  • Pilots that are users of the hub are searchable with "Hubs" functionality.
+  • List of all airports appear in pop-out window along with respective details`
+},
+  {
+  id: "1",
   version: "v 0.906 STABLE 08.Jul.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
   text: `• Introduced Pilots Career - a new personal aviation history page.
