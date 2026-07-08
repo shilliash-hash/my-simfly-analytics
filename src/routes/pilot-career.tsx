@@ -96,6 +96,40 @@ function AroundTheWorldCard({ data }: PropsData) {
     </div>
   );
 }
+
+// Mapowanie lotniczych prefiksów ICAO na standardowe kody krajów ISO (dla flag)
+const ICAO_TO_ISO: Record<string, string> = {
+  EN: "no", ES: "se", EF: "fi", EK: "dk", EI: "ie", EG: "gb", EH: "nl", EB: "be", EL: "lu",
+  ED: "de", ET: "de", LF: "fr", LS: "ch", LO: "at", LI: "it", LE: "es", LP: "pt", LG: "gr",
+  LT: "tr", LM: "mt", LK: "cz", LZ: "sk", LH: "hu", LR: "ro", LB: "bg", LC: "cy", LD: "hr",
+  LJ: "si", LY: "rs", LQ: "ba", LW: "mk", LA: "al", LU: "md", EP: "pl", EE: "ee", EV: "lv",
+  EY: "lt", UM: "by", UK: "ua", UU: "ru", UL: "ru", UE: "ru", UN: "ru", US: "ru", BI: "is",
+  BG: "gl", KA: "us", KB: "us", KC: "us", KD: "us", KE: "us", KF: "us", KG: "us", KH: "us",
+  KI: "us", KJ: "us", KK: "us", KL: "us", KM: "us", KN: "us", KO: "us", KP: "us", KR: "us",
+  KS: "us", KT: "us", KU: "us", KV: "us", KW: "us", KX: "us", KY: "us", KZ: "us", PA: "us",
+  PH: "us", PG: "gu", PJ: "mp", PK: "mh", CY: "ca", CZ: "ca", MM: "mx", MU: "cu", MD: "do",
+  MT: "ht", MK: "jm", MY: "bs", MZ: "bz", MP: "pa", MR: "cr", MS: "sv", MG: "gt", MH: "hn",
+  MN: "ni", TA: "ag", TB: "bb", TF: "gp", TG: "gd", TI: "vi", TJ: "pr", TK: "kn", TL: "lc",
+  TN: "bq", TQ: "ai", TR: "ms", TT: "tt", TU: "vg", TV: "vc", TX: "ky", SA: "ar", SB: "br",
+  SC: "cl", SD: "br", SE: "ec", SG: "py", SK: "co", SL: "bo", SM: "sr", SO: "gf", SP: "pe",
+  SU: "uy", SV: "ve", SY: "gy", DA: "dz", DB: "bj", DF: "bf", DG: "gh", DI: "ci", DN: "ng",
+  DR: "ne", DT: "tn", DX: "tg", FA: "za", FB: "bw", FC: "cg", FD: "sz", FE: "cf", FG: "gq",
+  FH: "sh", FI: "mu", FJ: "io", FK: "cm", FL: "zm", FM: "mg", FN: "ao", FO: "ga", FP: "st",
+  FQ: "mz", FS: "sc", FT: "td", FV: "zw", FW: "mw", FX: "ls", FY: "na", FZ: "cd", GA: "ml",
+  GB: "gm", GC: "ic", GE: "ea", GF: "sl", GG: "gw", GL: "lr", GM: "ma", GO: "sn", GQ: "mr",
+  GS: "eh", GU: "gn", GV: "cv", HA: "et", HB: "bi", HC: "so", HD: "dj", HE: "eg", HH: "er",
+  HK: "ke", HL: "ly", HR: "rw", HS: "sd", HT: "tz", HU: "ug", OA: "af", OB: "bh", OE: "sa",
+  OI: "ir", OJ: "jd", OK: "kw", OL: "lb", OM: "ae", OO: "om", OP: "pk", OR: "iq", OS: "sy",
+  OT: "qa", OY: "ye", VA: "in", VC: "lk", VD: "kh", VE: "in", VG: "bd", VH: "hk", VI: "in",
+  VL: "la", VM: "mo", VN: "np", VO: "in", VQ: "bt", VR: "mv", VT: "th", VV: "vn", VY: "mm",
+  RC: "tw", RJ: "jp", RK: "kr", RO: "jp", RP: "ph", Z: "cn", ZB: "cn", ZG: "cn", ZH: "cn",
+  ZJ: "cn", ZL: "cn", ZM: "mn", ZP: "cn", ZS: "cn", ZU: "cn", ZW: "cn", ZY: "cn", ZK: "kp",
+  UA: "kz", UB: "az", UC: "kg", UD: "am", UG: "ge", UT: "uz", WA: "id", WB: "my", WI: "id",
+  WM: "my", WP: "tl", WQ: "id", WR: "id", WS: "sg", YB: "au", YM: "au", YS: "au", NZ: "nz",
+  NF: "fj", NG: "tv", NI: "nu", NL: "wf", NS: "ws", NT: "pf", NV: "vu", NW: "nc", AG: "sb",
+  AN: "nr", AY: "pg", SC_: "cl"
+};
+
 function CountriesCard({ data }: PropsData) {
   // Mapujemy bezpośrednio całą tablicę z danymi bez ucinania jej przez .slice
   return (
@@ -117,17 +151,20 @@ function CountriesCard({ data }: PropsData) {
               title={`${c.name} · ${c.visits} visits`}
             >
               <span className="font-semibold text-foreground">{c.code}</span>
-                         <span className="text-muted-foreground flex items-center gap-1.5">
+              
+              <span className="text-muted-foreground flex items-center gap-1.5">
               <img
-                src={`https://flagcdn.com{c.code.toLowerCase()}.svg`}
+                {/* Wyciągamy kod ISO ze słownika na bazie lotniczego c.code */}
+                src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
                 alt={`${c.name} flag`}
-                className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/40"
+                className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/20"
                 onError={(e) => {
                   e.currentTarget.style.display = 'none';
                 }}
               />
               <span>{c.name}</span>
             </span>
+
 
             </span>
           ))}
