@@ -152,14 +152,16 @@ function CountriesCard({ data }: PropsData) {
             >
               <span className="font-semibold text-foreground">{c.code}</span>
               <span className="text-muted-foreground flex items-center gap-1.5">
-              <img
-                src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
+             <img
+                src={`https://netlify.app{encodeURIComponent(c.name.toLowerCase())}.png`}
                 alt={`${c.name} flag`}
-                className="h-3 w-4 rounded-sm object-cover inline-block border border-border/40 shadow-sm"
+                className="h-3 w-4.5 rounded-sm object-cover inline-block border border-border/40 shadow-sm"
                 onError={(e) => {
+                  // Jeśli jakieś nietypowe małe terytorium nie zostanie dopasowane, ukrywamy ikonę błędu
                   e.currentTarget.style.display = 'none';
                 }}
               />
+
                 <span>{c.name}</span>
               </span>
             </span>
