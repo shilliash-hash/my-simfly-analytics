@@ -109,7 +109,34 @@ export function CounterVisitModal({ username, onClose }: CounterVisitModalProps)
                       {airport.name}
                     </div>
                   </div>
-                  <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-runway opacity-0 group-hover:opacity-100 transition" />
+                  <div className="flex items-center gap-1.5 shrink-0 select-none">
+                    
+                    {/* 1. Ilość pozostałych slotów lądowania */}
+                    <span 
+                      className={`mono text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-wider ${
+                        (airport.slots - (airport.slots_used || 0)) <= 2 
+                          ? "bg-red-500/10 text-red-400 border-red-500/20 animate-pulse" 
+                          : "bg-runway/10 text-runway border-runway/20"
+                      }`}
+                      title="Available landing slots remaining"
+                    >
+                      {Math.max(0, airport.slots - (airport.slots_used || 0))} / {airport.slots || 20} slots
+                    </span>
+
+                    {/* 2. Etykieta TIER */}
+                    {airport.tier && (
+                      <span className="mono text-[10px] font-semibold text-instrument bg-instrument/10 px-2 py-0.5 rounded border border-instrument/20 uppercase tracking-wider">
+                        T{airport.tier}
+                      </span>
+                    )}
+                    
+                    {/* 3. Etykieta LEVEL */}
+                    <div className="mono text-[10px] font-medium text-muted-foreground bg-secondary/80 px-2 py-0.5 rounded border border-border/40">
+                      Lvl {airport.level || 1}
+                    </div>
+                    
+                    <ExternalLink className="h-3.5 w-3.5 text-muted-foreground group-hover:text-runway opacity-0 group-hover:opacity-100 transition ml-1" />
+                  </div>
                 </Link>
               ))}
             </div>
@@ -119,3 +146,4 @@ export function CounterVisitModal({ username, onClose }: CounterVisitModalProps)
     </div>
   );
 }
+
