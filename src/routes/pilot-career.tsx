@@ -154,7 +154,6 @@ function CountriesCard({ data }: PropsData) {
               
               <span className="text-muted-foreground flex items-center gap-1.5">
               <img
-                {/* Wyciągamy kod ISO ze słownika na bazie lotniczego c.code */}
                 src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
                 alt={`${c.name} flag`}
                 className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/20"
