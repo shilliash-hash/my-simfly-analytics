@@ -147,24 +147,21 @@ function CountriesCard({ data }: PropsData) {
           {data.countries.map((c) => (
             <span
               key={c.code}
-              className="mono inline-flex items-center gap-1 rounded bg-secondary px-2 py-1 text-[11px] ring-1 ring-border"
+              className="mono inline-flex items-center gap-1.5 rounded bg-secondary px-2 py-1 text-[11px] ring-1 ring-border"
               title={`${c.name} · ${c.visits} visits`}
             >
               <span className="font-semibold text-foreground">{c.code}</span>
-              
               <span className="text-muted-foreground flex items-center gap-1.5">
-              <img
-                src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
-                alt={`${c.name} flag`}
-                className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/20"
-                onError={(e) => {
-                  e.currentTarget.style.display = 'none';
-                }}
-              />
-              <span>{c.name}</span>
-            </span>
-
-
+                <img
+                  src={`https://flagcdn.com{(ICAO_TO_ISO[c.code.toUpperCase()] || c.code).toLowerCase()}.png`}
+                  alt={`${c.name} flag`}
+                  className="h-3 w-4.5 rounded-sm object-cover shadow-sm inline-block border border-border/20"
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                  }}
+                />
+                <span>{c.name}</span>
+              </span>
             </span>
           ))}
         </div>
@@ -172,6 +169,7 @@ function CountriesCard({ data }: PropsData) {
     </div>
   );
 }
+
 
 function MostVisitedCard({ data }: PropsData) {
   const rows = data.topAirports;
