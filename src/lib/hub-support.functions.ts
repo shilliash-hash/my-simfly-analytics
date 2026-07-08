@@ -617,3 +617,84 @@ export function getFrequentFlyers(uniqueVisitorFlights: any[]): FrequentFlyerPil
     .sort((a, b) => b.paxGenerated - a.paxGenerated);
 }
 
+export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string }) => d)
+  .handler(async ({ data }) => {
+    // 1. Weryfikacja tokenu bezpieczeństwa Admina
+    await verifyAdminToken(data.token);
+    
+    const weekStart = currentSimflyWeekStart();
+    const weekStartIso = weekStart.toISOString();
+    
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    try {
+      // 2. Pobieramy z bazy wszystkie unikalne lotniska, które mają już przypisany support w tym tygodniu
+      // Służy to jako szybki zestaw (Set), aby nie dublować zapytań
+      const { data: existingSupport } = await supabaseAdmin
+        .from("hub_support")
+        .select("username")
+        .eq("week_start_utc", weekStartIso);
+        
+      const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase()));
+
+      // 3. Pobieramy loty z obecnego tygodnia, które są ukończone (mają pasażerów/zarobek i czas)
+      // i wylądowały w tym tygodniu. Limit 1000 wierszy w zupełności wystarczy na audyt 3-godzinny.
+      const { data: flights, error: fErr } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("id, pilot_username, destination_icao, mission_start_ts, flight_time, total_reward, pax")
+        .gte("mission_start_ts", weekStartIso)
+        .order("mission_start_ts", { ascending: false })
+        .limit(1000);
+
+      if (fErr) throw fErr;
+      if (!flights || flights.length === 0) {
+        return { ok: true, msg: "Auditor finished: No flights recorded in the current week yet." };
+      }
+
+      let fixCount = 0;
+      const nowIso = new Date().toISOString();
+
+      // 4. Analizujemy loty i wyłapujemy brakujących supporterów
+      for (const f of flights) {
+        const username = (f.pilot_username || "").trim().toLowerCase();
+        if (!username || existingUsers.has(username)) continue;
+
+        // Sprawdzamy czy lot spełnia kryteria ukończenia (analogicznie do isCompletedFlight)
+        const ft = f.flight_time;
+        const hasTime = (typeof ft === "string" && ft.trim().length > 0 && ft.trim() !== "0" && ft.trim() !== "00:00:00") || (typeof ft === "number" && ft > 0);
+        const reward = Number(f.total_reward ?? 0);
+        const pax = Number(f.pax ?? 0);
+        
+        if (hasTime && (reward > 0 || pax > 0)) {
+          // Bingo! Znaleźliśmy ukończony lot pilota, który utknął bez rangi. Wbijamy go idempotentnie!
+          await supabaseAdmin.from("hub_support").upsert(
+            {
+              username: username,
+              week_start_utc: weekStartIso,
+              support_source: "airport",
+              qualifying_icao: (f.destination_icao ?? "").toUpperCase(),
+              qualifying_flight_id: String(f.id || null),
+              qualifying_arrival_at: f.mission_start_ts,
+              activated_at: nowIso,
+              updated_at: nowIso,
+            },
+            { onConflict: "username,week_start_utc", ignoreDuplicates: true }
+          );
+          
+          existingUsers.add(username); // Zapobiegamy wielokrotnemu wpisaniu tego samego gracza
+          fixCount++;
+        }
+      }
+
+      return { 
+        ok: true, 
+        msg: `Auditor finished successfully. Scanned ${flights.length} flights, fixed and restored ${fixCount} missing supporter statuses.` 
+      };
+
+    } catch (err) {
+      console.error("[hub-support-auditor] Atomic check failed:", err);
+      throw err;
+    }
+  });
+
