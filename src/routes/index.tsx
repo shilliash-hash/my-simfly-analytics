@@ -943,16 +943,21 @@ function PilotSwitcher({ current }: { current: string | null }) {
             </button>
 
              {value.trim() && (
-            <button
-              type="button"
-              onClick={() => {
-                setCounterPilot(value.trim());
+                      <button
+            type="button"
+            onClick={() => {
+              // Pobieramy wartość bezpośrednio z inputu lub fallback do wpisanego tekstu
+              const pilotToSearch = value?.trim();
+              if (pilotToSearch) {
+                setCounterPilot(pilotToSearch);
                 setOpen(false);
-              }}
-              className="mono rounded-md bg-instrument/25 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-instrument transition hover:bg-instrument/35 flex items-center gap-1"
-            >
-              <Search className="h-3 w-3" /> Hubs
-            </button>
+              }
+            }}
+            className="mono rounded-md bg-instrument/25 px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-widest text-instrument transition hover:bg-instrument/35 flex items-center gap-1"
+          >
+            <Search className="h-3 w-3" /> Hubs
+          </button>
+
          )}
                  
            <button
