@@ -160,13 +160,14 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       departure_icao: string | null;
       destination_icao: string | null;
       total_distance: number | null;
+      flight_time: string | null;
     };
     const all: Row[] = [];
     const PAGE = 100;
     for (let from = 0; ; from += PAGE) {
       const { data: page, error } = await supabaseAdmin
         .from("simfly_flights")
-        .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance")
+    .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time") // <-- DOPISZ ,flight_time NA KOŃCU STRINGA
         .eq("username", uname.toLowerCase())
         .order("mission_start_ts", { ascending: false, nullsFirst: false })
         .range(from, from + PAGE - 1);
