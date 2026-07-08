@@ -37,9 +37,10 @@ export type PilotCareerTierSlice = {
 };
 
 export type PilotCareerCountry = {
-  code: string;      // 2-letter ICAO prefix
-  name: string;      // pretty country/region name
+  code: string; // 2-letter ICAO prefix
+  name: string; // pretty country/region name
   visits: number;
+  flag: string; // dodatkowe flagi
 };
 
 export type PilotCareerPayload = {
@@ -119,14 +120,54 @@ const ICAO_PREFIX: Record<string, string> = {
   SC_: "Chile",
 };
 
-function countryFromIcao(icao: string): { code: string; name: string } | null {
+// Słownik flag dopasowany do Twoich prefiksów ICAO
+const ICAO_FLAGS: Record<string, string> = {
+  EN: "🇳🇴", ES: "🇸🇪", EF: "🇫🇮", EK: "🇩🇰", EI: "🇮🇪", EG: "🇬🇧", EH: "🇳🇱", EB: "🇧🇪", EL: "🇱🇺",
+  ED: "🇩🇪", ET: "🇩🇪", LF: "🇫🇷", LS: "🇨🇭", LO: "🇦🇹", LI: "🇮🇹", LE: "🇪🇸", LP: "🇵🇹", LG: "🇬🇷",
+  LT: "🇹🇷", LM: "🇲🇹", LK: "🇨🇿", LZ: "🇸🇰", LH: "🇭🇺", LR: "🇷🇴", LB: "🇧🇬", LC: "🇨🇾", LD: "🇭🇷",
+  LJ: "🇸🇮", LY: "🇷🇸", LQ: "🇧🇦", LW: "🇲🇰", LA: "🇦🇱", LU: "🇲🇩", EP: "🇵🇱", EE: "🇪🇪", EV: "🇱🇻",
+  EY: "🇱🇹", UM: "🇧🇾", UK: "🇺🇦", UU: "🇷🇺", UL: "🇷🇺", UE: "🇷🇺", UN: "🇷🇺", US: "🇷🇺", BI: "🇮🇸",
+  BG: "🇬🇱", KA: "🇺🇸", KB: "🇺🇸", KC: "🇺🇸", KD: "🇺🇸", KE: "🇺🇸", KF: "🇺🇸", KG: "🇺🇸", KH: "🇺🇸",
+  KI: "🇺🇸", KJ: "🇺🇸", KK: "🇺🇸", KL: "🇺🇸", KM: "🇺🇸", KN: "🇺🇸", KO: "🇺🇸", KP: "🇺🇸", KR: "🇺🇸",
+  KS: "🇺🇸", KT: "🇺🇸", KU: "🇺🇸", KV: "🇺🇸", KW: "🇺🇸", KX: "🇺🇸", KY: "🇺🇸", KZ: "🇺🇸", PA: "🇺🇸",
+  PH: "🇺🇸", PG: "🇬🇺", PJ: "🇲🇵", PK: "🇲🇭", CY: "🇨🇦", CZ: "🇨🇦", MM: "🇲🇽", MU: "🇨🇺", MD: "🇩🇴",
+  MT: "🇭🇹", MK: "🇯🇲", MY: "🇧🇸", MZ: "🇧🇿", MP: "🇵🇦", MR: "🇨🇷", MS: "🇸🇻", MG: "🇬🇹", MH: "🇭🇳",
+  MN: "🇳🇮", TA: "🇦🇬", TB: "🇧🇧", TF: "🇬🇵", TG: "🇬🇩", TI: "🇻🇮", TJ: "🇵🇷", TK: "🇰🇳", TL: "🇱🇨",
+  TN: "🇧🇶", TQ: "🇦🇮", TR: "🇲🇸", TT: "🇹🇹", TU: "🇻🇬", TV: "🇻🇨", TX: "🇰🇾", SA: "🇦🇷", SB: "🇧🇷",
+  SC: "🇨🇱", SD: "🇧🇷", SE: "🇪🇨", SG: "🇵🇾", SK: "🇨🇴", SL: "🇧🇴", SM: "🇸🇷", SO: "🇬🇫", SP: "🇵🇪",
+  SU: "🇺🇾", SV: "🇻🇪", SY: "🇬🇾", DA: "🇩🇿", DB: "🇧🇯", DF: "🇧🇫", DG: "🇬🇭", DI: "🇨🇮", DN: "🇳🇬",
+  DR: "🇳🇪", DT: "🇹🇳", DX: "🇹🇬", FA: "🇿🇦", FB: "🇧🇼", FC: "🇨🇬", FD: "🇸🇿", FE: "🇨🇫", FG: "🇬🇶",
+  FH: "🇸🇭", FI: "🇲🇺", FJ: "🇮🇴", FK: "🇨🇲", FL: "🇿🇲", FM: "🇲🇬", FN: "🇦🇴", FO: "🇬🇦", FP: "🇸🇹",
+  FQ: "🇲🇿", FS: "🇸🇨", FT: "🇹🇩", FV: "🇿🇼", FW: "🇲🇼", FX: "🇱🇸", FY: "🇳🇦", FZ: "🇨🇩", GA: "🇲🇱",
+  GB: "🇬🇲", GC: "🇮🇨", GE: "🇪🇦", GF: "🇸🇱", GG: "🇬🇼", GL: "🇱🇷", GM: "🇲🇦", GO: "🇸🇳", GQ: "🇲🇷",
+  GS: "🇪🇭", GU: "🇬🇳", GV: "🇨🇻", HA: "🇪🇹", HB: "🇧🇮", HC: "🇸🇴", HD: "🇩🇯", HE: "🇪🇬", HH: "🇪🇷",
+  HK: "🇰🇪", HL: "🇱🇾", HR: "🇷🇼", HS: "🇸🇩", HT: "🇹🇿", HU: "🇺🇬", OA: "🇦🇫", OB: "🇧🇭", OE: "🇸🇦",
+  OI: "🇮🇷", OJ: "🇯🇴", OK: "🇰🇼", OL: "🇱🇧", OM: "🇦🇪", OO: "🇴🇲", OP: "🇵🇰", OR: "🇮🇶", OS: "🇸🇾",
+  OT: "🇶🇦", OY: "🇾🇪", VA: "🇮🇳", VC: "🇱🇰", VD: "🇰🇭", VE: "🇮🇳", VG: "🇧🇩", VH: "🇭🇰", VI: "🇮🇳",
+  VL: "🇱🇦", VM: "🇲🇴", VN: "🇳🇵", VO: "🇮🇳", VQ: "🇧🇹", VR: "🇲🇻", VT: "🇹🇭", VV: "🇻🇳", VY: "🇲🇲",
+  RC: "🇹🇼", RJ: "🇯🇵", RK: "🇰🇷", RO: "🇯🇵", RP: "🇵🇭", Z: "🇨🇳", ZB: "🇨🇳", ZG: "🇨🇳", ZH: "🇨🇳",
+  ZJ: "🇨🇳", ZL: "🇨🇳", ZM: "🇲🇳", ZP: "🇨🇳", ZS: "🇨🇳", ZU: "🇨🇳", ZW: "🇨🇳", ZY: "🇨🇳", ZK: "🇰🇵",
+  UA: "🇰🇿", UB: "🇦🇿", UC: "🇰🇬", UD: "🇦🇲", UG: "🇬🇪", UT: "🇺🇿", WA: "🇮🇩", WB: "🇲🇾", WI: "🇮🇩",
+  WM: "🇲🇾", WP: "🇹🇱", WQ: "🇮🇩", WR: "🇮🇩", WS: "🇸🇬", YB: "🇦🇺", YM: "🇦🇺", YS: "🇦🇺", NZ: "🇳🇿",
+  NF: "🇫🇯", NG: "🇹🇻", NI: "🇳🇺", NL: "🇼🇫", NS: "🇼🇸", NT: "🇵🇫", NV: "🇻🇺", NW: "🇳🇨", AG: "🇸🇧",
+  AN: "🇳🇷", AY: "🇵🇬", SC_: "🇨🇱",
+};
+
+
+// Flagi na frontend dodatkowo
+function countryFromIcao(icao: string): { code: string; name: string; flag: string } | null {
   const s = (icao ?? "").toUpperCase().trim();
   if (s.length < 2) return null;
   const two = s.slice(0, 2);
   const one = s.slice(0, 1);
   const name = ICAO_PREFIX[two] ?? ICAO_PREFIX[one] ?? two;
-  return { code: two, name };
+  
+  // Szukamy odpowiedniej emotki – jeśli jej nie ma, zostawiamy pusty string lub domyślny globus 🌐
+  const flag = ICAO_FLAGS[two] ?? ICAO_FLAGS[one] ?? "🌐"; 
+  
+  return { code: two, name, flag };
 }
+
 
 export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
