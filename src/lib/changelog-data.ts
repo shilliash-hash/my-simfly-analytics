@@ -9,6 +9,12 @@ export interface ChangelogItem {
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
   {
+  id: "1",
+  version: "v 0.906 STABLE 08.Jul.26",
+  type: ["FEATURE", "UPGRADE", "FIX"],
+  text: "• Introduced Pilot's Career - a new personal aviation history page. • Discover your flying journey through visited airports, longest routes and global travel distance. • Added aircraft Tier usage statistics and flight activity breakdown. • Added visited countries with visual flag display. • Career statistics are calculated from complete historical SimFly flight data. • Improved historical flight processing for more accurate achievements and records. • Enhanced layout and readability on all device sizes."
+},
+    {
     id: "1",
     version: "v 0.905 STABLE 7.Jul.24",
     type: ["UPGRADE", "FEATURE", "FIX"],
