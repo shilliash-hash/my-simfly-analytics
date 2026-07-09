@@ -660,13 +660,12 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
         const username = (f.pilot_username || "").trim().toLowerCase();
         if (!username || existingUsers.has(username)) continue;
 
-        // Sprawdzamy czy lot spełnia kryteria ukończenia (analogicznie do isCompletedFlight)
+               // Sprawdzamy WYŁĄCZNIE poprawny, niezerowy czas lotu
         const ft = f.flight_time;
         const hasTime = (typeof ft === "string" && ft.trim().length > 0 && ft.trim() !== "0" && ft.trim() !== "00:00:00") || (typeof ft === "number" && ft > 0);
-        const reward = Number(f.total_reward ?? 0);
-        const pax = Number(f.pax ?? 0);
         
-        if (hasTime && (reward > 0 || pax > 0)) {
+        if (hasTime) {
+
           // Bingo! Znaleźliśmy ukończony lot pilota, który utknął bez rangi. Wbijamy go idempotentnie!
           await supabaseAdmin.from("hub_support").upsert(
             {
