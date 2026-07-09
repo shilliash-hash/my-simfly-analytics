@@ -305,7 +305,7 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
   }).setView([52.0, 20.0], 4); // <--- BINGO! Wpisz tutaj środek Europy [52.0, 20.0] i zoom 4 zamiast pustego setView
 
 
-        L.tileLayer("https://{s}://{z}/{x}/{y}{r}.png", {
+L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
           maxZoom: 18,
           subdomains: "abcd",
         }).addTo(mapRef.current);
