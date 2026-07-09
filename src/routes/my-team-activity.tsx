@@ -297,12 +297,13 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-      if (!mapRef.current) {
-        mapRef.current = L.map(containerRef.current, {
-          zoomControl: true,
-          attributionControl: false,
-          worldCopyJump: true,
-        }).setView([20, 0], 2);
+     if (!mapRef.current) {
+  mapRef.current = L.map(containerRef.current, {
+    zoomControl: true,
+    attributionControl: false,
+    worldCopyJump: true,
+  }).setView([52.0, 20.0], 4); // <--- BINGO! Wpisz tutaj środek Europy [52.0, 20.0] i zoom 4 zamiast pustego setView
+
 
         L.tileLayer("https://{s}://{z}/{x}/{y}{r}.png", {
           maxZoom: 18,
@@ -398,13 +399,17 @@ iconAnchor: [13, 13],
         }
       }
 
-      if (bounds.length > 0 && !fittedRef.current && mapRef.current) {
+          if (bounds.length > 0 && !fittedRef.current && mapRef.current) {
         fittedRef.current = true;
         if (bounds.length === 1) {
-          mapRef.current.setView(bounds[0], 5);
+          mapRef.current.setView(bounds, 5);
         } else {
-          mapRef.current.fitBounds(bounds, { padding: [40, 40] });
+          mapRef.current.fitBounds(bounds, { padding: });
         }
+      } else if (mapRef.current && !fittedRef.current) {
+        // AWARYJNY FALLBACK: Jeśli wszyscy stoją na ziemi, mapa i tak ożyje wycentrowana na Europę!
+        fittedRef.current = true;
+        mapRef.current.setView([52.0, 20.0], 4);
       }
     })();
 
