@@ -620,101 +620,87 @@ export function getFrequentFlyers(uniqueVisitorFlights: any[]): FrequentFlyerPil
 export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
   .inputValidator((d: { token: string }) => d)
   .handler(async ({ data }) => {
-    // 1. Weryfikacja tokenu bezpieczeństwa Admina
     await verifyAdminToken(data.token);
     
     const weekStart = currentSimflyWeekStart();
-    const weekStartIso = weekStart.toISOString();
+    
+    // FORMATUJEMY DATĘ DLA POSTGRESQL: "YYYY-MM-DD 00:00:00" ZAMIAST ISO Z LITERĄ "T"
+    const year = weekStart.getUTCFullYear();
+    const month = String(weekStart.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(weekStart.getUTCDate()).padStart(2, "0");
+    const weekStartSql = `${year}-${month}-${day} 00:00:00+00`;
+    const weekStartIso = weekStart.toISOString(); // Zostawiamy do filtra hub_support
     
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
-        try {
-      // 1. POBIERAMY OFICJALNY PAYLOAD LOTNISK BEZPOŚREDNIO Z API SIMFLY
-      // Używamy tej samej funkcji co strona główna, aby mieć 100% poprawnych baz
-      const { getSimflyPayload } = await import("@/lib/simfly.functions");
-      const simflyData = await getSimflyPayload();
-      
-      if (!simflyData || !simflyData.airports) {
-        return { ok: false, msg: "Auditor skipped: Failed to fetch live airports payload from SimFly API." };
-      }
+    try {
+      const { data: myHubsData } = await supabaseAdmin
+        .from("airport_upgrade_cache")
+        .select("icao");
+ 
+      const myHubs = new Set((myHubsData ?? []).map(h => (h.icao ?? "").toUpperCase().trim()));
 
-      // Wyciągamy kody ICAO dokładnie tak jak robi to pętla na stronie "My airports"
-      const myHubs = new Set(simflyData.airports.map((a: any) => (a.icao ?? "").toUpperCase().trim()));
-
-      // 2. Pobieramy z bazy użytkowników, którzy mają już przypisany support w tym tygodniu
       const { data: existingSupport } = await supabaseAdmin
         .from("hub_support")
         .select("username")
         .eq("week_start_utc", weekStartIso);
-
     
       const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase()));
 
-      // 4. POBIERAMY LOTY Z POPRAWNYMI NAZWAMI KOLUMN (username, flight_id)
+      // UŻYWAMY CZYSZCZONEGO FORMATU SQL W FILTRZE GTE
       const { data: flights, error: fErr } = await supabaseAdmin
         .from("simfly_flights")
-        .select("flight_id, username, departure_icao, destination_icao, mission_start_ts, flight_time")
-        .gte("mission_start_ts", weekStartIso)
-        .order("mission_start_ts", { ascending: false })
-        .limit(1000);
+        .select("flight_id, username, departure_icao, destination_icao, mission_start_ts")
+        .gte("mission_start_ts", weekStartSql) // <-- TU WPADA POPRAWNY CZAS SQL
+        .order("mission_start_ts", { ascending: false });
 
       if (fErr) throw fErr;
       if (!flights || flights.length === 0) {
-        return { ok: true, msg: "Auditor finished: No flights recorded in the current week yet." };
+        return { ok: true, msg: "Auditor finished: No flights found with SQL timestamp filter." };
       }
 
       let fixCount = 0;
       const nowIso = new Date().toISOString();
 
-      // 5. Analizujemy loty i wyłapujemy brakujących supporterów (Dwukierunkowo!)
       for (const f of flights) {
-        // MAPUJEMY NA POPRAWNĄ KOLUMNĘ "username" Z TWOJEJ DEFINICJI TABELI
         const originalUsername = (f.username || "").trim();
         const usernameLower = originalUsername.toLowerCase();
         
         if (!originalUsername || existingUsers.has(usernameLower)) continue;
 
-        // Sprawdzamy poprawność czasu trwania misji
-        const ft = f.flight_time;
-        const hasTime = typeof ft === "string" && ft.trim().length > 4 && ft.trim() !== "00:00:00";
+        const depIcao = (f.departure_icao ?? "").toUpperCase().trim();
+        const destIcao = (f.destination_icao ?? "").toUpperCase().trim();
         
-        if (hasTime) {
-          const depIcao = (f.departure_icao ?? "").toLowerCase().trim();
-          const destIcao = (f.destination_icao ?? "").toLowerCase().trim();
-          
-          // WERYFIKACJA DWUKIERUNKOWA
-          let qualifyingHub = "";
-          if (myHubs.has(destIcao)) {
-            qualifyingHub = destIcao;
-          } else if (myHubs.has(depIcao)) {
-            qualifyingHub = depIcao;
-          }
-          
-          if (!qualifyingHub) continue;
-
-          // Wszystko poprawne – wbijamy status supportera!
-          await supabaseAdmin.from("hub_support").upsert(
-            {
-              username: originalUsername,
-              week_start_utc: weekStartIso,
-              support_source: "airport",
-              qualifying_icao: qualifyingHub.toUpperCase(),
-              qualifying_flight_id: String(f.flight_id || null), // MAPUJEMY NA "flight_id"
-              qualifying_arrival_at: f.mission_start_ts,
-              activated_at: nowIso,
-              updated_at: nowIso,
-            },
-            { onConflict: "username,week_start_utc", ignoreDuplicates: true }
-          );
-          
-          existingUsers.add(usernameLower);
-          fixCount++;
+        let qualifyingHub = "";
+        if (myHubs.has(destIcao)) {
+          qualifyingHub = destIcao;
+        } else if (myHubs.has(depIcao)) {
+          qualifyingHub = depIcao;
         }
+        
+        if (!qualifyingHub) continue;
+
+        await supabaseAdmin.from("hub_support").upsert(
+          {
+            username: originalUsername,
+            week_start_utc: weekStartIso, // Frontend oczekuje ISO, więc tu zostaje bez zmian
+            support_source: "airport",
+            qualifying_icao: qualifyingHub,
+            qualifying_flight_id: String(f.flight_id || null),
+            qualifying_arrival_at: f.mission_start_ts,
+            activated_at: nowIso,
+            updated_at: nowIso,
+          },
+          { onConflict: "username,week_start_utc", ignoreDuplicates: true }
+        );
+        
+        existingUsers.add(usernameLower);
+        fixCount++;
       }
 
       return { 
         ok: true, 
-        msg: `Auditor finished successfully. Scanned ${flights.length} flights against ${myHubs.size} dynamic hubs. Fixed ${fixCount} missing statuses.` 
+        msg: `Auditor sfc. Scanned ${flights.length} flights. Fixed ${fixCount} missing statuses.` 
       };
 
     } catch (err) {
@@ -722,4 +708,5 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
       throw err;
     }
   });
+
 
