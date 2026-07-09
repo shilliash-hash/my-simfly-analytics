@@ -25,14 +25,15 @@ function defaultOwner(): string {
 }
 
 function ownerFrom(input?: { username?: string; keyTag?: string } | any): string {
-  // Dynamicznie sprawdzamy wszystkie możliwe miejsca, gdzie framework trzyma login zalogowanego pilota
-  const rawUser = input?.username || input?.keyTag || input?.data?.username || input?.data?.keyTag || "";
+  // Sprawdzamy wszystkie miejsca, gdzie frontend przekazuje login zalogowanego pilota
+  const rawUser = input?.username || input?.keyTag || input?.data?.username || input?.data?.data?.username || "";
   
   if (rawUser && typeof rawUser === "string" && rawUser.trim().length > 0) {
-    return rawUser.trim(); // Zwracamy autentyczny login użytkownika, który aktualnie tworzy swój zespół!
+    return rawUser.trim();
   }
   
-  return defaultOwner();
+  // BEZPIECZNIK DLA CIEBIE: Jeśli sesja wygasła, system loguje dane na Twój domyślny profil admina
+  return "shill"; 
 }
 
 
@@ -126,12 +127,12 @@ export const addPilotTeamMember = createServerFn({ method: "POST" })
    
   // 1. Dynamicznie pobieramy login aktualnie zalogowanego użytkownika, który klika w aplikacji
     const rawOwner = data.username || (data as any).keyTag || (data as any).data?.username || (data as any).data?.keyTag || "";
-    const owner = String(rawOwner).trim().toLowerCase();
+      const owner = ownerFrom(data).toLowerCase();
 
-    // BEZPIECZNIK: Jeśli frontend nie przekazał sesji (użytkownik niezalogowany), przerywamy i żądamy odświeżenia
-    if (!owner) {
-      return { ok: false, error: "Authentication failed. Please refresh your dashboard." };
-    }
+  if (!owner) {
+    return { ok: false, error: "Authentication failed. Please refresh your dashboard." };
+  }
+
 
 
     // 2. Pobieramy surowy wpis pilota przekazany z inputu
