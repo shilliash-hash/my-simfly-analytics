@@ -351,8 +351,8 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
           const icon = L.divIcon({
             className: "",
             html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background-color:${currentBgColor};border:2px solid ${currentBorderColor};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-            iconSize:,
-            iconAnchor:,
+iconSize: [26, 26],
+iconAnchor: [13, 13],
           });
 
           const eta = act.etaMs ? `<div style="margin-top:4px"><span style="color:#fff;font-weight:600">ETA:</span> <span style="color:#7DD3FC;font-weight:700">${new Date(act.etaMs).toISOString().substring(11, 16)} UTC</span></div>` : '';
@@ -380,8 +380,8 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
           const icon = L.divIcon({
             className: "",
             html: `<div style="display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background-color:${parkedColor};border:2px solid ${parkedBorder};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-            iconSize:,
-            iconAnchor:,
+            iconSize: [16, 16],
+            iconAnchor: [8, 8],
           });
 
           const dateStr = act.missionStartTs
