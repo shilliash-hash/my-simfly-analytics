@@ -707,14 +707,15 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
  }
  }
 
- return { 
- ok: true, 
- msg: `Auditor finished successfully. Scanned ${flights.length} flights against ${myHubs.size} dynamic hubs. Fixed ${fixCount} missing statuses.` 
- };
+       return { 
+        ok: true, 
+        msg: `Auditor finished successfully. Scanned ${flights.length} flights against ${myHubs.size} dynamic hubs. Fixed ${fixCount} missing statuses.` 
+      };
 
- catch (err) {
- console.error("[hub-support-auditor] Atomic check failed:", err);
- throw err;
- }
- });
+    } catch (err) {
+      console.error("[hub-support-auditor] Atomic check failed:", err);
+      throw err;
+    }
+  });
+
 
