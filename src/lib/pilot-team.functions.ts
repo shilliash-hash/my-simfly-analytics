@@ -24,9 +24,17 @@ function defaultOwner(): string {
   return process.env.SIMFLY_USERNAME || "shill";
 }
 
-function ownerFrom(input?: { username?: string }): string {
-  return sanitiseUsername(input?.username) || defaultOwner();
+function ownerFrom(input?: { username?: string; keyTag?: string } | any): string {
+  // Dynamicznie sprawdzamy wszystkie możliwe miejsca, gdzie framework trzyma login zalogowanego pilota
+  const rawUser = input?.username || input?.keyTag || input?.data?.username || input?.data?.keyTag || "";
+  
+  if (rawUser && typeof rawUser === "string" && rawUser.trim().length > 0) {
+    return rawUser.trim(); // Zwracamy autentyczny login użytkownika, który aktualnie tworzy swój zespół!
+  }
+  
+  return defaultOwner();
 }
+
 
 // ---------- Types ----------
 
