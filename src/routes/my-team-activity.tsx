@@ -316,11 +316,22 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
 
       for (const a of activity) {
         const act = a.activity;
+           // 1. Dynamicznie pobieramy login aktualnie zalogowanego pilota z sesji HUB-a
+    const loggedInUser = (payload?.username || payload?.keyTag || "").toLowerCase();
+
+    // 2. Sprawdzamy, czy ten konkretny samolot w pętli należy do zalogowanego użytkownika
+    const isMe = (a.username || "").toLowerCase() === loggedInUser;
+
+    // 3. Dynamicznie dobieramy barwy: złoty bursztyn dla zalogowanego gracza, czerwień dla zespołu
+    const currentLineColor = isMe ? "#F59E0B" : "#EF4444";
+    const currentBgColor = isMe ? "#F59E0B" : "#DC2626";
+    const currentBorderColor = isMe ? "#FBBF24" : "#EF4444";
+        
         if (act.status === "flying") {
           const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
           const d = act.destLat != null && act.destLon != null ? [act.destLat, act.destLon] as [number, number] : null;
           if (o && d) {
-            L.polyline([o, d], { color: "#EF4444", weight: 1.5, opacity: 0.45, dashArray: "4 6", interactive: false }).addTo(layer);
+           L.polyline([o, d], { color: currentLineColor, weight: 1.5, ...
           }
           const pos: [number, number] | null =
             act.currentLat != null && act.currentLon != null
@@ -330,7 +341,7 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
           bounds.push(pos);
           const icon = L.divIcon({
             className: "",
-            html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#DC2626;border:1.5px solid #0A0F1C;box-shadow:0 0 0 1px rgba(220,38,38,.45);color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700">✈</div>`,
+            html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background-color:${currentBgColor};border:2px solid ${currentBorderColor};box-shadow:0 2px 4px rgba(0,0,0,0.3);color:#fff;font-size:12px;font-weight:bold"></div>`,
             iconSize: [26, 26],
             iconAnchor: [13, 13],
           });
