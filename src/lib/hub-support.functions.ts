@@ -655,21 +655,23 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
       let fixCount = 0;
       const nowIso = new Date().toISOString();
 
-      // 4. Analizujemy loty i wyłapujemy brakujących supporterów
+          // 4. Analizujemy loty i wyłapujemy brakujących supporterów
       for (const f of flights) {
-        const username = (f.pilot_username || "").trim().toLowerCase();
-        if (!username || existingUsers.has(username)) continue;
+        // Zachowujemy ORYGINALNY nick z logu lotów (np. Benoit0211) do zapisu w bazie
+        const originalUsername = (f.pilot_username || "").trim();
+        const usernameLower = originalUsername.toLowerCase();
+        
+        if (!originalUsername || existingUsers.has(usernameLower)) continue;
 
-               // Sprawdzamy WYŁĄCZNIE poprawny, niezerowy czas lotu
+        // Sprawdzamy WYŁĄCZNIE poprawny, niezerowy czas lotu
         const ft = f.flight_time;
         const hasTime = (typeof ft === "string" && ft.trim().length > 0 && ft.trim() !== "0" && ft.trim() !== "00:00:00") || (typeof ft === "number" && ft > 0);
         
         if (hasTime) {
-
-          // Bingo! Znaleźliśmy ukończony lot pilota, który utknął bez rangi. Wbijamy go idempotentnie!
+          // Bingo! Wbijamy status używając ORYGINALNEGO formatu nazwy użytkownika
           await supabaseAdmin.from("hub_support").upsert(
             {
-              username: username,
+              username: originalUsername, // <-- TUTAJ PRZEKAZUJEMY ORYGINALNY NICK
               week_start_utc: weekStartIso,
               support_source: "airport",
               qualifying_icao: (f.destination_icao ?? "").toUpperCase(),
@@ -681,10 +683,11 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
             { onConflict: "username,week_start_utc", ignoreDuplicates: true }
           );
           
-          existingUsers.add(username); // Zapobiegamy wielokrotnemu wpisaniu tego samego gracza
+          existingUsers.add(usernameLower); // Dodajemy małą do Setu podręcznego
           fixCount++;
         }
       }
+
 
       return { 
         ok: true, 
