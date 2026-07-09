@@ -238,7 +238,7 @@ export const getPilotTeamActivity = createServerFn({ method: "GET" })
       const { data: rows } = await supabaseAdmin
         .from("simfly_flights")
         .select("username,destination_icao,mission_start_ts")
-        .in("username", lowered)
+        .in("username", parkedNeeded)
         .not("destination_icao", "is", null)
         .order("mission_start_ts", { ascending: false })
         .limit(200);
