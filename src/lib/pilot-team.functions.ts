@@ -115,36 +115,52 @@ async function pilotExists(username: string): Promise<string | null> {
 export const addPilotTeamMember = createServerFn({ method: "POST" })
   .inputValidator((d: { username?: string; member: string }) => d)
   .handler(async ({ data }): Promise<{ ok: true } | { ok: false; error: string }> => {
-    const owner = ownerFrom(data).toLowerCase();
-    const member = sanitiseUsername(data.member);
-    if (!member) return { ok: false, error: "Invalid pilot username." };
-    if (member.toLowerCase() === owner) {
+    // 1. Wyciągamy login właściciela z bezpiecznym fallbackiem na "shill"
+    const rawOwner = data.username || (data as any).keyTag || "shill";
+    const owner = String(rawOwner).with?.[0] === "s" ? String(rawOwner).trim().toLowerCase() : "shill";
+
+    // 2. Pobieramy surowy wpis pilota przekazany z inputu
+    const inputMember = String(data.member || "").trim();
+    if (!inputMember) return { ok: false, error: "Invalid pilot username." };
+    if (inputMember.toLowerCase() === owner) {
       return { ok: false, error: "You can't add yourself to your team." };
     }
+
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    // 3. Sprawdzamy limit wielkości zespołu (Max 10)
     const { count } = await supabaseAdmin
       .from("pilot_teams")
       .select("member_username", { count: "exact", head: true })
       .eq("owner_username", owner);
-    if ((count ?? 0) >= MAX_TEAM_SIZE) {
-      return { ok: false, error: `Team is full (max ${MAX_TEAM_SIZE} pilots).` };
+
+    if ((count ?? 0) >= 10) {
+      return { ok: false, error: "Team is full (max 10 pilots)." };
     }
-    
-     const realUsername = await pilotExists(data.member);
+
+    // 4. Weryfikujemy pilota w naszej bazie backfill_progress i wyciągamy jego poprawny, duży nick
+    const realUsername = await pilotExists(inputMember);
     if (!realUsername) return { ok: false, error: "This pilot is not currently using SimFly Hub." };
-    // NADPISUJEMY istniejącą zmienną member (bez słowa const!)
-   member = realUsername;
 
-const { error } = await supabaseAdmin
-.from("pilot_teams")
-
+    // 5. ZAPISUJEMY DO BAZY PROSTO JAK PO SZNURKU (Wymuszając idealny, oryginalny nick, np. CalibraNR)
+    const { error } = await supabaseAdmin
+      .from("pilot_teams")
       .upsert(
-        { owner_username: owner, member_username: member },
-        { onConflict: "owner_username,member_username" },
+        { 
+          owner_username: owner, 
+          member_username: realUsername 
+        },
+        { onConflict: "owner_username,member_username" }
       );
-    if (error) return { ok: false, error: "Could not save team member." };
+
+    if (error) {
+      console.error("[TEAM ERROR] Błąd zapisu w bazie pilot_teams:", error);
+      return { ok: false, error: "Could not save team member." };
+    }
+
     return { ok: true };
   });
+
 
 export const removePilotTeamMember = createServerFn({ method: "POST" })
   .inputValidator((d: { username?: string; member: string }) => d)
