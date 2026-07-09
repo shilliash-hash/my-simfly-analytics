@@ -21,7 +21,7 @@ function sanitiseUsername(raw?: string | null): string {
 }
 
 function defaultOwner(): string {
-  return process.env.SIMFLY_USERNAME || "shill";
+  return "";
 }
 
 function ownerFrom(input?: { username?: string; keyTag?: string } | any): string {
