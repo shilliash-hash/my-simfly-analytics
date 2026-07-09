@@ -287,25 +287,20 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const fittedRef = useRef(false);
-  const { payload } = useSimflyArgs();
 
   useEffect(() => {
     let cancelled = false;
-
     (async () => {
       if (!containerRef.current) return;
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
-
-     if (!mapRef.current) {
-  mapRef.current = L.map(containerRef.current, {
-    zoomControl: true,
-    attributionControl: false,
-    worldCopyJump: true,
-  }).setView([52.0, 20.0], 4); // <--- BINGO! Wpisz tutaj środek Europy [52.0, 20.0] i zoom 4 zamiast pustego setView
-
-
-L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
+      if (!mapRef.current) {
+        mapRef.current = L.map(containerRef.current, {
+          zoomControl: true,
+          attributionControl: false,
+          worldCopyJump: true,
+        }).setView([20, 0], 2);
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
           maxZoom: 18,
           subdomains: "abcd",
         }).addTo(mapRef.current);
@@ -316,110 +311,72 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
       layerRef.current = layer;
 
       const bounds: [number, number][] = [];
-        const esc = (s: any) => {
-        const text = String(s || "");
-        return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "'" }[c]!));
-      };
-
+      const esc = (s: string) =>
+        s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
       for (const a of activity) {
-            const act = a.activity || a || (a as any).data;
-               if (!act) continue;
-    const currentStatus = String(act.status || (act as any).flight_status || "").toLowerCase().trim();
-
-        // 1. Dynamicznie pobieramy login aktualnie zalogowanego pilota z sesji HUB-a
-        const loggedInUser = (payload?.username || payload?.keyTag || "").toLowerCase();
-
-        // 2. Sprawdzamy, czy ten konkretny samolot w pętli należy do zalogowanego użytkownika
-        const isMe = (a.username || "").toLowerCase() === loggedInUser;
-
-        // 3. Dynamicznie dobieramy barwy: złoty bursztyn dla zalogowanego gracza, czerwień dla zespołu
-        const currentLineColor = isMe ? "#F59E0B" : "#EF4444";
-        const currentBgColor = isMe ? "#F59E0B" : "#DC2626";
-        const currentBorderColor = isMe ? "#FBBF24" : "#EF4444";
-
-           if (currentStatus === "flying" || currentStatus === "enroute") {
-             const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
-
-      const pos: [number, number] | null =
-        (act as any).lat != null && (act as any).lng != null
-          ? [(act as any).lat, (act as any).lng]
-          : (act.currentLat != null && act.currentLon != null ? [act.currentLat, act.currentLon] : o ?? d);
-
+        const act = a.activity;
+        if (act.status === "flying") {
+          const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
+          const d = act.destLat != null && act.destLon != null ? [act.destLat, act.destLon] as [number, number] : null;
+          if (o && d) {
+            L.polyline([o, d], { color: "#EF4444", weight: 1.5, opacity: 0.45, dashArray: "4 6", interactive: false }).addTo(layer);
+          }
+          const pos: [number, number] | null =
+            act.currentLat != null && act.currentLon != null
+              ? [act.currentLat, act.currentLon]
+              : o ?? d;
           if (!pos) continue;
           bounds.push(pos);
-
           const icon = L.divIcon({
             className: "",
-            html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background-color:${currentBgColor};border:2px solid ${currentBorderColor};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-iconSize: [26, 26],
-iconAnchor: [13, 13],
+            html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background:#DC2626;border:1.5px solid #0A0F1C;box-shadow:0 0 0 1px rgba(220,38,38,.45);color:#fff;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700">✈</div>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13],
           });
-
-          const eta = act.etaMs ? `<div style="margin-top:4px"><span style="color:#fff;font-weight:600">ETA:</span> <span style="color:#7DD3FC;font-weight:700">${new Date(act.etaMs).toISOString().substring(11, 16)} UTC</span></div>` : '';
-
+          const eta = act.etaMs ? `<div style="margin-top:4px"><span style="color:#fff;font-weight:600">ETA:</span> <span style="color:#FACC15;font-weight:800">${esc(formatEtaUtc(act.etaMs))}</span></div><div style="color:#7DD3FC;font-weight:700">${esc(formatRemainingFromNow(act.etaMs))}</div>` : "";
           const popup = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;min-width:180px">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">@${esc(a.username)}</div>
-            <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(act.aircraftName || act.aircraftIcao)}${act.tailNumber ? ` · ${esc(act.tailNumber)}` : ''}</div>
-            <div style="margin-top:4px"><span style="color:#fff;font-weight:600">Route:</span> <span style="color:#7DD3FC;font-weight:700">${esc(act.originIcao)} → ${esc(act.destinationIcao)}</span></div>
-            <div><span style="color:#fff;font-weight:600">Progress:</span> <span style="color:#7DD3FC;font-weight:700">${Math.round(act.progress || 0)}%</span></div>
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">@${esc(a.member)}</div>
+            <div style="color:#E5E7EB;font-weight:600;font-size:11px">${esc(act.aircraftName || act.aircraftIcao)}${act.tailNumber ? ` · ${esc(act.tailNumber)}` : ""}</div>
+            <div style="margin-top:4px"><span style="color:#fff;font-weight:600">Route:</span> <span style="color:#7DD3FC;font-weight:700">${esc(act.origin)} → ${esc(act.destination)}</span></div>
+            <div><span style="color:#fff;font-weight:600">Progress:</span> <span style="color:#7DD3FC;font-weight:700">${Math.round(act.progress * 100)}%</span></div>
             ${eta}
           </div>`;
-
           L.marker(pos, { icon, zIndexOffset: 500 }).addTo(layer).bindPopup(popup);
-           } else if (currentStatus === "parked" || currentStatus === "landed") {
-             const pos: [number, number] | null =
-        act.destLat != null && act.destLon != null
-          ? [act.destLat, act.destLon]
-          : (act.lat != null && act.lon != null ? [act.lat, act.lon] : null);
-
-
-          if (!pos) continue;
+        } else if (act.status === "parked") {
+          if (act.lat == null || act.lon == null) continue;
+          const pos: [number, number] = [act.lat, act.lon];
           bounds.push(pos);
-
-          // Dla zaparkowanego lidera podmieniamy kolor cyjanowy na złoty bursztyn!
-          const parkedColor = isMe ? "#F59E0B" : "#22D3EE";
-          const parkedBorder = isMe ? "#FBBF24" : "#06B6D4";
-
           const icon = L.divIcon({
             className: "",
-            html: `<div style="display:grid;place-items:center;width:16px;height:16px;border-radius:50%;background-color:${parkedColor};border:2px solid ${parkedBorder};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-            iconSize: [16, 16],
-            iconAnchor: [8, 8],
+            html: `<div style="display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#22D3EE;border:1.5px solid #0A0F1C;box-shadow:0 0 0 1px rgba(34,211,238,.45);color:#0A0F1C;font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:800">📍</div>`,
+            iconSize: [24, 24],
+            iconAnchor: [12, 12],
           });
-
-          const dateStr = act.missionStartTs
-            ? `Last flight ${new Date(act.missionStartTs).toISOString().substring(0, 10)}`
-            : "Status unknown";
-
-          const popup = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5">
-            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">@${esc(a.username)}</div>
-            <div style="margin-top:4px;font-weight:600;color:#fff">Parked at ${esc(act.destinationIcao || "Unknown")}</div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:2px">${dateStr}</div>
+          const last = act.lastFlightAt ? `<div style="color:#94A3B8;font-size:11px;margin-top:2px">Last flight ${esc(new Date(act.lastFlightAt).toISOString().slice(0, 10))}</div>` : "";
+          const popup = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;min-width:170px">
+            <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">@${esc(a.member)}</div>
+            <div style="color:#E5E7EB;font-weight:600">Parked at <span style="color:#7DD3FC">${esc(act.icao)}</span></div>
+            ${act.airportName ? `<div style="color:#94A3B8;font-size:11px">${esc(act.airportName)}</div>` : ""}
+            ${last}
           </div>`;
-
           L.marker(pos, { icon }).addTo(layer).bindPopup(popup);
         }
       }
 
-          if (bounds.length > 0 && !fittedRef.current && mapRef.current) {
+      if (!fittedRef.current && bounds.length > 1) {
+        mapRef.current.fitBounds(bounds, { padding: [30, 30], maxZoom: 6 });
         fittedRef.current = true;
-        if (bounds.length === 1) {
-          mapRef.current.setView(bounds, 5);
-        } else {
-         mapRef.current.fitBounds(bounds, { padding: [40, 40] });
-        }
-      } else if (mapRef.current && !fittedRef.current) {
-        // AWARYJNY FALLBACK: Jeśli wszyscy stoją na ziemi, mapa i tak ożyje wycentrowana na Europę!
+      } else if (!fittedRef.current && bounds.length === 1) {
+        mapRef.current.setView(bounds[0], 5);
         fittedRef.current = true;
-        mapRef.current.setView([52.0, 20.0], 4);
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [activity, payload]);
+  }, [activity]);
 
   useEffect(() => {
     return () => {
