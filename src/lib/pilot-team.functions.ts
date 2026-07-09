@@ -86,33 +86,31 @@ export const getPilotTeam = createServerFn({ method: "GET" })
     }));
   });
 
-async function pilotExists(username: string): Promise<boolean> {
-  // Ping SimFly's public profile endpoint. It responds 200 for valid pilots
-  // (even without a valid nonce — the endpoint returns the public profile).
+async function pilotExists(username: string): Promise<string | null> {
   try {
-    const res = await fetch(
-      `${SIMFLY_BASE}/user/v2/?username=${encodeURIComponent(username)}&nonce=0`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!res.ok) return false;
-    const text = await res.text();
-    // 200 with an empty body or an error object means "not found".
-    if (!text || text.length < 4) return false;
-    try {
-      const json = JSON.parse(text);
-      if (json && typeof json === "object") {
-        if ("username" in json) return true;
-        if ("user" in json && json.user) return true;
-        if ("data" in json && json.data) return true;
-      }
-    } catch {
-      /* non-JSON body, treat as not found */
-    }
-    return false;
-  } catch {
-    return false;
+    const cleanUsername = username.trim();
+    if (!cleanUsername) return null;
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    // Szukamy pilota w tabeli synchronizacji (backfill_progress)
+    // Pobieramy jego DOKŁADNY, oryginalny username z bazy (np. "Pietro65")
+    const { data, error } = await supabaseAdmin
+      .from("backfill_progress")
+      .select("username")
+      .ilike("username", cleanUsername)
+      .maybeSingle();
+
+    if (error || !data || !data.username) return null;
+    
+    // Zwracamy autentyczny nick z bazy z zachowaniem wielkości liter!
+    return data.username;
+  } catch (err) {
+    console.error("[PILOT EXISTS ERROR] Lokalna weryfikacja nie powiodła się:", err);
+    return null;
   }
 }
+
 
 export const addPilotTeamMember = createServerFn({ method: "POST" })
   .inputValidator((d: { username?: string; member: string }) => d)
@@ -131,12 +129,15 @@ export const addPilotTeamMember = createServerFn({ method: "POST" })
     if ((count ?? 0) >= MAX_TEAM_SIZE) {
       return { ok: false, error: `Team is full (max ${MAX_TEAM_SIZE} pilots).` };
     }
-    const exists = await pilotExists(member);
-    if (!exists) {
-      return { ok: false, error: "This pilot is not currently using SimFly Hub." };
-    }
-    const { error } = await supabaseAdmin
-      .from("pilot_teams")
+    
+     const realUsername = await pilotExists(data.member);
+    if (!realUsername) return { ok: false, error: "This pilot is not currently using SimFly Hub." };
+    // NADPISUJEMY istniejącą zmienną member (bez słowa const!)
+   member = realUsername;
+
+const { error } = await supabaseAdmin
+.from("pilot_teams")
+
       .upsert(
         { owner_username: owner, member_username: member },
         { onConflict: "owner_username,member_username" },
