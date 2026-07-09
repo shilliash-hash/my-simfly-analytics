@@ -628,19 +628,25 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
     
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     
-    try {
-      // 2. DYNAMICZNE POBIERANIE TWOICH LOTNISK Z BAZY DANYCH
-      const { data: myHubsData } = await supabaseAdmin
-        .from("airport_upgrade_cache")
-        .select("icao");
- 
-      const myHubs = new Set((myHubsData ?? []).map(h => (h.icao ?? "").toLowerCase().trim()));
+        try {
+      // 1. POBIERAMY OFICJALNY PAYLOAD LOTNISK BEZPOŚREDNIO Z API SIMFLY
+      // Używamy tej samej funkcji co strona główna, aby mieć 100% poprawnych baz
+      const { getSimflyPayload } = await import("@/lib/simfly.functions");
+      const simflyData = await getSimflyPayload();
+      
+      if (!simflyData || !simflyData.airports) {
+        return { ok: false, msg: "Auditor skipped: Failed to fetch live airports payload from SimFly API." };
+      }
 
-      // 3. Pobieramy z bazy użytkowników, którzy mają już przypisany support w tym tygodniu
+      // Wyciągamy kody ICAO dokładnie tak jak robi to pętla na stronie "My airports"
+      const myHubs = new Set(simflyData.airports.map((a: any) => (a.icao ?? "").toUpperCase().trim()));
+
+      // 2. Pobieramy z bazy użytkowników, którzy mają już przypisany support w tym tygodniu
       const { data: existingSupport } = await supabaseAdmin
         .from("hub_support")
         .select("username")
         .eq("week_start_utc", weekStartIso);
+
     
       const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase()));
 
