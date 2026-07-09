@@ -229,9 +229,9 @@ export const getPilotTeamActivity = createServerFn({ method: "GET" })
       .order("created_at", { ascending: true });
     const members = (teamRows ?? []).map((r) => r.member_username);
        // ZABIEG INTEGRACYJNY: Dorzucamy Ciebie (właściciela) do tablicy, aby system pobrał też Twój lot live/parked!
-    if (!members.map(m => m.toLowerCase()).includes(owner.toLowerCase())) {
-      members.push(owner);
-    }
+  //  if (!members.map(m => m.toLowerCase()).includes(owner.toLowerCase())) {
+  //    members.push(owner);
+ //   }
 
 
     // Live flights across all team members: fetch once using the shared feed
