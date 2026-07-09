@@ -618,96 +618,95 @@ export function getFrequentFlyers(uniqueVisitorFlights: any[]): FrequentFlyerPil
 }
 
 export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
- .inputValidator((d: { token: string }) => d)
- .handler(async ({ data }) => {
- // 1. Weryfikacja tokenu bezpieczeństwa Admina
- await verifyAdminToken(data.token);
- 
- const weekStart = currentSimflyWeekStart();
- const weekStartIso = weekStart.toISOString();
- 
- const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
- 
- try {
- // 2. DYNAMICZNE POBIERANIE TWOICH LOTNISK Z BAZY DANYCH
- // Wyciągamy kody ICAO bezpośrednio z Twojej tabeli airports, dzięki czemu skrypt widzi pełną siatkę połączeń
- const { data: myHubsData } = await supabaseAdmin
+  .inputValidator((d: { token: string }) => d)
+  .handler(async ({ data }) => {
+    // 1. Weryfikacja tokenu bezpieczeństwa Admina
+    await verifyAdminToken(data.token);
+    
+    const weekStart = currentSimflyWeekStart();
+    const weekStartIso = weekStart.toISOString();
+    
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    
+    try {
+      // 2. DYNAMICZNE POBIERANIE TWOICH LOTNISK Z BAZY DANYCH
+      const { data: myHubsData } = await supabaseAdmin
         .from("airport_upgrade_cache")
         .select("icao");
  
- const myHubs = new Set((myHubsData ?? []).map(h => (h.icao ?? "").toLowerCase().trim()));
+      const myHubs = new Set((myHubsData ?? []).map(h => (h.icao ?? "").toLowerCase().trim()));
 
- // 3. Pobieramy z bazy użytkowników, którzy mają już przypisany support w tym tygodniu
- const { data: existingSupport } = await supabaseAdmin
- .from("hub_support")
- .select("username")
- .eq("week_start_utc", weekStartIso);
- 
- const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase()));
+      // 3. Pobieramy z bazy użytkowników, którzy mają już przypisany support w tym tygodniu
+      const { data: existingSupport } = await supabaseAdmin
+        .from("hub_support")
+        .select("username")
+        .eq("week_start_utc", weekStartIso);
+    
+      const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase()));
 
- // 4. Pobieramy loty z obecnego tygodnia wraz z departure_icao i destination_icao
- const { data: flights, error: fErr } = await supabaseAdmin
- .from("simfly_flights")
- .select("id, pilot_username, departure_icao, destination_icao, mission_start_ts, flight_time")
- .gte("mission_start_ts", weekStartIso)
- .order("mission_start_ts", { ascending: false })
- .limit(1000);
+      // 4. POBIERAMY LOTY Z POPRAWNYMI NAZWAMI KOLUMN (username, flight_id)
+      const { data: flights, error: fErr } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("flight_id, username, departure_icao, destination_icao, mission_start_ts, flight_time")
+        .gte("mission_start_ts", weekStartIso)
+        .order("mission_start_ts", { ascending: false })
+        .limit(1000);
 
- if (fErr) throw fErr;
- if (!flights || flights.length === 0) {
- return { ok: true, msg: "Auditor finished: No flights recorded in the current week yet." };
- }
+      if (fErr) throw fErr;
+      if (!flights || flights.length === 0) {
+        return { ok: true, msg: "Auditor finished: No flights recorded in the current week yet." };
+      }
 
- let fixCount = 0;
- const nowIso = new Date().toISOString();
+      let fixCount = 0;
+      const nowIso = new Date().toISOString();
 
- // 5. Analizujemy loty i wyłapujemy brakujących supporterów (Dwukierunkowo!)
- for (const f of flights) {
- const originalUsername = (f.pilot_username || "").trim();
- const usernameLower = originalUsername.toLowerCase();
- 
- if (!originalUsername || existingUsers.has(usernameLower)) continue;
+      // 5. Analizujemy loty i wyłapujemy brakujących supporterów (Dwukierunkowo!)
+      for (const f of flights) {
+        // MAPUJEMY NA POPRAWNĄ KOLUMNĘ "username" Z TWOJEJ DEFINICJI TABELI
+        const originalUsername = (f.username || "").trim();
+        const usernameLower = originalUsername.toLowerCase();
+        
+        if (!originalUsername || existingUsers.has(usernameLower)) continue;
 
- // Sprawdzamy poprawność czasu trwania misji
- const ft = f.flight_time;
- const hasTime = (typeof ft === "string" && ft.trim().length > 4 && ft.trim() !== "00:00:00") || (typeof ft === "number" && ft > 0);
- 
- if (hasTime) {
- const depIcao = (f.departure_icao ?? "").toLowerCase().trim();
- const destIcao = (f.destination_icao ?? "").toLowerCase().trim();
- 
- // WERYFIKACJA DWUKIERUNKOWA: Sprawdzamy czy przylot lub wylot pasuje do listy Twoich Hubów
- let qualifyingHub = "";
- if (myHubs.has(destIcao)) {
- qualifyingHub = destIcao;
- } else if (myHubs.has(depIcao)) {
- qualifyingHub = depIcao;
- }
- 
- // Jeśli lot nie dotyczył żadnego z Twoich posiadanych lotnisk, pomijamy go
- if (!qualifyingHub) continue;
+        // Sprawdzamy poprawność czasu trwania misji
+        const ft = f.flight_time;
+        const hasTime = typeof ft === "string" && ft.trim().length > 4 && ft.trim() !== "00:00:00";
+        
+        if (hasTime) {
+          const depIcao = (f.departure_icao ?? "").toLowerCase().trim();
+          const destIcao = (f.destination_icao ?? "").toLowerCase().trim();
+          
+          // WERYFIKACJA DWUKIERUNKOWA
+          let qualifyingHub = "";
+          if (myHubs.has(destIcao)) {
+            qualifyingHub = destIcao;
+          } else if (myHubs.has(depIcao)) {
+            qualifyingHub = depIcao;
+          }
+          
+          if (!qualifyingHub) continue;
 
- // Wbijamy status używając ORYGINALNEGO formatu nazwy użytkownika (Case-Sensitive)
- await supabaseAdmin.from("hub_support").upsert(
- {
- username: originalUsername,
- week_start_utc: weekStartIso,
- support_source: "airport",
- qualifying_icao: qualifyingHub.toUpperCase(),
- qualifying_flight_id: String(f.id || null),
- qualifying_arrival_at: f.mission_start_ts,
- activated_at: nowIso,
- updated_at: nowIso,
- },
- { onConflict: "username,week_start_utc", ignoreDuplicates: true }
- );
- 
- existingUsers.add(usernameLower);
- fixCount++;
- }
- }
+          // Wszystko poprawne – wbijamy status supportera!
+          await supabaseAdmin.from("hub_support").upsert(
+            {
+              username: originalUsername,
+              week_start_utc: weekStartIso,
+              support_source: "airport",
+              qualifying_icao: qualifyingHub.toUpperCase(),
+              qualifying_flight_id: String(f.flight_id || null), // MAPUJEMY NA "flight_id"
+              qualifying_arrival_at: f.mission_start_ts,
+              activated_at: nowIso,
+              updated_at: nowIso,
+            },
+            { onConflict: "username,week_start_utc", ignoreDuplicates: true }
+          );
+          
+          existingUsers.add(usernameLower);
+          fixCount++;
+        }
+      }
 
-       return { 
+      return { 
         ok: true, 
         msg: `Auditor finished successfully. Scanned ${flights.length} flights against ${myHubs.size} dynamic hubs. Fixed ${fixCount} missing statuses.` 
       };
@@ -717,5 +716,4 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
       throw err;
     }
   });
-
 
