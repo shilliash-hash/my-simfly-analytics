@@ -339,12 +339,12 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
               : o ?? d;
           if (!pos) continue;
           bounds.push(pos);
-             const icon = L.divIcon({
-      className: "",
-      html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background-color:${currentBgColor};border:2px solid ${currentBorderColor};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
-      iconSize:,
-      iconAnchor:,
-    });
+       const icon = L.divIcon({
+        className: "",
+        html: `<div style="display:grid;place-items:center;width:26px;height:26px;border-radius:50%;background-color:${currentBgColor};border:2px solid ${currentBorderColor};box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>`,
+        iconSize:,
+        iconAnchor:,
+      });
           const eta = act.etaMs ? `<div style="margin-top:4px"><span style="color:#fff;font-weight:600">ETA:</span> <span style="color:#FACC15;font-weight:800">${esc(formatEtaUtc(act.etaMs))}</span></div><div style="color:#7DD3FC;font-weight:700">${esc(formatRemainingFromNow(act.etaMs))}</div>` : "";
           const popup = `<div style="font-family:Inter,sans-serif;font-size:12px;line-height:1.5;min-width:180px">
             <div style="font-family:'JetBrains Mono',monospace;font-size:13px;letter-spacing:.06em;color:#FACC15;font-weight:800">@${esc(a.member)}</div>
