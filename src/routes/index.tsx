@@ -565,7 +565,7 @@ function IncomingTraffic({
                     <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
                 ))}
-               {visitors.slice(0, 4).map((v: any) => {
+               {visitors.map((v: any) => {
             const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
             
             // POPRAWKA: Sprawdzamy nazwę pilota bezpośrednio z danych Twojego profilu (data.me.handle)
@@ -617,11 +617,6 @@ function IncomingTraffic({
                     </li>
                   );
                 })}
-                {visitors.length > 4 && (
-                  <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    + {visitors.length - 4} more
-                  </li>
-                )}
               </ul>
             </Link>
             );
