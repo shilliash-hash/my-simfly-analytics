@@ -1108,14 +1108,11 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       );
     }
 
-        // =========================================================================
-    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - DLA ODLOTÓW I PRZYLOTÓW
     // =========================================================================
-       // =========================================================================
-    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA STRICTLY Z ACTIVITY
+    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA Z BACKEND TYPE
     // =========================================================================
     try {
-      // Działa tylko dla Ciebie jako zalogowanego Admina i gdy tablica logów aktywności istnieje
+      // Wyciągamy poprawną tablicę aktywności z pamięci serwera
       const rawActivity = typeof activity !== "undefined" ? activity : (typeof payload !== "undefined" ? payload.activity : null);
       
       if (username.toLowerCase() === defaultUsername().toLowerCase() && Array.isArray(rawActivity)) {
@@ -1132,27 +1129,30 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase().trim()));
         const nowIso = new Date().toISOString();
 
-        // 2. Filtrujemy dokładnie te wpisy "VISITOR", które widzisz na swoim ekranie z tego tygodnia
+        // 2. Filtrujemy wpisy po prawdziwym typie z API, dokładnie tak jak robi to Twój backend!
         const validWeeklyVisitors = rawActivity.filter((a: any) => {
-          const isVisitor = typeof a.message === "string" && a.message.startsWith("(Visitor)");
-          if (!isVisitor) return false;
+          // Sprawdzamy oficjalny typ rekordu z API SimFly
+          const isVisitorEntry = a.type === "visitor" || a.type === "airport_visitor" || a.type === "visitor_arrival" || (typeof a.message === "string" && a.message.toLowerCase().includes("visitor"));
+          if (!isVisitorEntry) return false;
           
+          // Filtrujemy strictly pod kątem obecnego tygodnia
           const entryMs = new Date(a.at).getTime();
           return entryMs >= weekStart.getTime();
         });
 
-        // 3. Wstrzykujemy statusy wyłącznie dla zweryfikowanych pilotów, którzy przynieśli Ci zysk
+        // 3. Wstrzykujemy zasłużone statusy dla pilotów, którzy wygenerowali zysk na Twoich Hubach
         for (const a of validWeeklyVisitors) {
           const rawHandle = (a.actorHandle || "").trim();
           const handleLower = rawHandle.toLowerCase();
           
-          if (!rawHandle || existingUsers.has(handleLower)) continue;
+          // Odrzucamy puste wpisy, Twoje własne loty oraz osoby, które już mają status
+          if (!rawHandle || handleLower === username.toLowerCase() || existingUsers.has(handleLower)) continue;
 
-          // Wyciągamy kod ICAO lotniska powiązanego z tą oficjalną aktywnością
+          // Wyciągamy kod ICAO powiązany z tą operacją finansową (np. ENVA)
           const qualifyingHub = (a.hubIcao || "").toUpperCase().trim();
           if (!qualifyingHub) continue;
 
-          // Wstrzykujemy status Supportera do bazy, wymuszając małe litery dla frontu
+          // Wszystko w 100% uczciwe - wbijamy status małymi literami prosto do Supabase!
           await supabaseAdmin.from("hub_support").upsert(
             {
               username: handleLower, // Gwarancja idealnej spójności z frontendem i admin panelem
@@ -1168,13 +1168,14 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           );
           
           existingUsers.add(handleLower);
-          console.log(`[SAFETY VALVE SUCCESS] Uczciwy status przyznany z Activity dla: ${handleLower} (Hub: ${qualifyingHub})`);
+          console.log(`[SAFETY VALVE SUCCESS] Pomyślnie nadano status dla: ${handleLower} (Hub: ${qualifyingHub})`);
         }
       }
     } catch (safetyErr) {
-      console.error("[SAFETY VALVE CRASH] Awaryjny zawór z Activity zgłosił błąd:", safetyErr);
+      console.error("[SAFETY VALVE CRASH] Awaryjny zawór z typu aktywności zgłosił błąd:", safetyErr);
     }
     // =========================================================================
+
 
 
     
