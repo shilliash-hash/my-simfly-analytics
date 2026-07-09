@@ -316,8 +316,11 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
       layerRef.current = layer;
 
       const bounds: [number, number][] = [];
-      const esc = (s: string) =>
-        s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+        const esc = (s: any) => {
+        const text = String(s || "");
+        return text.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "'" }[c]!));
+      };
+
 
       for (const a of activity) {
             const act = a.activity || a || (a as any).data;
