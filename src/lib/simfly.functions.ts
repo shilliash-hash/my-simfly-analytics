@@ -1108,6 +1108,76 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       );
     }
 
+        // =========================================================================
+    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - DLA ODLOTÓW I PRZYLOTÓW
+    // =========================================================================
+       // =========================================================================
+    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA STRICTLY Z ACTIVITY
+    // =========================================================================
+    try {
+      // Działa tylko dla Ciebie jako zalogowanego Admina i gdy tablica logów aktywności istnieje
+      const rawActivity = typeof activity !== "undefined" ? activity : (typeof payload !== "undefined" ? payload.activity : null);
+      
+      if (username.toLowerCase() === defaultUsername().toLowerCase() && Array.isArray(rawActivity)) {
+        const { currentSimflyWeekStart } = await import("./hub-support.functions");
+        const weekStart = currentSimflyWeekStart();
+        const weekStartIso = weekStart.toISOString();
+
+        // 1. Pobieramy z bazy listę osób już rozliczonych w tym tygodniu (Z małych liter)
+        const { data: existingSupport } = await supabaseAdmin
+          .from("hub_support")
+          .select("username")
+          .eq("week_start_utc", weekStartIso);
+          
+        const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase().trim()));
+        const nowIso = new Date().toISOString();
+
+        // 2. Filtrujemy dokładnie te wpisy "VISITOR", które widzisz na swoim ekranie z tego tygodnia
+        const validWeeklyVisitors = rawActivity.filter((a: any) => {
+          const isVisitor = typeof a.message === "string" && a.message.startsWith("(Visitor)");
+          if (!isVisitor) return false;
+          
+          const entryMs = new Date(a.at).getTime();
+          return entryMs >= weekStart.getTime();
+        });
+
+        // 3. Wstrzykujemy statusy wyłącznie dla zweryfikowanych pilotów, którzy przynieśli Ci zysk
+        for (const a of validWeeklyVisitors) {
+          const rawHandle = (a.actorHandle || "").trim();
+          const handleLower = rawHandle.toLowerCase();
+          
+          if (!rawHandle || existingUsers.has(handleLower)) continue;
+
+          // Wyciągamy kod ICAO lotniska powiązanego z tą oficjalną aktywnością
+          const qualifyingHub = (a.hubIcao || "").toUpperCase().trim();
+          if (!qualifyingHub) continue;
+
+          // Wstrzykujemy status Supportera do bazy, wymuszając małe litery dla frontu
+          await supabaseAdmin.from("hub_support").upsert(
+            {
+              username: handleLower, // Gwarancja idealnej spójności z frontendem i admin panelem
+              week_start_utc: weekStartIso,
+              support_source: "airport",
+              qualifying_icao: qualifyingHub,
+              qualifying_flight_id: String(a.id || null),
+              qualifying_arrival_at: a.at,
+              activated_at: nowIso,
+              updated_at: nowIso,
+            },
+            { onConflict: "username,week_start_utc", ignoreDuplicates: true }
+          );
+          
+          existingUsers.add(handleLower);
+          console.log(`[SAFETY VALVE SUCCESS] Uczciwy status przyznany z Activity dla: ${handleLower} (Hub: ${qualifyingHub})`);
+        }
+      }
+    } catch (safetyErr) {
+      console.error("[SAFETY VALVE CRASH] Awaryjny zawór z Activity zgłosił błąd:", safetyErr);
+    }
+    // =========================================================================
+
+
+    
     // Fold visitor PAX (airport leg + aircraft rental) into daily timeseries.
     const visitorByDay = new Map<string, number>();
     for (const v of uniqueVisitorFlights) {
