@@ -320,7 +320,9 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
         s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
 
       for (const a of activity) {
-        const act = a.activity;
+            const act = a.activity || a || (a as any).data;
+               if (!act) continue;
+    const currentStatus = String(act.status || (act as any).flight_status || "").toLowerCase().trim();
 
         // 1. Dynamicznie pobieramy login aktualnie zalogowanego pilota z sesji HUB-a
         const loggedInUser = (payload?.username || payload?.keyTag || "").toLowerCase();
@@ -333,7 +335,7 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
         const currentBgColor = isMe ? "#F59E0B" : "#DC2626";
         const currentBorderColor = isMe ? "#FBBF24" : "#EF4444";
 
-        if (act.status === "flying") {
+           if (currentStatus === "flying" || currentStatus === "enroute") {
              const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
 
       const pos: [number, number] | null =
@@ -362,7 +364,7 @@ iconAnchor: [13, 13],
           </div>`;
 
           L.marker(pos, { icon, zIndexOffset: 500 }).addTo(layer).bindPopup(popup);
-        } else if (act.status === "parked") {
+           } else if (currentStatus === "parked" || currentStatus === "landed") {
              const pos: [number, number] | null =
         act.destLat != null && act.destLon != null
           ? [act.destLat, act.destLon]
