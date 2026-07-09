@@ -1047,7 +1047,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
                 // A visitor landing at my airport qualifies for weekly hub
                 // support regardless of the PAX split — the arrival itself
                 // is what matters, not how SimFly divided the payout.
-                if (n.role === "landing") {
+                if (n.role === "landing" || n.role === "takeoff") {
                   support.push({
                     id: n.id,
                     visitor: n.visitor,
