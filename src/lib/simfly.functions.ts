@@ -1108,14 +1108,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       );
     }
 
-    // =========================================================================
-    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA Z BACKEND TYPE
+      // =========================================================================
+    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA Z VISITOR FLIGHTS
     // =========================================================================
     try {
-      // Wyciągamy poprawną tablicę aktywności z pamięci serwera
-      const rawActivity = typeof activity !== "undefined" ? activity : (typeof payload !== "undefined" ? payload.activity : null);
-      
-      if (username.toLowerCase() === defaultUsername().toLowerCase() && Array.isArray(rawActivity)) {
+      // Działa strictly dla Ciebie jako zalogowanego Admina (shill)
+      if (username.toLowerCase() === defaultUsername().toLowerCase() && typeof uniqueVisitorFlights !== "undefined" && Array.isArray(uniqueVisitorFlights)) {
         const { currentSimflyWeekStart } = await import("./hub-support.functions");
         const weekStart = currentSimflyWeekStart();
         const weekStartIso = weekStart.toISOString();
@@ -1129,38 +1127,27 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase().trim()));
         const nowIso = new Date().toISOString();
 
-        // 2. Filtrujemy wpisy po prawdziwym typie z API, dokładnie tak jak robi to Twój backend!
-        const validWeeklyVisitors = rawActivity.filter((a: any) => {
-          // Sprawdzamy oficjalny typ rekordu z API SimFly
-          const isVisitorEntry = a.type === "visitor" || a.type === "airport_visitor" || a.type === "visitor_arrival" || (typeof a.message === "string" && a.message.toLowerCase().includes("visitor"));
-          if (!isVisitorEntry) return false;
+        // 2. Przejeżdżamy po gotowej, bezbłędnej tablicy unikalnych lotów odwiedzających, którą serwer ma przed oczami
+        for (const v of uniqueVisitorFlights) {
+          const pilotHandle = (v.visitor || "").trim();
+          const handleLower = pilotHandle.toLowerCase();
           
-          // Filtrujemy strictly pod kątem obecnego tygodnia
-          const entryMs = new Date(a.at).getTime();
-          return entryMs >= weekStart.getTime();
-        });
+          // Jeśli brak nicku, jeśli to Twój własny lot lub jeśli pilot ma już status - pomijamy
+          if (!pilotHandle || handleLower === username.toLowerCase() || existingUsers.has(handleLower)) continue;
 
-        // 3. Wstrzykujemy zasłużone statusy dla pilotów, którzy wygenerowali zysk na Twoich Hubach
-        for (const a of validWeeklyVisitors) {
-          const rawHandle = (a.actorHandle || "").trim();
-          const handleLower = rawHandle.toLowerCase();
-          
-          // Odrzucamy puste wpisy, Twoje własne loty oraz osoby, które już mają status
-          if (!rawHandle || handleLower === username.toLowerCase() || existingUsers.has(handleLower)) continue;
-
-          // Wyciągamy kod ICAO powiązany z tą operacją finansową (np. ENVA)
-          const qualifyingHub = (a.hubIcao || "").toUpperCase().trim();
+          // Wyciągamy kod ICAO lotniska powiązanego z tym ruchem (v.airportIcao zawiera np. ENVA)
+          const qualifyingHub = (v.airportIcao || "").toUpperCase().trim();
           if (!qualifyingHub) continue;
 
-          // Wszystko w 100% uczciwe - wbijamy status małymi literami prosto do Supabase!
+          // BINGO! Wbijamy status bezwzględnie małymi literami prosto do Supabase!
           await supabaseAdmin.from("hub_support").upsert(
             {
               username: handleLower, // Gwarancja idealnej spójności z frontendem i admin panelem
               week_start_utc: weekStartIso,
               support_source: "airport",
               qualifying_icao: qualifyingHub,
-              qualifying_flight_id: String(a.id || null),
-              qualifying_arrival_at: a.at,
+              qualifying_flight_id: String(v.id || null),
+              qualifying_arrival_at: v.ts || nowIso,
               activated_at: nowIso,
               updated_at: nowIso,
             },
@@ -1168,11 +1155,11 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           );
           
           existingUsers.add(handleLower);
-          console.log(`[SAFETY VALVE SUCCESS] Pomyślnie nadano status dla: ${handleLower} (Hub: ${qualifyingHub})`);
+          console.log(`[SAFETY VALVE VISITOR] Pomyślnie nadano status dla: ${handleLower} (Hub: ${qualifyingHub})`);
         }
       }
     } catch (safetyErr) {
-      console.error("[SAFETY VALVE CRASH] Awaryjny zawór z typu aktywności zgłosił błąd:", safetyErr);
+      console.error("[SAFETY VALVE CRASH] Awaryjny zawór z visitor flights zgłosił błąd:", safetyErr);
     }
     // =========================================================================
 
