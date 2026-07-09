@@ -1108,11 +1108,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       );
     }
 
-      // =========================================================================
-    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - INTEGRACJA Z VISITOR FLIGHTS
+       // =========================================================================
+    // PANCERNY ZAWÓR BEZPIECZEŃSTWA (SAFETY VALVE) - DLA ODLOTÓW I PRZYLOTÓW
     // =========================================================================
     try {
-      // Działa strictly dla Ciebie jako zalogowanego Admina (shill)
       if (username.toLowerCase() === defaultUsername().toLowerCase() && typeof uniqueVisitorFlights !== "undefined" && Array.isArray(uniqueVisitorFlights)) {
         const { currentSimflyWeekStart } = await import("./hub-support.functions");
         const weekStart = currentSimflyWeekStart();
@@ -1127,7 +1126,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         const existingUsers = new Set((existingSupport ?? []).map(r => r.username.toLowerCase().trim()));
         const nowIso = new Date().toISOString();
 
-        // 2. Przejeżdżamy po gotowej, bezbłędnej tablicy unikalnych lotów odwiedzających, którą serwer ma przed oczami
+        // 2. Przejeżdżamy po gotowej, bezbłędnej tablicy unikalnych lotów odwiedzających
         for (const v of uniqueVisitorFlights) {
           const pilotHandle = (v.visitor || "").trim();
           const handleLower = pilotHandle.toLowerCase();
@@ -1135,7 +1134,19 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           // Jeśli brak nicku, jeśli to Twój własny lot lub jeśli pilot ma już status - pomijamy
           if (!pilotHandle || handleLower === username.toLowerCase() || existingUsers.has(handleLower)) continue;
 
-          // Wyciągamy kod ICAO lotniska powiązanego z tym ruchem (v.airportIcao zawiera np. ENVA)
+          // =========================================================================
+          // PANCERNY FILTR TYGODNIOWY DLA UNIQUE VISITOR FLIGHTS
+          // Wyciągamy poprawny timestamp używając właściwości .at lub .ts lub .mission_start_ts
+          // =========================================================================
+          const rawTimestamp = v.ts || v.at || v.mission_start_ts || null;
+          if (!rawTimestamp) continue;
+
+          const entryMs = new Date(rawTimestamp).getTime();
+          // Jeśli lot odbył się PRZED obecnym poniedziałkiem - bezwzględnie go pomijamy!
+          if (!Number.isFinite(entryMs) || entryMs < weekStart.getTime()) continue;
+          // =========================================================================
+
+          // Wyciągamy kod ICAO lotniska powiązanego z tym ruchem
           const qualifyingHub = (v.airportIcao || "").toUpperCase().trim();
           if (!qualifyingHub) continue;
 
@@ -1147,7 +1158,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
               support_source: "airport",
               qualifying_icao: qualifyingHub,
               qualifying_flight_id: String(v.id || null),
-              qualifying_arrival_at: v.ts || nowIso,
+              qualifying_arrival_at: rawTimestamp,
               activated_at: nowIso,
               updated_at: nowIso,
             },
@@ -1155,7 +1166,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           );
           
           existingUsers.add(handleLower);
-          console.log(`[SAFETY VALVE VISITOR] Pomyślnie nadano status dla: ${handleLower} (Hub: ${qualifyingHub})`);
+          console.log(`[SAFETY VALVE VISITOR] Nadano aktualny status dla: ${handleLower} (Hub: ${qualifyingHub})`);
         }
       }
     } catch (safetyErr) {
