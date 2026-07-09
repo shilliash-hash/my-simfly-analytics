@@ -387,8 +387,51 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
     };
   }, []);
 
-  return (
-    <div className="panel relative overflow-hidden rounded-xl">
+   return (
+    <div className="panel relative overflow-hidden rounded-xl border border-border/40">
+      {/* SEKCJA RETROSPEKTYWNEGO KONTRASTU DLA CIEMNYCH POPUPOW LEAFLETA */}
+      <style>{`
+        /* 1. Głębokie, ciemne tło całego dymku */
+        .leaflet-popup-content-wrapper {
+          background: #111827 !important;
+          border: 1px solid #374151 !important;
+          border-radius: 8px !important;
+          box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5) !important;
+        }
+
+        /* 2. RATOWANIE KONTRASTU: Wymuszamy jasny, czytelny kolor dla wszystkich fabrycznie bladych tekstów! */
+        .leaflet-popup-content,
+        .leaflet-popup-content div,
+        .leaflet-popup-content span,
+        .leaflet-popup-content p {
+          color: #E5E7EB !important; /* Piękny, jasnoszary odcień, idealny do czytania w nocy */
+          text-shadow: none !important;
+        }
+
+        /* 3. OCHRONA AKCENTÓW: Zostawiamy oryginalne, jasne barwy dla nicków i statusów lotów */
+        .leaflet-popup-content font,
+        .leaflet-popup-content [style*="color:#FACC15"],
+        .leaflet-popup-content .text-yellow-500 {
+          color: #FACC15 !important; /* Oryginalne złoto */
+        }
+        
+        .leaflet-popup-content [style*="color:#7DD3FC"],
+        .leaflet-popup-content .text-sky-400 {
+          color: #38BDF8 !important; /* Oryginalny błękit trasy */
+        }
+
+        /* 4. Ciemny dzióbek pod dymkiem oraz stonowany krzyżyk zamknięcia */
+        .leaflet-popup-tip {
+          background: #111827 !important;
+          border: 1px solid #374151 !important;
+        }
+        
+        .leaflet-popup-close-button {
+          color: #9ca3af !important;
+          padding: 6px !important;
+        }
+      `}</style>
+
       <div ref={containerRef} className="h-[420px] w-full sm:h-[560px] lg:h-[680px]" />
       {loading && activity.length === 0 ? (
         <div className="absolute inset-0 grid place-items-center bg-background/50 text-sm text-muted-foreground">
@@ -398,4 +441,5 @@ function TeamMap({ activity, loading }: { activity: TeamActivity[]; loading: boo
     </div>
   );
 }
+
 
