@@ -404,7 +404,7 @@ iconAnchor: [13, 13],
         if (bounds.length === 1) {
           mapRef.current.setView(bounds, 5);
         } else {
-          mapRef.current.fitBounds(bounds, { padding: });
+         mapRef.current.fitBounds(bounds, { padding: [40, 40] });
         }
       } else if (mapRef.current && !fittedRef.current) {
         // AWARYJNY FALLBACK: Jeśli wszyscy stoją na ziemi, mapa i tak ożyje wycentrowana na Europę!
