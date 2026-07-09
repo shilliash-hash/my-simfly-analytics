@@ -123,9 +123,16 @@ async function pilotExists(username: string): Promise<string | null> {
 export const addPilotTeamMember = createServerFn({ method: "POST" })
   .inputValidator((d: { username?: string; member: string }) => d)
   .handler(async ({ data }): Promise<{ ok: true } | { ok: false; error: string }> => {
-    // 1. Wyciągamy login właściciela z bezpiecznym fallbackiem na "shill"
-    const rawOwner = data.username || (data as any).keyTag || "shill";
-    const owner = String(rawOwner).with?.[0] === "s" ? String(rawOwner).trim().toLowerCase() : "shill";
+   
+  // 1. Dynamicznie pobieramy login aktualnie zalogowanego użytkownika, który klika w aplikacji
+    const rawOwner = data.username || (data as any).keyTag || (data as any).data?.username || (data as any).data?.keyTag || "";
+    const owner = String(rawOwner).trim().toLowerCase();
+
+    // BEZPIECZNIK: Jeśli frontend nie przekazał sesji (użytkownik niezalogowany), przerywamy i żądamy odświeżenia
+    if (!owner) {
+      return { ok: false, error: "Authentication failed. Please refresh your dashboard." };
+    }
+
 
     // 2. Pobieramy surowy wpis pilota przekazany z inputu
     const inputMember = String(data.member || "").trim();
