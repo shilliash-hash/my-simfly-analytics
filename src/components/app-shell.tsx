@@ -38,7 +38,6 @@ const NAV = [
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Community",   icon: Users },
   { to: "/admin",       label: "Admin",       icon: Wrench },
-  { to: "/my-team-activity", label: "      ", icon: Users },
 ] as const;
 
 
