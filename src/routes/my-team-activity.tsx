@@ -334,17 +334,12 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png", {
         const currentBorderColor = isMe ? "#FBBF24" : "#EF4444";
 
         if (act.status === "flying") {
-          const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
-          const d = act.destLat != null && act.destLon != null ? [act.destLat, act.destLon] as [number, number] : null;
+             const o = act.originLat != null && act.originLon != null ? [act.originLat, act.originLon] as [number, number] : null;
 
-          if (o && d) {
-            L.polyline([o, d], { color: currentLineColor, weight: 1.5, opacity: 0.45, dashArray: "4 6", interactive: false }).addTo(mapRef.current);
-          }
-
-          const pos: [number, number] | null =
-            act.currentLat != null && act.currentLon != null
-              ? [act.currentLat, act.currentLon]
-              : o ?? d;
+      const pos: [number, number] | null =
+        (act as any).lat != null && (act as any).lng != null
+          ? [(act as any).lat, (act as any).lng]
+          : (act.currentLat != null && act.currentLon != null ? [act.currentLat, act.currentLon] : o ?? d);
 
           if (!pos) continue;
           bounds.push(pos);
@@ -368,8 +363,11 @@ iconAnchor: [13, 13],
 
           L.marker(pos, { icon, zIndexOffset: 500 }).addTo(layer).bindPopup(popup);
         } else if (act.status === "parked") {
-          const pos: [number, number] | null =
-            act.lat != null && act.lon != null ? [act.lat, act.lon] : null;
+             const pos: [number, number] | null =
+        act.destLat != null && act.destLon != null
+          ? [act.destLat, act.destLon]
+          : (act.lat != null && act.lon != null ? [act.lat, act.lon] : null);
+
 
           if (!pos) continue;
           bounds.push(pos);
