@@ -632,8 +632,8 @@ export const runWeeklySupportAuditor = createServerFn({ method: "POST" })
  // 2. DYNAMICZNE POBIERANIE TWOICH LOTNISK Z BAZY DANYCH
  // Wyciągamy kody ICAO bezpośrednio z Twojej tabeli airports, dzięki czemu skrypt widzi pełną siatkę połączeń
  const { data: myHubsData } = await supabaseAdmin
- .from("airports")
- .select("icao");
+        .from("airport_upgrade_cache")
+        .select("icao");
  
  const myHubs = new Set((myHubsData ?? []).map(h => (h.icao ?? "").toLowerCase().trim()));
 
