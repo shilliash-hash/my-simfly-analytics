@@ -215,15 +215,33 @@ export const getPilotCareer = createServerFn({ method: "GET" })
     };
 
     // Pobieramy 200 najświeższych lotów - bez zadyszki, pętli for i timeoutów na Cloudflare!
-    const { data: page, error } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
-      .ilike("username", uname.trim())
-      .order("mission_start_ts", { ascending: false, nullsFirst: false })
-      .limit(2000);
+     // NIEZALEŻNE POBRANIE HISTORII KARIERY (Brak wpływu na licencje, pełne 79 krajów i Indie!)
+    const all: Row[] = [];
+    let currentOffset = 0;
+    const CHUNK_SIZE = 1000;
+    let hasMore = true;
 
-    if (error) throw error;
-    const all: Row[] = (page ?? []) as Row[];
+    while (hasMore) {
+      const { data: chunk, error } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
+        .ilike("username", uname.trim())
+        .order("mission_start_ts", { ascending: false, nullsFirst: false })
+        .range(currentOffset, currentOffset + CHUNK_SIZE - 1);
+
+      if (error) throw error;
+
+      if (chunk && chunk.length > 0) {
+        all.push(...(chunk as Row[]));
+        currentOffset += CHUNK_SIZE;
+        // Bezpiecznik: jeśli chunk jest mniejszy niż 1000 lub przekroczyliśmy 15k wierszy, kończymy pętlę
+        if (chunk.length < CHUNK_SIZE || currentOffset >= 15000) {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+    }
 
       
     if (all.length === 0) return empty;
