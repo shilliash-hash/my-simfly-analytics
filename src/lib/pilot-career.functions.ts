@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
-import { lookupAircraftSpec } from "@/lib/aircraft-specs";
+import { lookupAircraftSpec } from "./aircraft-specs";
+import { countryFromIcao } from "./icao-countries";
+
 
 /**
  * Pilot Career analytics — isolated read-only aggregations over the
