@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import type { PilotCareerPayload, ... } from "./types";
 
 /**
  * Pilot Career analytics — isolated read-only aggregations over the
