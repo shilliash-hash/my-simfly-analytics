@@ -33,14 +33,25 @@ const TIER_COLORS = [
 ];
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
-  const { keyTag, payload, username } = useSimflyArgs();
+  
+  // 1. WYCIĄGAMY USERNAME DYNAMICZNIE Z PARAMETRÓW TRASY (Z adresu URL przeglądarki)
+  const params = (Route as any).useParams?.() || {};
+  const routeUsername = params.username || "";
+  
+  // Pobieramy dane z sesji Lovable jako fallback
+  const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
+  
+  // Priorytet ma login z adresu URL, a jeśli go brak – login z sesji użytkownika
+  const targetUsername = routeUsername || sessionUsername || "";
+
   const { data, isLoading } = useQuery({
-    queryKey: ["pilot-career", keyTag, username || ""],
-    // ZMIANA: Przekazujemy w argumencie 'username' przeglądanego profilu, a nie cały payload sesji!
-    queryFn: () => fn({ username: username || "" }),
+    queryKey: ["pilot-career", keyTag, targetUsername],
+    // JAWNIE PRZEKAZUJEMY SPRAWDZONĄ NAZWĘ PILOTA DO SERWERA:
+    queryFn: () => fn({ username: targetUsername }),
     staleTime: 0,
     refetchOnMount: "always"
   });
+
   return (
     <AppShell>
       <PageHeader
