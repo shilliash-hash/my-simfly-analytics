@@ -293,13 +293,14 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         }
 
        // Uproszczone zliczanie tierów: jeśli brak kodu ICAO, wrzucamy domyślnie do Tier 2, żeby ożywić wykres!
-        const cleanIcao = (r.aircraft_icao ?? "").toUpperCase().trim();
-        let tier = 2;
+              const cleanIcao = (r.aircraft_icao ?? "").toUpperCase().trim();
+        let tier = 0; // Jeśli brak kodu lub maszyna nieznana, domyślnie leci do szarego Tieru 0
         if (cleanIcao) {
           const tiers: Record<string, number> = { C750: 4, TBM9: 3, C172: 1, C25B: 3, B738: 5, A20N: 5, B77W: 6, A359: 6 };
-          tier = tiers[cleanIcao] ?? 2;
+          tier = tiers[cleanIcao] ?? 0;
         }
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
+
 
         if (dist > 0 && (!longest || dist >= longest.distanceNm)) {
           longest = {
