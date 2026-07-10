@@ -3134,31 +3134,31 @@ export const getOnlineUsersList = createServerFn({
 });
 
 export const getFleetExternalUsage = createServerFn({ method: "GET" })
-  .inputValidator((d?: { username?: string; aircraftIcao?: string }) => d ?? {})
+  .inputValidator((d?: { username?: string; aircraftIcaos?: string[] }) => d ?? {})
   .handler(async ({ data, context }) => {
-    // 1. DYNAMICZNY ODCZYT BIEŻĄCEGO UŻYTKOWNIKA:
-    // Priorytet ma username przekazany z frontu, a jeśli go brak – bierzemy bezpieczną tożsamość z sesji serwera
     const activeUser = data?.username || (context as any)?.user?.username || "";
-    const targetAircraft = data?.aircraftIcao || "";
+    const targetAircrafts = data?.aircraftIcaos || []; // Odbieramy TABLICĘ wszystkich ICAO floty
 
-    // BEZPIECZNIK: Jeśli system nie wie, kto pyta o flotę, zwraca pustą tablicę i nie miesza danych!
     if (!activeUser || activeUser === "undefined" || activeUser === "null" || activeUser.length === 0) {
       return [];
     }
 
-    if (!targetAircraft) {
+    // Bezpiecznik: Jeśli pilot nie ma jeszcze żadnych samolotów, od razu zwracamy pustą listę bez męczenia bazy
+    if (!targetAircrafts || targetAircrafts.length === 0) {
       return [];
     }
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Dynamiczne zapytanie: Pobierz loty MOJEJ maszyny, ale wykonane przez INNYCH pilotów!
+    // DYNAMICZNE ZAPYTANIE O CAŁĄ FLOTĘ: 
+    // Zmieniamy filtr .eq() na .in(), który sprawdzi WSZYSTKIE Twoje maszyny jednym zamachem!
     const { data: externalFlights, error } = await supabaseAdmin
       .from("simfly_flights")
-      .select("flight_id, username, departure_icao, destination_icao, total_distance, mission_start_ts, aircraft")
-      .eq("aircraft_icao", targetAircraft) // Szukamy konkretnego modelu z Twojej floty
-      .neq("username", activeUser.trim())  // KLUCZ: Pilotem NIE był bieżący właściciel!
-      .order("mission_start_ts", { ascending: false });
+      .select("flight_id, username, departure_icao, destination_icao, total_distance, mission_start_ts, aircraft, aircraft_icao")
+      .in("aircraft_icao", targetAircrafts) // SPRAWDZAMY CAŁĄ TABLICĘ ICAO FLOTY!
+      .neq("username", activeUser.trim())   // Pilotem NIE był właściciel
+      .order("mission_start_ts", { ascending: false })
+      .range(0, 9); // Pobieramy max 10 najnowszych rejsów, żeby Dashboard ładował się błyskawicznie
 
     if (error) throw error;
 
