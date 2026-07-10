@@ -259,15 +259,15 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           if (!icao) continue;
           const up = icao.toUpperCase();
           visitsByIcao.set(up, (visitsByIcao.get(up) ?? 0) + 1);
-         const c = _countryFromIcao(up);
+         const c = countryFromIcao(up);
           if (c) {
-            const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
+         const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
             cur.visits += 1;
             countryVisits.set(c.code, cur);
           }
         }
 
-        const spec = _lookupSpec(r.aircraft_icao ?? undefined);
+        const spec = lookupAircraftSpec(r.aircraft_icao ?? undefined);
         const tier = spec.matched ? spec.spec.category : 0;
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
 
