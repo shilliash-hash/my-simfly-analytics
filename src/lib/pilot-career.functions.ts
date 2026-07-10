@@ -173,7 +173,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-      // BEZPIECZNIK LOGICZNY: Zapobiegamy pustym zapytaniom GET z nawigacji frontendu
+    // 1. BEZPIECZNIK LOGICZNY: Zapobiegamy pustym zapytaniom GET z nawigacji frontendu
     let rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
     
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
@@ -181,8 +181,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
     }
 
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
-
-
 
     const empty: PilotCareerPayload = {
       username: uname,
@@ -195,11 +193,11 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       tierDistribution: [],
       countries: [],
     };
+
     if (!uname) return empty;
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Pull minimal columns for the pilot. Paginate to avoid PostgREST caps.
     type Row = {
       flight_id: string;
       mission_start_ts: string | null;
@@ -210,7 +208,18 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       total_distance: number | null;
       flight_time: string | null;
     };
-   
+
+    // 2. ULTRA-SZYBKIE POBRANIE LOTÓW KARIERY (Bez zadyszki i pętli for)
+    const { data: page, error } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
+      .ilike("username", uname.trim())
+      .order("mission_start_ts", { ascending: false, nullsFirst: false })
+      .limit(200);
+
+    if (error) throw error;
+    const all: Row[] = (page ?? []) as Row[];
+
     if (all.length === 0) return empty;
 
     // Aggregate
@@ -220,64 +229,65 @@ export const getPilotCareer = createServerFn({ method: "GET" })
     let totalDistance = 0;
     let longest: PilotCareerLongestFlight | null = null;
 
-for (const r of all) {
-  const dist = Number(r.total_distance ?? 0);
-  if (Number.isFinite(dist) && dist > 0) totalDistance += dist;
+    const { lookupAircraftSpec } = await import("./aircraft-specs");
+    const { countryFromIcao } = await import("./icao-countries");
 
-  // 1. Precyzyjnie zamieniamy format "HH:MM:SS" na liczbowe godziny
-  let flightHours = 0;
-  const timeStr = String(r.flight_time ?? "").trim();
-  if (timeStr.includes(":")) {
-    const parts = timeStr.split(":").map(Number);
-    if (parts.length === 3) {
-      // Format HH:MM:SS (standard z Supabase)
-      const [h, m, s] = parts;
-      flightHours = (h || 0) + (m || 0) / 60 + (s || 0) / 3600;
-    } else if (parts.length === 2) {
-      // Zabezpieczenie na wypadek formatu HH:MM
-      const [h, m] = parts;
-      flightHours = (h || 0) + (m || 0) / 60;
+    for (const r of all) {
+      try {
+        const dist = Number(r.total_distance ?? 0);
+        if (Number.isFinite(dist) && dist > 0) totalDistance += dist;
+
+        // Precyzyjnie zamieniamy format "HH:MM:SS" na liczbowe godziny z filtrem NaN
+        let flightHours = 0;
+        const timeStr = String(r.flight_time ?? "").trim();
+        if (timeStr.includes(":")) {
+          const parts = timeStr.split(":").map(Number);
+          if (parts.length === 3) {
+            const [h, m, s] = parts;
+            flightHours = (Number.isFinite(h) ? h : 0) + (Number.isFinite(m) ? m : 0) / 60 + (Number.isFinite(s) ? s : 0) / 3600;
+          } else if (parts.length === 2) {
+            const [h, m] = parts;
+            flightHours = (Number.isFinite(h) ? h : 0) + (Number.isFinite(m) ? m : 0) / 60;
+          }
+        }
+
+        // Zabezpieczenie przed NaN przy dzieleniu prędkości
+        const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
+        const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0 || !Number.isFinite(groundSpeed));
+
+        for (const icao of [r.departure_icao, r.destination_icao]) {
+          if (!icao) continue;
+          const up = icao.toUpperCase();
+          visitsByIcao.set(up, (visitsByIcao.get(up) ?? 0) + 1);
+          const c = countryFromIcao(up);
+          if (c) {
+            const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
+            cur.visits += 1;
+            countryVisits.set(c.code, cur);
+          }
+        }
+
+        const spec = lookupAircraftSpec(r.aircraft_icao ?? undefined);
+        const tier = spec.matched ? spec.spec.category : 0;
+        tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
+
+        if (dist > 0 && !isAnomalous && (!longest || dist > longest.distanceNm)) {
+          longest = {
+            flightId: r.flight_id,
+            departureIcao: r.departure_icao,
+            destinationIcao: r.destination_icao,
+            distanceNm: Math.round(dist),
+            aircraft: r.aircraft,
+            aircraftIcao: r.aircraft_icao,
+            ts: r.mission_start_ts,
+          };
+        }
+      } catch (e) {
+        // Jeśli konkretny wiersz ma uszkodzone typy danych, pomijamy go bezpiecznie, chroniąc cały build
+        console.error("Skipping malformed row inside pilot career loop:", e);
+        continue;
+      }
     }
-  }
-
-  // 2. Wyliczamy Ground Speed (węzły)
-  const groundSpeed = flightHours > 0 ? (dist / flightHours) : 0;
-
-  // 3. Filtr anomalii: odrzucamy loty, gdzie wyliczona prędkość przekracza 750 węzłów (Mach 1+),
-  // co jednoznacznie wskazuje na uszkodzony zapis odległości przy krótkim czasie lotu.
-  const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0);
-
-  for (const icao of [r.departure_icao, r.destination_icao]) {
-    if (!icao) continue;
-    const up = icao.toUpperCase();
-    visitsByIcao.set(up, (visitsByIcao.get(up) ?? 0) + 1);
-    const c = countryFromIcao(up);
-    if (c) {
-      const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
-      cur.visits += 1;
-      countryVisits.set(c.code, cur);
-    }
-  }
-
-  // Tier via aircraft-specs lookup
-  const spec = lookupAircraftSpec(r.aircraft_icao ?? undefined);
-  const tier = spec.matched ? spec.spec.category : 0;
-  tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
-
-  // 4. Przypisujemy rekord życiowy tylko dla zweryfikowanych lotów
-  if (dist > 0 && !isAnomalous && (!longest || dist > longest.distanceNm)) {
-    longest = {
-      flightId: r.flight_id,
-      departureIcao: r.departure_icao,
-      destinationIcao: r.destination_icao,
-      distanceNm: Math.round(dist),
-      aircraft: r.aircraft,
-      aircraftIcao: r.aircraft_icao,
-      ts: r.mission_start_ts,
-    };
-  }
-}
-
 
     const topAirports: PilotCareerAirportVisit[] = [...visitsByIcao.entries()]
       .map(([icao, visits]) => ({ icao, visits }))
