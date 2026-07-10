@@ -190,21 +190,14 @@ const ICAO_FLAGS: Record<string, string> = {
 
 
 
-export const getPilotCareer = createServerFn({ method: "GET" })
+// 1. Przestawiamy funkcję na metodę POST
+export const getPilotCareer = createServerFn({ method: "POST" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-        // BEZBŁĘDNE WYCIĄGNIĘCIE PARAMETRU (Obsługuje każdy format paczki danych z linii 40)
-    let rawUsername = "";
-    if (data) {
-      rawUsername = (data as any).username || (data as any).data?.username || "";
-    }
-
-    if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      rawUsername = "shill"; // Bezpieczny, ostateczny fallback, gdy profil jest pusty
-    }
+    // 2. CZYSTE, DYNAMICZNE CZYTANIE PARAMETRU (Żadnych sztywnych nadpisań na shill!)
+    const rawUsername = data?.username || "";
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
-
 
     const empty: PilotCareerPayload = {
       username: uname,
@@ -218,7 +211,9 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       countries: [],
     };
 
+    // Jeśli profil rzeczywiście byłby pusty, system bezpiecznie zwraca pustą makietę i nie miesza profili!
     if (!uname) return empty;
+
 
 const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
