@@ -271,7 +271,9 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         }
 
         const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
-        const isAnomalous = false;
+        // PANCERNY FILTR TELEMETRII: Odrzucamy godzinne loty z przekłamanym dystansem (jak SKPB -> SVCR)
+        const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0 || !Number.isFinite(groundSpeed) || dist > 6000);
+
         
         for (const icao of [r.departure_icao, r.destination_icao]) {
           if (!icao) continue;
