@@ -271,8 +271,14 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         }
 
         const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
-        // PANCERNY FILTR TELEMETRII: Odrzucamy godzinne loty z przekłamanym dystansem (jak SKPB -> SVCR)
-        const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0 || !Number.isFinite(groundSpeed) || dist > 6000);
+              // PANCERNY FILTR TELEMETRII: Odrzucamy loty z kosmicznym dystansem lub prędkością Mach 11 (błędy zapisu bazy)
+        const isAnomalous = dist > 500 && (
+          groundSpeed > 750 || 
+          groundSpeed < 40 || 
+          flightHours === 0 || 
+          dist > 6500 || 
+          !Number.isFinite(groundSpeed)
+        );
 
         
         for (const icao of [r.departure_icao, r.destination_icao]) {
