@@ -125,6 +125,13 @@ const ICAO_PREFIX: Record<string, string> = {
   NW: "New Caledonia",
   AG: "Solomon Is.", AN: "Nauru", AY: "Papua New Guinea",
   SC_: "Chile",
+    // DOPISUJEMY DO TABELI ICAO_PREFIX TE BRAKUJĄCE REJESTRY, KTÓRE WYWOŁAŁY DUPLIKACJĘ:
+  YW: "Venezuela (Mil.)", // Specjalne wojskowe strefy Ameryki Płd.
+  UW: "Russia (Volga)",   // Regiony regionalne Rosji (Wołga/Ural)
+  YP: "Australia (Mil.)", // Specjalne strefy wojskowe/pustynne Australii
+  YK: "Australia (Ats.)", // Strefy kontroli przestrzeni dalekiej
+  "1G": "USA (Private)",  // Prywatne, niestandardowe lądowiska FAA w USA
+  LX: "Gibraltar",        // Brytyjskie terytorium zamorskie Gibraltar (Kod LX)
 };
 
 // Słownik flag dopasowany do Twoich prefiksów ICAO
@@ -157,7 +164,8 @@ const ICAO_FLAGS: Record<string, string> = {
   UA: "🇰🇿", UB: "🇦🇿", UC: "🇰🇬", UD: "🇦🇲", UG: "🇬🇪", UT: "🇺🇿", WA: "🇮🇩", WB: "🇲🇾", WI: "🇮🇩",
   WM: "🇲🇾", WP: "🇹🇱", WQ: "🇮🇩", WR: "🇮🇩", WS: "🇸🇬", YB: "🇦🇺", YM: "🇦🇺", YS: "🇦🇺", NZ: "🇳🇿",
   NF: "🇫🇯", NG: "🇹🇻", NI: "🇳🇺", NL: "🇼🇫", NS: "🇼🇸", NT: "🇵🇫", NV: "🇻🇺", NW: "🇳🇨", AG: "🇸🇧",
-  AN: "🇳🇷", AY: "🇵🇬", SC_: "🇨🇱",
+  AN: "🇳🇷", AY: "🇵🇬", SC_: "🇨🇱", YW: "🇻🇪", UW: "🇷🇺", YP: "🇦🇺", YK: "🇦🇺", "1G": "🇺🇸", LX: "🇬🇮",
+
 };
 
 
