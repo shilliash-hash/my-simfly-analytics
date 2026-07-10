@@ -242,7 +242,7 @@ const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const { data: chunk, error } = await supabaseAdmin
         .from("simfly_flights")
         .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
-        .ilike("username", uname.trim())
+        .ilike("username", targetName) // <-- PODMIENIAMY NA CZYSTĄ ZMIENNĄ targetName!
         .order("mission_start_ts", { ascending: false, nullsFirst: false })
         .range(currentOffset, currentOffset + CHUNK_SIZE - 1);
 
