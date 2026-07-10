@@ -193,28 +193,28 @@ const ICAO_FLAGS: Record<string, string> = {
 // Przywracamy fabryczną metodę GET frameworku TanStack Start
 export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string; keyTag?: string }) => d ?? {})
-  .handler(async ({ data }): Promise<PilotCareerPayload> => {
-    
-    // Pobieramy tożsamość bezpośrednio z przesłanego username LUB unikalnego identyfikatora keyTag
-    const rawUsername = data?.username || (data as any)?.keyTag || "";
-    const uname = String(rawUsername).replace("@", "").trim();
+      .handler(async ({ data }): Promise<PilotCareerPayload> => {
+      
+      // System najpierw sprawdza unikalny keyTag, a w razie jego braku – username
+      const rawUsername = data?.keyTag || data?.username || "";
+      const targetName = String(rawUsername).replace("@", "").trim();
 
-    const empty: PilotCareerPayload = {
-      username: uname,
-      totalFlights: 0,
-      totalDistanceNm: 0,
-      earthCircumferencesNm: 21600,
-      circumferencesFlown: 0,
-      topAirports: [],
-      longestFlight: null,
-      tierDistribution: [],
-      countries: [],
-    };
+      const empty: PilotCareerPayload = {
+        username: targetName,
+        totalFlights: 0,
+        totalDistanceNm: 0,
+        earthCircumferencesNm: 21600,
+        circumferencesFlown: 0,
+        topAirports: [],
+        longestFlight: null,
+        tierDistribution: [],
+        countries: [],
+      };
 
-    // JEŚLI PROFIL JEST PUSTY, SYSTEM ZWRACA PUSTĄ MAKIETĘ I NIE KLONUJE DANYCH SHILLA!
-    if (!uname || uname === "undefined" || uname === "null" || uname.length === 0) {
-      return empty;
-    }
+      if (!targetName || targetName === "undefined" || targetName === "null" || targetName.length === 0) {
+        return empty;
+      }
+
 
 
 
