@@ -207,7 +207,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       const { data: page, error } = await supabaseAdmin
         .from("simfly_flights")
     .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time") // <-- DOPISZ ,flight_time NA KOŃCU STRINGA
-        .eq("username", uname.toLowerCase())
+        .ilike("username", uname.trim())
         .order("mission_start_ts", { ascending: false, nullsFirst: false })
         .range(from, from + PAGE - 1);
       if (error) throw error;
