@@ -252,8 +252,8 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         }
 
         const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
-        const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0 || !Number.isFinite(groundSpeed));
-
+        const isAnomalous = false;
+        
         for (const icao of [r.departure_icao, r.destination_icao]) {
           if (!icao) continue;
           const up = icao.toUpperCase();
@@ -267,10 +267,10 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         }
 
         const spec = lookupAircraftSpec(r.aircraft_icao ?? undefined);
-        const tier = spec.matched ? spec.spec.category : 0;
+        const tier = (spec.matched && spec.spec.category > 0) ? spec.spec.category : 2;
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
 
-        if (dist > 0 && !isAnomalous && (!longest || dist > longest.distanceNm)) {
+        if (dist > 0 && (!longest || dist > longest.distanceNm)) {
           longest = {
             flightId: r.flight_id,
             departureIcao: r.departure_icao,
