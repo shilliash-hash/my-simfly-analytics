@@ -33,25 +33,16 @@ const TIER_COLORS = [
 ];
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
-  
-  // 1. PANCERNE WYCIĄGNIĘCIE USERNAME PROSTO Z PASKA ADRESU PRZEGLĄDARKI (0% szans na błąd!)
-  const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
-  const pathParts = currentPath.split("/");
-  // Pobieramy ostatni element adresu (np. z /pilot-career/django wyciągnie django)
-  const routeUsername = pathParts[pathParts.length - 1] || "";
-  
-  // Pobieramy dane z sesji jako rezerwowy fallback
-  const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
-  
-  // Jeśli w adresie URL jest /pilot-career lub pusta końcówka, bierzemy login z sesji
-  const targetUsername = (routeUsername && routeUsername !== "pilot-career") ? routeUsername : (sessionUsername || "");
+  const { keyTag, payload, username } = useSimflyArgs();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pilot-career", keyTag, targetUsername],
-    queryFn: () => fn({ username: targetUsername }),
+    queryKey: ["pilot-career", keyTag, username || ""],
+    // Wysyłamy do serwera zarowno username jak i keyTag, żeby backend miał pełen komplet informacji!
+    queryFn: () => fn({ username: username || "", keyTag: keyTag || "" }),
     staleTime: 0,
     refetchOnMount: "always"
   });
+
 
 
   return (
