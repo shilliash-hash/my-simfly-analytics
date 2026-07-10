@@ -221,8 +221,9 @@ export const getPilotCareer = createServerFn({ method: "GET" })
 
     if (all.length === 0) return empty;
 
-    const { lookupAircraftSpec: _lookupSpec } = await import("./aircraft-specs");
-    const { countryFromIcao: _countryFromIcao } = await import("./icao-countries");
+       const { lookupAircraftSpec: _lookupSpec } = await import("@/lib/aircraft-specs");
+    const { countryFromIcao: _countryFromIcao } = await import("@/lib/icao-countries");
+
     
     // Aggregate
     const visitsByIcao = new Map<string, number>();
