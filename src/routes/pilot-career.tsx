@@ -34,23 +34,23 @@ const TIER_COLORS = [
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
   
-  // 1. OFICJALNE I BEZPIECZNE POBRANIE PARAMETRÓW AKTUALNEJ TRASY ROUTERA:
-  const { username: routeUsername } = Route.useParams();
+  // Bezpieczne odczytanie parametrów z adresu URL za znakiem zapytania (?username=)
+  const search: any = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const searchUsername = search ? search.get("username") : "";
   
-  // Zostawiamy oryginalną linię, aby nie popsuć innych zmiennych niżej w kodzie:
+  // Oryginalna, stabilna linia bota:
   const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
   
-  // Priorytet ma login z adresu URL trasy, a jako fallback bierzemy login sesyjny
-  const targetUsername = routeUsername || sessionUsername || "";
+  // Jeśli w adresie URL jest jawnie podany ?username=, bierzemy go. W innym wypadku sesja.
+  const targetUsername = searchUsername || sessionUsername || "";
 
   const { data, isLoading } = useQuery({
-    // Dodajemy targetUsername do klucza, aby React Query poprawnie rozróżniał cache profili
     queryKey: ["pilot-career", keyTag, targetUsername],
-    // JAWNIE PRZEKAZUJEMY ZWALIDOWANĄ NAZWĘ PILOTA DO SERWERA:
     queryFn: () => fn({ username: targetUsername, keyTag: keyTag || "" }),
     staleTime: 0,
     refetchOnMount: "always"
   });
+
 
 
 
