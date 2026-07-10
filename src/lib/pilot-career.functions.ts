@@ -292,11 +292,34 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           }
         }
 
-       // Uproszczone zliczanie tierów: jeśli brak kodu ICAO, wrzucamy domyślnie do Tier 2, żeby ożywić wykres!
-              const cleanIcao = (r.aircraft_icao ?? "").toUpperCase().trim();
-        let tier = 0; // Jeśli brak kodu lub maszyna nieznana, domyślnie leci do szarego Tieru 0
+              // OFICJALNE I DOKŁADNE ZESTAWIENIE KATEGORII SAMOLOTÓW SIMFLY (Bez łączenia tierów!)
+        const cleanIcao = (r.aircraft_icao ?? "").toUpperCase().trim();
+        let tier = 0; // Maszyny spoza bazy trafiają autonomicznie do szrego Tieru 0 (Unknown)
+
         if (cleanIcao) {
-          const tiers: Record<string, number> = { C750: 4, TBM9: 3, C172: 1, C25B: 3, B738: 5, A20N: 5, B77W: 6, A359: 6 };
+          const tiers: Record<string, number> = { 
+            // Tier 1: Compact / Light General Aviation
+            C152: 1, C172: 1, DV20: 1, BE36: 1, SR22: 1, P28A: 1, M20P: 1, PA24: 1,
+            
+            // Tier 2: Advanced Multi-Engine GA / Light Utility
+            DA42: 2, DA62: 2, C208: 2, B350: 2, KING: 2, BARO: 2, PC12: 2, BE58: 2, C414: 2,
+            
+            // Tier 3: High-Performance Turboprops
+            TBM8: 3, TBM9: 3, PC24: 3,
+            
+            // Tier 4: Light Business Jets
+            C25B: 4, CJ4: 4, C510: 4,
+            
+            // Tier 5: Mid-Size Business Jets & Regional Airliners
+            C750: 5, E190: 5, CRJ7: 5, ATR72: 5,
+            
+            // Tier 6: Narrow-Body Commercial Airliners
+            B738: 6, A319: 6, A320: 6, A20N: 6, A321: 6, A21N: 6, MD11: 6,
+            
+            // Tier 7: Wide-Body Heavy Passenger Liners (Ultra Long-Range)
+            B77W: 7, B772: 7, B77L: 7, A359: 7, A35K: 7, B748: 7, A332: 7, A339: 7, A343: 7, A346: 7, A388: 7, A380: 7
+          };
+          
           tier = tiers[cleanIcao] ?? 0;
         }
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
