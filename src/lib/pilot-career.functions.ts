@@ -191,12 +191,13 @@ export const getPilotCareer = createServerFn({ method: "GET" })
        // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
     let rawUsername = data?.username || (data as any)?.data?.username || "";
     
-    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie pytamy Supabase o tożsamość zalogowanego pilota
+        // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie szukamy tożsamości w nagłówkach żądania lub sesji
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      const { supabaseAdmin } = await import("@integrations/supabase/client.server");
-      const { data: { user } } = await supabaseAdmin.auth.getUser();
-      rawUsername = user?.user_metadata?.username || user?.user_metadata?.full_name || "shill";
+      // Wyciągamy nagłówek użytkownika wstrzykiwany automatycznie przez middleware serwera Lovable
+      const requestHeaders = (data as any)?.headers || {};
+      rawUsername = requestHeaders["x-user-username"] || (data as any)?.context?.user?.username || "shill";
     }
+
 
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
 
