@@ -1,7 +1,4 @@
 import { createServerFn } from "@tanstack/react-start";
-import { lookupAircraftSpec } from "./aircraft-specs";
-import { countryFromIcao } from "./icao-countries";
-
 
 /**
  * Pilot Career analytics — isolated read-only aggregations over the
@@ -224,6 +221,9 @@ export const getPilotCareer = createServerFn({ method: "GET" })
 
     if (all.length === 0) return empty;
 
+    const { lookupAircraftSpec: _lookupSpec } = await import("./aircraft-specs");
+    const { countryFromIcao: _countryFromIcao } = await import("./icao-countries");
+    
     // Aggregate
     const visitsByIcao = new Map<string, number>();
     const countryVisits = new Map<string, { name: string; visits: number }>();
@@ -258,7 +258,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           if (!icao) continue;
           const up = icao.toUpperCase();
           visitsByIcao.set(up, (visitsByIcao.get(up) ?? 0) + 1);
-          const c = countryFromIcao(up);
+         const c = _countryFromIcao(up);
           if (c) {
             const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
             cur.visits += 1;
@@ -266,7 +266,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           }
         }
 
-        const spec = lookupAircraftSpec(r.aircraft_icao ?? undefined);
+        const spec = _lookupSpec(r.aircraft_icao ?? undefined);
         const tier = spec.matched ? spec.spec.category : 0;
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
 
