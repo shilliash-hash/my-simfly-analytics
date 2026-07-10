@@ -5,7 +5,7 @@ import { getSimflyPayload } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import type { LicenseTimer } from "@/lib/types";
-import { ShieldCheck, Timer } from "lucide-react";
+import { ShieldCheck, Timer, Plane } from "lucide-react";
 import { RouteChecker } from "@/components/route-checker";
 
 function LevelBadge({ level }: { level: number }) {
@@ -123,31 +123,33 @@ function LicensesPage() {
                 <MiniKV label="7d PAX" value={formatNumber(Math.round(l.pax7d || 0))} />
                 <MiniKV label="30d PAX" value={formatNumber(Math.round(l.pax30d || 0))} />
               </div>
-                        {/* PRZYWRACAMY SEKCJĘ LAST FLIGHT OPERACYJNĄ POD PLANE RENTAL */}
-            {lastFlight ? (
-              <div className="relative mt-4 flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
-                <Plane className="h-4 w-4 shrink-0 text-instrument" strokeWidth={1.5} />
-                <div className="min-w-0 flex-1">
+                       {/* PRZYWRACAMY SEKCJĘ LAST FLIGHT OPERACYJNĄ POD PLANE RENTAL */}
+              {lastFlight ? (
+                <div className="relative mt-4 flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
+                  <Plane className="h-4 w-4 shrink-0 text-instrument" strokeWidth={1.5} />
+                  <div className="min-w-0 flex-1">
+                    <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                      Last flight
+                    </div>
+                    <div className="mono mt-0.5 flex items-center gap-1.5 truncate text-xs text-foreground">
+                      <span className="text-runway">{lastFlight.departure}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="text-runway">{lastFlight.destination}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span className="truncate">{lastFlight.aircraftName || lastFlight.aircraft}</span>
+                      <span className="text-muted-foreground">·</span>
+                      <span>{Math.round(lastFlight.distance)} nm</span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="relative mt-4 rounded-lg border border-dashed border-border/40 px-3 py-2.5">
                   <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    Last flight
-                  </div>
-                  <div className="mono mt-0.5 flex items-center gap-1.5 truncate text-xs text-foreground">
-                    <span className="text-runway">{lastFlight.departure}</span>
-                    <span className="text-muted-foreground">→</span>
-                    <span className="text-runway">{lastFlight.destination}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span className="truncate">{lastFlight.aircraftName || lastFlight.aircraft}</span>
-                    <span className="text-muted-foreground">·</span>
-                    <span>{Math.round(lastFlight.distance)} nm</span>
+                    No recent flights on this license
                   </div>
                 </div>
-              </div>
-            ) : (
-              <div className="relative mt-4 rounded-lg border border-dashed border-border/40 px-3 py-2.5">
-                <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  No recent flights on this license
-                </div>
-              </div>
+              )}
+
             )}
             </Link>
           );
