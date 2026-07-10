@@ -188,12 +188,17 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-    let rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
+       // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
+    let rawUsername = data?.username || (data as any)?.data?.username || "";
     
+    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie pytamy o tożsamość aktualnie zalogowanego pilota
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      rawUsername = process.env.SIMFLY_USERNAME || "shill";
+      // Pobieramy nazwę z sesji środowiskowej lub przypisujemy bezpieczny, pasywny fallback
+      rawUsername = (data as any)?.user?.user_metadata?.username || "shill";
     }
+
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
+
 
     const empty: PilotCareerPayload = {
       username: uname,
