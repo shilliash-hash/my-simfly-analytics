@@ -279,7 +279,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           flightHours === 0 || 
           !Number.isFinite(groundSpeed)
         );
-
         
         for (const icao of [r.departure_icao, r.destination_icao]) {
           if (!icao) continue;
