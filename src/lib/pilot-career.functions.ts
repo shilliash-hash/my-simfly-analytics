@@ -231,9 +231,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
     let totalDistance = 0;
     let longest: PilotCareerLongestFlight | null = null;
 
-    const { lookupAircraftSpec } = await import("./aircraft-specs");
-    const { countryFromIcao } = await import("./icao-countries");
-
     for (const r of all) {
       try {
         const dist = Number(r.total_distance ?? 0);
