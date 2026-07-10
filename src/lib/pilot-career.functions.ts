@@ -190,14 +190,14 @@ const ICAO_FLAGS: Record<string, string> = {
 
 
 
-// 1. Przestawiamy funkcję na metodę POST
-export const getPilotCareer = createServerFn({ method: "POST" })
-  .inputValidator((d?: { username?: string }) => d ?? {})
+// Przywracamy fabryczną metodę GET frameworku TanStack Start
+export const getPilotCareer = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string; keyTag?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-    // 2. CZYSTE, DYNAMICZNE CZYTANIE PARAMETRU (Żadnych sztywnych nadpisań na shill!)
-    const rawUsername = data?.username || "";
-    const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
+    // Pobieramy tożsamość bezpośrednio z przesłanego username LUB unikalnego identyfikatora keyTag
+    const rawUsername = data?.username || (data as any)?.keyTag || "";
+    const uname = String(rawUsername).replace("@", "").trim();
 
     const empty: PilotCareerPayload = {
       username: uname,
@@ -211,8 +211,11 @@ export const getPilotCareer = createServerFn({ method: "POST" })
       countries: [],
     };
 
-    // Jeśli profil rzeczywiście byłby pusty, system bezpiecznie zwraca pustą makietę i nie miesza profili!
-    if (!uname) return empty;
+    // JEŚLI PROFIL JEST PUSTY, SYSTEM ZWRACA PUSTĄ MAKIETĘ I NIE KLONUJE DANYCH SHILLA!
+    if (!uname || uname === "undefined" || uname === "null" || uname.length === 0) {
+      return empty;
+    }
+
 
 
 const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
