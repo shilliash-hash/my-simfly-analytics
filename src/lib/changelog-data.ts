@@ -8,6 +8,17 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
+ {
+  id: "1",
+  version: "v 0.908 STABLE 10.Jul.26",
+  type: ["FEATURE"],["FIX"],
+  text: `• Introduced the new My Team Activity module.
+  • Build your own team of up to 10 pilots.
+  • Follow live flights and parked aircraft on an interactive map.
+  • View real-time flight progress, aircraft details and estimated arrival times.
+  • Available exclusively for Hub Supporters.
+  • License page - revised UI and functionality for timers`
+},  
   {
   id: "1",
   version: "v 0.907 STABLE 08.Jul.26",
