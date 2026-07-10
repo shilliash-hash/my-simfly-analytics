@@ -34,10 +34,12 @@ const TIER_COLORS = [
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
   const { keyTag, payload, username } = useSimflyArgs();
-  const { data, isLoading } = useQuery({
-    queryKey: ["pilot-career", keyTag],
+ const { data, isLoading } = useQuery({
+    // 1. Dynamiczny klucz: dodanie username natychmiast zniszczy stary, pusty schowek!
+    queryKey: ["pilot-career", keyTag, username || ""],
     queryFn: () => fn(payload ? { data: payload } : undefined),
-    staleTime: 10 * 60_000,
+    staleTime: 10 * 60_000, // Zachowujemy Twoje optymalne 10 minut pamięci podręcznej!
+    refetchOnMount: "always" // Ale wymuszamy jedno świeże pobranie z bazy przy wejściu na stronę
   });
   return (
     <AppShell>
