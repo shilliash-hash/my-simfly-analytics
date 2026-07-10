@@ -172,8 +172,11 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
 export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
-    const rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
-    const uname = sanitiseUsername(rawUsername);
+    
+      const rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
+    // BEZPIECZNIK MULTI-USER: Wycinamy małpki, czyścimy spacje i wymuszamy małe litery
+    const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
+
 
     const empty: PilotCareerPayload = {
       username: uname,
