@@ -225,24 +225,26 @@ export const getPilotCareer = createServerFn({ method: "GET" })
     if (error) throw error;
     const all: Row[] = (page ?? []) as Row[];
 
-          // BEZBŁĘDNY RADAR NA ŻYCIOWY REKORD DYSTANSU (Standardowa tablica z limitem 1)
-    const { data: longestRes } = await supabaseAdmin
+        // DEDYKOWANY RADAR NA ŻYCIOWY REKORD DYSTANSU (Standardowa tablica z bezpiecznym indeksem)
+    const queryLongest = await supabaseAdmin
       .from("simfly_flights")
       .select("flight_id,departure_icao,destination_icao,total_distance,aircraft,aircraft_icao,mission_start_ts")
       .ilike("username", uname.trim())
       .order("total_distance", { ascending: false }) // Od największego dystansu w dół!
       .limit(1);
 
-    if (longestRes && Array.isArray(longestRes) && longestRes.length > 0) {
-      const longestRecord = longestRes[0];
-      if (longestRecord.total_distance && longestRecord.total_distance > 0) {
+    if (queryLongest.data && Array.isArray(queryLongest.data) && queryLongest.data.length > 0) {
+      // TWARDE WYCIĄGNIĘCIE PIERWSZEGO ELEMENTU Z TABLICY:
+      const longestRecord = queryLongest.data[0]; 
+      
+      if (longestRecord && longestRecord.total_distance && longestRecord.total_distance > 0) {
         longest = {
           flightId: longestRecord.flight_id,
-          departureIcao: longestRecord.departure_icao,
-          destinationIcao: longestRecord.destination_icao,
+          departureIcao: longestRecord.departure_icao || "",
+          destinationIcao: longestRecord.destination_icao || "",
           distanceNm: Math.round(longestRecord.total_distance),
-          aircraft: longestRecord.aircraft,
-          aircraftIcao: longestRecord.aircraft_icao,
+          aircraft: longestRecord.aircraft || "",
+          aircraftIcao: longestRecord.aircraft_icao || "",
           ts: longestRecord.mission_start_ts,
         };
       }
