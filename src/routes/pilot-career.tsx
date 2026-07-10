@@ -34,23 +34,25 @@ const TIER_COLORS = [
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
   
-  // 1. WYCIĄGAMY USERNAME DYNAMICZNIE Z PARAMETRÓW TRASY (Z adresu URL przeglądarki)
-  const params = (Route as any).useParams?.() || {};
-  const routeUsername = params.username || "";
+  // 1. PANCERNE WYCIĄGNIĘCIE USERNAME PROSTO Z PASKA ADRESU PRZEGLĄDARKI (0% szans na błąd!)
+  const currentPath = typeof window !== "undefined" ? window.location.pathname : "";
+  const pathParts = currentPath.split("/");
+  // Pobieramy ostatni element adresu (np. z /pilot-career/django wyciągnie django)
+  const routeUsername = pathParts[pathParts.length - 1] || "";
   
-  // Pobieramy dane z sesji Lovable jako fallback
+  // Pobieramy dane z sesji jako rezerwowy fallback
   const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
   
-  // Priorytet ma login z adresu URL, a jeśli go brak – login z sesji użytkownika
-  const targetUsername = routeUsername || sessionUsername || "";
+  // Jeśli w adresie URL jest /pilot-career lub pusta końcówka, bierzemy login z sesji
+  const targetUsername = (routeUsername && routeUsername !== "pilot-career") ? routeUsername : (sessionUsername || "");
 
   const { data, isLoading } = useQuery({
     queryKey: ["pilot-career", keyTag, targetUsername],
-    // JAWNIE PRZEKAZUJEMY SPRAWDZONĄ NAZWĘ PILOTA DO SERWERA:
     queryFn: () => fn({ username: targetUsername }),
     staleTime: 0,
     refetchOnMount: "always"
   });
+
 
   return (
     <AppShell>
