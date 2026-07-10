@@ -38,7 +38,7 @@ function PilotCareerPage() {
     queryKey: ["pilot-career", keyTag, username || ""],
     // ZMIANA: Przekazujemy w argumencie 'username' przeglądanego profilu, a nie cały payload sesji!
     queryFn: () => fn({ username: username || "" }),
-    staleTime: 10 * 60_000,
+    staleTime: 0,
     refetchOnMount: "always"
   });
   return (
