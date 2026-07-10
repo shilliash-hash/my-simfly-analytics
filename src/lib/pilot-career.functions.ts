@@ -220,7 +220,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
       .ilike("username", uname.trim())
       .order("mission_start_ts", { ascending: false, nullsFirst: false })
-      .limit(200);
+      .limit(2000);
 
     if (error) throw error;
     const all: Row[] = (page ?? []) as Row[];
