@@ -65,10 +65,11 @@ function LicensesPage() {
 
       {/* NOWA SIATKA PREMIUM: Z zachowaniem starej struktury danych wejściowych */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-        {rows.map((l) => {
+         {rows.map((l) => {
           const t24 = l.timers?.find((t) => t.kind === "TIMER24");
           const t84 = l.timers?.find((t) => t.kind === "TIMER84");
-
+          // PRZYWRACAMY MAPOWANIE OSTATNIEGO LOTU:
+          const lastFlight = data.flights?.find((f) => f.licenceCode === l.code);
           return (
             <Link
               key={l.sku + l.code}
@@ -122,6 +123,32 @@ function LicensesPage() {
                 <MiniKV label="7d PAX" value={formatNumber(Math.round(l.pax7d || 0))} />
                 <MiniKV label="30d PAX" value={formatNumber(Math.round(l.pax30d || 0))} />
               </div>
+                        {/* PRZYWRACAMY SEKCJĘ LAST FLIGHT OPERACYJNĄ POD PLANE RENTAL */}
+            {lastFlight ? (
+              <div className="relative mt-4 flex items-center gap-3 rounded-lg border border-border/40 bg-background/30 px-3 py-2.5">
+                <Plane className="h-4 w-4 shrink-0 text-instrument" strokeWidth={1.5} />
+                <div className="min-w-0 flex-1">
+                  <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    Last flight
+                  </div>
+                  <div className="mono mt-0.5 flex items-center gap-1.5 truncate text-xs text-foreground">
+                    <span className="text-runway">{lastFlight.departure}</span>
+                    <span className="text-muted-foreground">→</span>
+                    <span className="text-runway">{lastFlight.destination}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span className="truncate">{lastFlight.aircraftName || lastFlight.aircraft}</span>
+                    <span className="text-muted-foreground">·</span>
+                    <span>{Math.round(lastFlight.distance)} nm</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="relative mt-4 rounded-lg border border-dashed border-border/40 px-3 py-2.5">
+                <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  No recent flights on this license
+                </div>
+              </div>
+            )}
             </Link>
           );
         })}
