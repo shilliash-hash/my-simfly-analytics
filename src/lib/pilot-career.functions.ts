@@ -192,9 +192,10 @@ const ICAO_FLAGS: Record<string, string> = {
 export const getPilotCareer = createServerFn({ method: "GET" })
      .handler(async ({ data }): Promise<PilotCareerPayload> => {
       
-      // PARSOWANIE ZGODNE Z KONSOLĄ: Szukamy tożsamości wyłącznie w przesłanych strukturach
-      const rawUsername = data?.username || data?.keyTag || (data as any)?.keyTag || (data as any)?.data?.username || "";
-      const targetName = String(rawUsername).replace("@", "").trim();
+            // CZYSTE CZYTANIE Z PACKETU SIECIOWEGO: Sprawdzamy płaski obiekt oraz strukturę zagnieżdżoną TanStacka
+    const rawUsername = (data as any)?.username || (data as any)?.keyTag || (data as any)?.data?.username || (data as any)?.data?.keyTag || "";
+    const targetName = String(rawUsername).replace("@", "").trim();
+
 
       const empty: PilotCareerPayload = {
         username: targetName,
