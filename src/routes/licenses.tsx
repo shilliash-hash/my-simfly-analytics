@@ -149,8 +149,7 @@ function LicensesPage() {
                   </div>
                 </div>
               )}
-
-            )}
+            )
             </Link>
           );
         })}
