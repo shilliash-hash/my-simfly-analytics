@@ -194,13 +194,16 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-        // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
+        // 1. DYNAMICZNE POBRANIE SESJI Z INTEGRALNYCH NAGŁÓWKÓW ŻĄDANIA TANSTACK START
     let rawUsername = data?.username || (data as any)?.data?.username || "";
     
-    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie szukamy tożsamości w nagłówkach żądania lub sesji
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      const requestHeaders = (data as any)?.headers || {};
-      rawUsername = requestHeaders["x-user-username"] || (data as any)?.context?.user?.username || "shill";
+      // Pobieramy surowe żądanie sieciowe przechodzące przez serwer
+      const req = (globalThis as any).__tanstack_start_context?.request;
+      const requestHeaders = req?.headers ? Object.fromEntries(req.headers.entries()) : {};
+      
+      // Dynamicznie sprawdzamy nagłówki tożsamości wstrzykiwane przez middleware
+      rawUsername = requestHeaders["x-user-username"] || "shill";
     }
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
 
