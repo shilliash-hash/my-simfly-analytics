@@ -33,12 +33,21 @@ const TIER_COLORS = [
 ];
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
-  const { keyTag, payload, username } = useSimflyArgs();
+  
+  // 1. OFICJALNE I BEZPIECZNE POBRANIE PARAMETRÓW AKTUALNEJ TRASY ROUTERA:
+  const { username: routeUsername } = Route.useParams();
+  
+  // Zostawiamy oryginalną linię, aby nie popsuć innych zmiennych niżej w kodzie:
+  const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
+  
+  // Priorytet ma login z adresu URL trasy, a jako fallback bierzemy login sesyjny
+  const targetUsername = routeUsername || sessionUsername || "";
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pilot-career", keyTag, username || ""],
-    // Wysyłamy do serwera zarowno username jak i keyTag, żeby backend miał pełen komplet informacji!
-    queryFn: () => fn({ username: username || "", keyTag: keyTag || "" }),
+    // Dodajemy targetUsername do klucza, aby React Query poprawnie rozróżniał cache profili
+    queryKey: ["pilot-career", keyTag, targetUsername],
+    // JAWNIE PRZEKAZUJEMY ZWALIDOWANĄ NAZWĘ PILOTA DO SERWERA:
+    queryFn: () => fn({ username: targetUsername, keyTag: keyTag || "" }),
     staleTime: 0,
     refetchOnMount: "always"
   });
