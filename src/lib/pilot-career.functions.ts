@@ -191,10 +191,11 @@ export const getPilotCareer = createServerFn({ method: "GET" })
        // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
     let rawUsername = data?.username || (data as any)?.data?.username || "";
     
-    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie pytamy o tożsamość aktualnie zalogowanego pilota
+    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie pytamy Supabase o tożsamość zalogowanego pilota
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      // Pobieramy nazwę z sesji środowiskowej lub przypisujemy bezpieczny, pasywny fallback
-      rawUsername = (data as any)?.user?.user_metadata?.username || "shill";
+      const { supabaseAdmin } = await import("@integrations/supabase/client.server");
+      const { data: { user } } = await supabaseAdmin.auth.getUser();
+      rawUsername = user?.user_metadata?.username || user?.user_metadata?.full_name || "shill";
     }
 
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
