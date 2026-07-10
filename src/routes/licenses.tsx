@@ -148,11 +148,11 @@ function LicensesPage() {
                     No recent flights on this license
                   </div>
                 </div>
-              )}
-            )
-            </Link>
-          );
-        })}
+            )}
+          </Link>
+        );
+      })}
+
         {rows.length === 0 && (
           <div className="panel rounded-xl p-5 text-sm text-muted-foreground">No licenses yet.</div>
         )}
