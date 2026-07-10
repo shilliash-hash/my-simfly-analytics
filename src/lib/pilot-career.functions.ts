@@ -272,11 +272,11 @@ export const getPilotCareer = createServerFn({ method: "GET" })
 
         const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
               // PANCERNY FILTR TELEMETRII: Odrzucamy loty z kosmicznym dystansem lub prędkością Mach 11 (błędy zapisu bazy)
+       // SPECJALISTYCZNY FILTR TELEMETRII: Przepuszcza loty ultra-długie (Tier 7), ale bezwzględnie miażdży hipersoniczne błędy zapisu bazy
         const isAnomalous = dist > 500 && (
-          groundSpeed > 750 || 
+          groundSpeed > 1500 || 
           groundSpeed < 40 || 
           flightHours === 0 || 
-          dist > 6500 || 
           !Number.isFinite(groundSpeed)
         );
 
