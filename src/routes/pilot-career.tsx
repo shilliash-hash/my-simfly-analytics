@@ -33,26 +33,15 @@ const TIER_COLORS = [
 ];
 function PilotCareerPage() {
   const fn = useServerFn(getPilotCareer);
-  
-  // Bezpieczne odczytanie parametrów z adresu URL za znakiem zapytania (?username=)
-  const search: any = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-  const searchUsername = search ? search.get("username") : "";
-  
-  // Oryginalna, stabilna linia bota:
-  const { keyTag, payload, username: sessionUsername } = useSimflyArgs();
-  
-  // Jeśli w adresie URL jest jawnie podany ?username=, bierzemy go. W innym wypadku sesja.
-  const targetUsername = searchUsername || sessionUsername || "";
+  const { keyTag, payload, username } = useSimflyArgs();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pilot-career", keyTag, targetUsername],
-    queryFn: () => fn({ username: targetUsername, keyTag: keyTag || "" }),
+    queryKey: ["pilot-career", keyTag, username || ""],
+    // Przekazujemy do funkcji serwerowej to, co system ma w pamięci: keyTag oraz username
+    queryFn: () => fn({ username: username || "", keyTag: keyTag || "" }),
     staleTime: 0,
     refetchOnMount: "always"
   });
-
-
-
 
   return (
     <AppShell>
