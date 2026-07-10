@@ -15,8 +15,6 @@ import type {
  * Zero writes. Zero new tables. No changes to existing logic.
  */
 
-const DEFAULT_USERNAME = "shill";
-
 function sanitiseUsername(raw?: string | null): string {
   const v = (raw ?? "").trim();
   return /^[A-Za-z0-9_.-]{1,40}$/.test(v) ? v : "";
