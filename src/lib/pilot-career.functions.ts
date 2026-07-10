@@ -194,16 +194,16 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-           // DYNAMICZNE I JAWNE WYCIĄGNIĘCIE PILOTA (Zaufanie danym z linii 40 z frontendu!)
-    let rawUsername = data?.username || "";
-    
-    // Jeśli z jakiegoś powodu front przesłał pustkę, dopiero wtedy aktywujemy bezpieczny fallback
+        // BEZBŁĘDNE WYCIĄGNIĘCIE PARAMETRU (Obsługuje każdy format paczki danych z linii 40)
+    let rawUsername = "";
+    if (data) {
+      rawUsername = (data as any).username || (data as any).data?.username || "";
+    }
+
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      rawUsername = "shill";
+      rawUsername = "shill"; // Bezpieczny, ostateczny fallback, gdy profil jest pusty
     }
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
-
-
 
 
     const empty: PilotCareerPayload = {
