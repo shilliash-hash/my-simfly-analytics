@@ -192,11 +192,10 @@ const ICAO_FLAGS: Record<string, string> = {
 
 // Przywracamy fabryczną metodę GET frameworku TanStack Start
 export const getPilotCareer = createServerFn({ method: "GET" })
-  .inputValidator((d?: { username?: string; keyTag?: string }) => d ?? {})
-      .handler(async ({ data }): Promise<PilotCareerPayload> => {
+     .handler(async ({ data }): Promise<PilotCareerPayload> => {
       
-      // System najpierw sprawdza unikalny keyTag, a w razie jego braku – username
-      const rawUsername = data?.keyTag || data?.username || "";
+      // PARSOWANIE ZGODNE Z KONSOLĄ: Szukamy tożsamości wyłącznie w przesłanych strukturach
+      const rawUsername = data?.username || data?.keyTag || (data as any)?.keyTag || (data as any)?.data?.username || "";
       const targetName = String(rawUsername).replace("@", "").trim();
 
       const empty: PilotCareerPayload = {
@@ -211,10 +210,10 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         countries: [],
       };
 
+      // JEŚLI STRONA JEST PUSTA, SYSTEM ZWRACA PUSTĄ MAKIETĘ I NIE PRZEPISUJE DANYCH ADMINISTRATORA!
       if (!targetName || targetName === "undefined" || targetName === "null" || targetName.length === 0) {
         return empty;
       }
-
 
 
 
