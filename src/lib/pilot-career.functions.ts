@@ -170,12 +170,6 @@ const ICAO_FLAGS: Record<string, string> = {
 
 
 // Flagi na frontend dodatkowo
-function countryFromIcao(icao: string): { code: string; name: string; flag: string } | null {
-  const s = (icao ?? "").toUpperCase().trim();
-  if (s.length < 2) return null;
-  const two = s.slice(0, 2);
-  const one = s.slice(0, 1);
-  
   function countryFromIcao(icao: string): { code: string; name: string; flag: string } | null {
   const s = (icao ?? "").toUpperCase().trim();
   if (s.length < 2) return null;
