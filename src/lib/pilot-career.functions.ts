@@ -179,27 +179,42 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
   
   // Szukamy odpowiedniej emotki – jeśli jej nie ma, zostawiamy pusty string lub domyślny globus 🌐
   const flag = ICAO_FLAGS[two] ?? ICAO_FLAGS[one] ?? "🌐"; 
-  
-  return { code: two, name, flag };
+
+  function countryFromIcao(icao: string): { code: string; name: string; flag: string } | null {
+  const s = (icao ?? "").toUpperCase().trim();
+  if (s.length < 2) return null;
+  const two = s.slice(0, 2);
+  const one = s.slice(0, 1);
+
+  const name = ICAO_PREFIX[two] ?? ICAO_PREFIX[one] ?? two;
+  const flag = ICAO_FLAGS[two] ?? ICAO_FLAGS[one] ?? "🌐";
+
+  // TUTAJ: Bezpieczne scalanie kodu regionu pod wspólny klucz mapy 'US'
+  // Oryginalna nazwa i flaga są już zapisane w pamięci i bezpieczne!
+  let code = two;
+  if (one === "K" || two === "PA" || two === "PH" || two === "PG" || two === "PJ" || two === "KO" || two === "KT") {
+    code = "US";
+  }
+
+  return { code, name, flag };
 }
+
 
 
 export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-       // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
+        // 1. BEZPIECZNE POBRANIE AKTUALNEJ SESJI LOGOWANIA (Zamiast sztywnego fallbacku na shill!)
     let rawUsername = data?.username || (data as any)?.data?.username || "";
     
-        // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie szukamy tożsamości w nagłówkach żądania lub sesji
+    // Jeśli front nie przekazał nazwy w parametrze url, dynamicznie szukamy tożsamości w nagłówkach żądania lub sesji
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
-      // Wyciągamy nagłówek użytkownika wstrzykiwany automatycznie przez middleware serwera Lovable
       const requestHeaders = (data as any)?.headers || {};
       rawUsername = requestHeaders["x-user-username"] || (data as any)?.context?.user?.username || "shill";
     }
-
-
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
+
 
 
     const empty: PilotCareerPayload = {
@@ -216,7 +231,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
 
     if (!uname) return empty;
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
     type Row = {
       flight_id: string;
@@ -340,6 +355,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         tierCounts.set(tier, (tierCounts.get(tier) ?? 0) + 1);
 
 
+              // Rejon podliczania dystansu ogólnego i czysty filtr najdłuższego rejsu
         if (dist > 0 && (!longest || dist >= longest.distanceNm)) {
           longest = {
             flightId: r.flight_id,
@@ -351,6 +367,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
             ts: r.mission_start_ts,
           };
         }
+
      
       } catch (e) {
         console.error("Skipping malformed row inside pilot career loop:", e);
