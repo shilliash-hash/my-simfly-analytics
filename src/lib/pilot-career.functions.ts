@@ -1,5 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { PilotCareerPayload, ... } from "./types";
+import type { 
+  PilotCareerPayload, 
+  PilotCareerAirportVisit, 
+  PilotCareerLongestFlight, 
+  PilotCareerTierSlice, 
+  PilotCareerCountry 
+} from "./types";
+
 
 /**
  * Pilot Career analytics — isolated read-only aggregations over the
@@ -173,13 +180,11 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-    // 1. BEZPIECZNIK LOGICZNY: Zapobiegamy pustym zapytaniom GET z nawigacji frontendu
     let rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
     
     if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
       rawUsername = process.env.SIMFLY_USERNAME || "shill";
     }
-
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
 
     const empty: PilotCareerPayload = {
@@ -209,7 +214,7 @@ export const getPilotCareer = createServerFn({ method: "GET" })
       flight_time: string | null;
     };
 
-    // 2. ULTRA-SZYBKIE POBRANIE LOTÓW KARIERY (Bez zadyszki i pętli for)
+    // Pobieramy 200 najświeższych lotów - bez zadyszki, pętli for i timeoutów na Cloudflare!
     const { data: page, error } = await supabaseAdmin
       .from("simfly_flights")
       .select("flight_id,mission_start_ts,aircraft,aircraft_icao,departure_icao,destination_icao,total_distance,flight_time")
@@ -222,11 +227,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
 
     if (all.length === 0) return empty;
 
-       const { lookupAircraftSpec: _lookupSpec } = await import("@/lib/aircraft-specs");
-    const { countryFromIcao: _countryFromIcao } = await import("@/lib/icao-countries");
-
-    
-    // Aggregate
     const visitsByIcao = new Map<string, number>();
     const countryVisits = new Map<string, { name: string; visits: number }>();
     const tierCounts = new Map<number, number>();
@@ -238,7 +238,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
         const dist = Number(r.total_distance ?? 0);
         if (Number.isFinite(dist) && dist > 0) totalDistance += dist;
 
-        // Precyzyjnie zamieniamy format "HH:MM:SS" na liczbowe godziny z filtrem NaN
         let flightHours = 0;
         const timeStr = String(r.flight_time ?? "").trim();
         if (timeStr.includes(":")) {
@@ -252,7 +251,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           }
         }
 
-        // Zabezpieczenie przed NaN przy dzieleniu prędkości
         const groundSpeed = Number.isFinite(flightHours) && flightHours > 0 ? (dist / flightHours) : 0;
         const isAnomalous = dist > 500 && (groundSpeed > 750 || flightHours === 0 || !Number.isFinite(groundSpeed));
 
@@ -260,9 +258,9 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           if (!icao) continue;
           const up = icao.toUpperCase();
           visitsByIcao.set(up, (visitsByIcao.get(up) ?? 0) + 1);
-         const c = countryFromIcao(up);
+          const c = countryFromIcao(up);
           if (c) {
-         const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
+            const cur = countryVisits.get(c.code) ?? { name: c.name, visits: 0 };
             cur.visits += 1;
             countryVisits.set(c.code, cur);
           }
@@ -284,7 +282,6 @@ export const getPilotCareer = createServerFn({ method: "GET" })
           };
         }
       } catch (e) {
-        // Jeśli konkretny wiersz ma uszkodzone typy danych, pomijamy go bezpiecznie, chroniąc cały build
         console.error("Skipping malformed row inside pilot career loop:", e);
         continue;
       }
