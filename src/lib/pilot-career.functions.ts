@@ -172,10 +172,8 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
 export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
-    const uname =
-      sanitiseUsername(data?.username) ||
-      sanitiseUsername(process.env.SIMFLY_USERNAME) ||
-      sanitiseUsername(DEFAULT_USERNAME);
+    const rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
+    const uname = sanitiseUsername(rawUsername);
 
     const empty: PilotCareerPayload = {
       username: uname,
