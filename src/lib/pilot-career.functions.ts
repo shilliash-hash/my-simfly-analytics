@@ -173,9 +173,15 @@ export const getPilotCareer = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PilotCareerPayload> => {
     
-      const rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
-    // BEZPIECZNIK MULTI-USER: Wycinamy małpki, czyścimy spacje i wymuszamy małe litery
+      // BEZPIECZNIK LOGICZNY: Zapobiegamy pustym zapytaniom GET z nawigacji frontendu
+    let rawUsername = data?.username || (data as any)?.data?.username || (data as any)?.keyTag || "";
+    
+    if (!rawUsername || rawUsername === "undefined" || rawUsername === "null" || String(rawUsername).trim().length === 0) {
+      rawUsername = process.env.SIMFLY_USERNAME || "shill";
+    }
+
     const uname = String(rawUsername).replace("@", "").trim().toLowerCase();
+
 
 
     const empty: PilotCareerPayload = {
