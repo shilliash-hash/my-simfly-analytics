@@ -175,11 +175,7 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
   if (s.length < 2) return null;
   const two = s.slice(0, 2);
   const one = s.slice(0, 1);
-  const name = ICAO_PREFIX[two] ?? ICAO_PREFIX[one] ?? two;
   
-  // Szukamy odpowiedniej emotki – jeśli jej nie ma, zostawiamy pusty string lub domyślny globus 🌐
-  const flag = ICAO_FLAGS[two] ?? ICAO_FLAGS[one] ?? "🌐"; 
-
   function countryFromIcao(icao: string): { code: string; name: string; flag: string } | null {
   const s = (icao ?? "").toUpperCase().trim();
   if (s.length < 2) return null;
@@ -189,8 +185,6 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
   const name = ICAO_PREFIX[two] ?? ICAO_PREFIX[one] ?? two;
   const flag = ICAO_FLAGS[two] ?? ICAO_FLAGS[one] ?? "🌐";
 
-  // TUTAJ: Bezpieczne scalanie kodu regionu pod wspólny klucz mapy 'US'
-  // Oryginalna nazwa i flaga są już zapisane w pamięci i bezpieczne!
   let code = two;
   if (one === "K" || two === "PA" || two === "PH" || two === "PG" || two === "PJ" || two === "KO" || two === "KT") {
     code = "US";
@@ -198,6 +192,7 @@ function countryFromIcao(icao: string): { code: string; name: string; flag: stri
 
   return { code, name, flag };
 }
+
 
 
 
