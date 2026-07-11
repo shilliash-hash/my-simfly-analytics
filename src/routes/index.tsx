@@ -148,10 +148,9 @@ function Overview() {
             height={64}
             className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
           />
-        ) : null}
-      </div>
-    </div>
-  }
+        ) : null
+      }
+    />
     
       {/* BURSZTYNOWY PANEL NAPRAWCZY FLOTY — DO URUCHOMIENIA LOTU LUIGIEGO */}
       <div className="mb-6 panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center justify-between gap-4 text-left relative z-10">
