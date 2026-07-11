@@ -341,7 +341,17 @@ type RawAssetLicence = {
   image_src?: string;
   image_badge_src?: string;
   timers?: RawLicenceTimer[];
+  
+  /** Official licence physical location (airport where the licence currently exists).
+   *  SimFly may expose it under different keys depending on the endpoint version. */
+  location?: { icao?: string; country?: string; airport?: { icao?: string; country?: string } } | null;
+  airportICAO?: string | null;
+  airport?: { icao?: string; country?: string; name?: string } | null;
+  currentICAO?: string | null;
+  currentAirport?: { icao?: string; country?: string } | null;
+  country?: string | null;
 };
+
 
 type RawAsset = RawAssetAirport | RawAssetAirplane | RawAssetLicence;
 type RawAssetsAll = { page: number; totalPages: number; items: RawAsset[] };
@@ -548,8 +558,32 @@ function mapLicence(a: RawAssetLicence, flights: RawFlightLite[]): LicenseExt {
         nextRestoreTs: t.nextRestoreTimestamp ?? 0,
         minsUntilNextRestore: t.minsUntilNextRestore ?? 0,
       })),
-  };
+    
+     // Official Licence Location — physical airport where the licence currently exists.
+    // Passed through verbatim from the SimFly licence asset; never derived or estimated.
+       // SimFly exposes this under a few possible keys — try each in order.
+    ...(() => {
+      const icao =
+        a.location?.icao ??
+        a.location?.airport?.icao ??
+        a.airport?.icao ??
+        a.currentAirport?.icao ??
+        a.airportICAO ??
+        a.currentICAO ??
+        "";
+      const country =
+        a.location?.country ??
+        a.location?.airport?.country ??
+        a.airport?.country ??
+        a.currentAirport?.country ??
+        a.country ??
+        "";
+      if (!icao && !country) return {};
+      return { location: { icao: (icao ?? "").toUpperCase(), country: country ?? "" } };
+    })(),
+  } as LicenseExt;
 }
+
 
 function airportToHub(a: AirportExt, owner: string): Hub {
   return {
