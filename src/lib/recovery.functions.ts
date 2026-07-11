@@ -21,7 +21,6 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
     const startTime = Date.now();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // 1. Pobieramy wszystkich zarejestrowanych użytkowników huba
     const { data: users, error: userError } = await supabaseAdmin
       .from("profiles")
       .select("username");
@@ -34,7 +33,6 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
     let alreadyCorrect = 0;
     const totalUsers = users?.length || 0;
 
-    // Skanujemy zakres ostatnich 10 dni
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
     for (const user of users || []) {
@@ -47,38 +45,35 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
       for (const act of userActivity || []) {
         activitiesScanned++;
 
-        // Interesują nas wpisy powiązane z unikalnym ID wykonanego lotu
-        if (!act.flight_id) continue;
+        // Obsługa polimorficzna dla flightId / flight_id
+        const currentFlightId = act.flightId || act.flight_id;
+        if (!currentFlightId) continue;
 
-        // Pobieramy surowy rekord lotu z tabeli public.simfly_flights na podstawie Twojego schematu SQL
         const { data: flight } = await supabaseAdmin
           .from("simfly_flights")
           .select("*")
-          .eq("flight_id", act.flight_id)
+          .eq("flight_id", currentFlightId)
           .maybeSingle();
 
-        // 🚨 ZGODNOŚĆ Z SQL: Czytamy poprawną kolumnę aircraft_tail_number ze schematu bazy!
         if (!flight || !flight.aircraft_tail_number || !flight.aircraft || flight.aircraft === "Not in SimFly database" || flight.aircraft.toLowerCase().includes("generic")) continue;
 
         const pilot = flight.username ? flight.username.trim() : "";
         const tail = flight.aircraft_tail_number.trim();
 
-        // Szukamy właściciela samolotu w tabeli public.simfly_flights na podstawie Twoich własnych, historycznych logów
         const { data: ownerRecord } = await supabaseAdmin
           .from("simfly_flights")
           .select("username")
           .eq("aircraft_tail_number", tail)
-          .order("mission_start_ts", { ascending: true }) // Pierwszy zalogowany pilot tej maszyny to jej właściciel w Hubie
+          .order("mission_start_ts", { ascending: true })
           .limit(1)
           .maybeSingle();
 
         if (!ownerRecord || !ownerRecord.username) continue;
         const owner = ownerRecord.username.trim();
 
-        // Jeśli pilot wykonujący lot to właściciel samolotu, pomijamy (to nie jest leasing Rental)
         if (pilot === owner) continue;
 
-        // 🚨 BEZPIECZNIK TEMPORALNY (TEMPORAL SAFETY HUB VALIDATION)
+        // Bezpiecznik temporalny
         const { data: historicalHubStart } = await supabaseAdmin
           .from("simfly_hubs")
           .select("id")
@@ -95,36 +90,44 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
           .lt("purchased_at", flight.mission_start_ts)
           .maybeSingle();
 
-        // Jeśli lotnisko startu lub lądowania było HUBem właściciela w momencie lotu, ignorujemy
         if (historicalHubStart || historicalHubEnd) {
           alreadyCorrect++;
           continue;
         }
 
-        // 3. CROSS-CHECK: Sprawdzamy czy w Activity właściciela brakuje tego wpisu
-        const { data: ownerActivity } = await supabaseAdmin
+        // Cross-check w oparciu o oba formaty zapisu klucza unikalnego
+        const { data: ownerActivity1 } = await supabaseAdmin
+          .from("activity")
+          .select("id")
+          .eq("flightId", flight.flight_id)
+          .eq("username", owner)
+          .maybeSingle();
+
+        const { data: ownerActivity2 } = await supabaseAdmin
           .from("activity")
           .select("id")
           .eq("flight_id", flight.flight_id)
           .eq("username", owner)
           .maybeSingle();
 
-        if (!ownerActivity) {
+        if (!ownerActivity1 && !ownerActivity2) {
           missingActivities++;
           
-          // IDEMPOTENTNY INSERT: Zgodny z formatem camelCase i snake_case struktury tabeli activity
-          await supabaseAdmin.from("activity").insert({
+          // 🚨 POPRAWIONE NA CAMELCASE ZGODNIE Z KLUCZAMI TWOJEJ TABELI ACTIVITY!
+          const { error: insertError } = await supabaseAdmin.from("activity").insert({
             username: owner,
-            actor_handle: pilot,
+            actorHandle: pilot,
             kind: "rental",
             message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${tail}) from ${flight.departure_icao} to ${flight.destination_icao}`,
-            at: flight.mission_start_ts, // Oryginalny czas zachowuje chronologię
-            flight_id: flight.flight_id,
-            delta: flight.pax || 0, // Pobieramy zysk z kolumny pax Twojego schematu SQL
-            hub_icao: flight.departure_icao
+            at: flight.mission_start_ts,
+            flightId: flight.flight_id,
+            delta: flight.pax || 0,
+            hubIcao: flight.departure_icao
           });
 
-          recoveredCount++;
+          if (!insertError) {
+            recoveredCount++;
+          }
         } else {
           alreadyCorrect++;
         }
@@ -154,7 +157,6 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
 
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Pobieramy loty bezpośrednio ze zwalidowanej tabeli public.simfly_flights
     const { data: flights, error: flightError } = await supabaseAdmin
       .from("simfly_flights")
       .select("*")
@@ -188,28 +190,38 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
 
       if (pilot === owner) continue;
 
-      const { data: ownerActivity } = await supabaseAdmin
+      const { data: ownerActivity1 } = await supabaseAdmin
+        .from("activity")
+        .select("id")
+        .eq("flightId", flight.flight_id)
+        .eq("username", owner)
+        .maybeSingle();
+
+      const { data: ownerActivity2 } = await supabaseAdmin
         .from("activity")
         .select("id")
         .eq("flight_id", flight.flight_id)
         .eq("username", owner)
         .maybeSingle();
 
-      if (!ownerActivity) {
+      if (!ownerActivity1 && !ownerActivity2) {
         missingActivities++;
 
-        await supabaseAdmin.from("activity").insert({
+        // 🚨 POPRAWIONE NA CAMELCASE ZGODNIE Z KLUCZAMI TWOJEJ TABELI ACTIVITY!
+        const { error: insertError } = await supabaseAdmin.from("activity").insert({
           username: owner,
-          actor_handle: pilot,
+          actorHandle: pilot,
           kind: "rental",
           message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${tail}) from ${flight.departure_icao} to ${flight.destination_icao}`,
           at: flight.mission_start_ts,
-          flight_id: flight.flight_id,
+          flightId: flight.flight_id,
           delta: flight.pax || 0,
-          hub_icao: flight.departure_icao
+          hubIcao: flight.departure_icao
         });
 
-        recoveredCount++;
+        if (!insertError) {
+          recoveredCount++;
+        }
       } else {
         alreadyCorrect++;
       }
