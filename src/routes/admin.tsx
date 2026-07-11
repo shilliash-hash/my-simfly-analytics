@@ -89,16 +89,16 @@ function AdminPage() {
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
-      {mounted && token ? (
-      <div className="space-y-8">
-        {/* WIDŻET ONLINE NA SAMEJ GÓRZE PANELU ADMINA */}
-        <AdminOnlineUsersWidget />
+            {mounted && token ? (
+        <div className="space-y-8">
+          {/* NOWE CENTRUM REPARACJI FLOTY W MIEJSCU NIEAKTYWNEGO WIDGETU ONLINE */}
+          <MaintenanceCenterWidget />
 
-        <AdminTable token={token} />
-        <HubSupportAdmin token={token} />
-        <AdminChangelog adminToken={token} />
-      </div>
-    ) : (
+          <AdminTable token={token} />
+          <HubSupportAdmin token={token} />
+          <AdminChangelog adminToken={token} />
+        </div>
+      ) : (
 
         <TokenForm />
       )}
