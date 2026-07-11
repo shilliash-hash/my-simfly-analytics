@@ -85,6 +85,7 @@ function LicensesPage() {
                 <div className="min-w-0">
                   <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">License №</div>
                   <div className="font-display mono mt-0.5 text-lg font-semibold tracking-wide text-foreground">{l.code || l.sku}</div>
+                   <LicenceLocationRow location={lic.location} />
                 </div>
                 <div className="text-right">
                   <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Rank</div>
@@ -160,6 +161,38 @@ function LicensesPage() {
     </AppShell>
   );
 }
+
+// ISO 3166-1 alpha-2 → regional-indicator flag emoji. Anything else falls back
+// to a small paper icon so we never fabricate a flag.
+function countryFlag(country?: string): string | null {
+  if (!country) return null;
+  const c = country.trim().toUpperCase();
+  if (c.length !== 2 || !/^[A-Z]{2}$/.test(c)) return null;
+  const A = 0x1f1e6;
+  return String.fromCodePoint(A + (c.charCodeAt(0) - 65), A + (c.charCodeAt(1) - 65));
+}
+function LicenceLocationRow({ location }: { location?: { icao?: string; country?: string } }) {
+  if (!location || !location.icao) return null;
+  const flag = countryFlag(location.country);
+  return (
+    <div className="mt-2">
+      <div className="mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">
+        📄 Licence Location
+      </div>
+      <div className="mono mt-0.5 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <span className="tracking-wide">{location.icao}</span>
+        {flag ? (
+          <span aria-label={location.country} className="text-sm leading-none">{flag}</span>
+        ) : location.country ? (
+          <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
+            {location.country}
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 
 function Stat({ label, value, accent }: { label: string; value: string; accent?: "runway" | "instrument" }) {
   const tone = accent === "runway" ? "text-runway" : accent === "instrument" ? "text-instrument" : "text-foreground";
