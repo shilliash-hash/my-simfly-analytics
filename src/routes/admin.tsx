@@ -15,6 +15,11 @@ import {
   adminGrantHubSupport,
   adminRevokeHubSupport,
 } from "@/lib/hub-support.functions";
+import {
+  runSoftRecovery,
+  runFlightRecovery,
+  type RecoveryReport,
+} from "@/lib/recovery.functions";
 import { setAdminToken, useAdminToken } from "@/lib/admin-token";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
