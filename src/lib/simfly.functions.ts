@@ -83,7 +83,7 @@ function AdminPage() {
   return (
     <AppShell>
       <PageHeader>
-        eyebrow="Operations"
+        eyebrow="Operations")
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
