@@ -956,6 +956,60 @@ function RecoveryReportView({ report }: { report: RecoveryReport }) {
           ))}
         </div>
       )}
+
+      
+   {report.recovered > 0 && report.recoveredItems.length > 0 && (
+        <div className="mt-5">
+          <div className="mb-2 flex items-baseline justify-between">
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Recovered items
+            </div>
+            <div className="mono text-[10px] uppercase tracking-widest text-purple-400">
+              {report.recoveredItems.length} restored
+            </div>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {report.recoveredItems.map((it) => (
+              <div
+                key={it.id}
+                className="rounded-lg border border-border/40 bg-background/30 p-3"
+              >
+                <div className="mb-1.5 flex items-center justify-between gap-2">
+                  <span className="mono rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-purple-400 ring-1 ring-purple-500/30">
+                    Recovered
+                  </span>
+                  <span className="mono text-[10px] text-muted-foreground">
+                    @{it.username}
+                  </span>
+                </div>
+                <div className="text-sm font-medium">
+                  {it.aircraft}
+                  {it.tailNumber && (
+                    <span className="mono ml-2 text-[11px] text-muted-foreground">
+                      {it.tailNumber}
+                    </span>
+                  )}
+                </div>
+                <div className="mono mt-1 text-xs text-runway">{it.route}</div>
+                <div className="mt-1.5 flex items-baseline justify-between text-[11px]">
+                  <span className="text-muted-foreground">flown by @{it.pilot}</span>
+                  <span className="mono font-medium text-instrument">
+                    +{it.delta.toLocaleString()} PAX
+                  </span>
+                </div>
+                {it.at && (
+                  <div className="mono mt-1 text-[10px] text-muted-foreground">
+                    {fmtDate(it.at)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+
+      
     </div>
   );
 }
