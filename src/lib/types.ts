@@ -150,6 +150,9 @@ export interface LicenseExt {
   pax7d: number;
   pax30d: number;
   timers: LicenseTimer[];
+   /** Official licence physical location (airport where the licence currently exists). */
+  location?: { icao: string; country: string };
+
 }
 
 export interface FlightLog {
