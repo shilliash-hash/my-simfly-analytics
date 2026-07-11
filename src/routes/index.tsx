@@ -121,37 +121,38 @@ function Overview() {
  //  staleTime: 5 * 60 * 1000,
 // });
 
-  return (
+   return (
     <AppShell>
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
         title={`Captain ${data.me.displayName}`}
-                    description={
+        description={
           <div className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
             </p>
           </div>
-         }                
-     actions={
-    <div className="flex items-center gap-4">
-    <div className="flex items-center gap-3">
-        <PilotSwitcher current={viewedUser} />
-       
-        {/* twój awatar */}
-
-        {data.me.avatarUrl ? (
-          <img
-            src={data.me.avatarUrl}
-            alt={`@${data.me.handle} avatar`}
-            width={64}
-            height={64}
-            className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
-          />
-        ) : null
-      }
-    />
-    
+        } 
+        actions={
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              <PilotSwitcher current={viewedUser} />
+              
+              {/* twój awatar */}
+              {data.me.avatarUrl ? (
+                <img
+                  src={data.me.avatarUrl}
+                  alt={`@${data.me.handle} avatar`}
+                  width={64}
+                  height={64}
+                  className="h-16 w-16 rounded-full border border-border/40 object-cover shadow-lg"
+                />
+              ) : null}
+            </div>
+          </div>
+        }
+      />
+      
       {/* BURSZTYNOWY PANEL NAPRAWCZY FLOTY — DO URUCHOMIENIA LOTU LUIGIEGO */}
       <div className="mb-6 panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center justify-between gap-4 text-left relative z-10">
         <div className="min-w-0">
@@ -179,7 +180,7 @@ function Overview() {
         </button>
       </div>
 
-      <CurrentFlightHero
+     <CurrentFlightHero
 
         live={(() => {
           const completedIds = new Set(data.flights.map((f) => f.id));
