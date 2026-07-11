@@ -100,6 +100,7 @@ function AdminPage() {
         <AdminTable token={token} />
         <HubSupportAdmin token={token} />
         <AdminChangelog adminToken={token} />
+        <MaintenanceCenter token={token} />
       </div>
     ) : (
 
