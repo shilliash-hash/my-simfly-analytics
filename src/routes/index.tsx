@@ -152,10 +152,7 @@ function Overview() {
       </div>
     </div>
   }
-      />
-
-            />
-
+    
       {/* BURSZTYNOWY PANEL NAPRAWCZY FLOTY — DO URUCHOMIENIA LOTU LUIGIEGO */}
       <div className="mb-6 panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center justify-between gap-4 text-left relative z-10">
         <div className="min-w-0">
