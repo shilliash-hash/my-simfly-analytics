@@ -46,9 +46,9 @@ const SIMFLY_BASE = "https://simfly.io/api";
 const DEFAULT_USERNAME = "shill";
 const DEFAULT_NONCE = "1697880083";
 const FETCH_TIMEOUT_MS = 12_000;
-const AIRCRAFT_BACKFILL_DAYS = 100;
-const AIRCRAFT_BACKFILL_PAGE_LIMIT = 180;
-const AIRCRAFT_BACKFILL_BATCH_SIZE = 8;
+const AIRCRAFT_BACKFILL_DAYS = 3;
+const AIRCRAFT_BACKFILL_PAGE_LIMIT = 3;
+const AIRCRAFT_BACKFILL_BATCH_SIZE = 2;
 
 // ---- Per-isolate in-memory cache for heavy SimFly scans.
 // Survives within a single Cloudflare Worker isolate so repeated dashboard
