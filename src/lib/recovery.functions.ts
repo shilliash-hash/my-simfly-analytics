@@ -31,6 +31,18 @@ function checkToken(token: string | undefined): void {
 }
 // -------- Shared types ------------------------------------------------------
 export type RecoveryMode = "soft" | "flight";
+
+export interface RecoveredItem {
+  id: string;
+  username: string;
+  pilot: string;
+  aircraft: string;
+  tailNumber: string;
+  route: string;
+  at: string;
+  delta: number;
+}
+
 export interface RecoveryReport {
   mode: RecoveryMode;
   windowDays: number;
@@ -43,7 +55,9 @@ export interface RecoveryReport {
   skipped: number;
   elapsedMs: number;
   notes: string[];
+  recoveredItems: RecoveredItem[];
 }
+
 interface FlightRow {
   username: string;
   flight_id: string;
@@ -185,6 +199,7 @@ async function runRecoveryCore(
       skipped: 0,
       elapsedMs: Date.now() - started,
       notes: ["No active Hub users found."],
+      recoveredItems: [],
     };
   }
   const flights = await loadFlightsInWindow(supabaseAdmin as never, windowDays);
@@ -199,6 +214,7 @@ async function runRecoveryCore(
   let alreadyCorrect = 0;
   let skipped = 0;
   const toInsert: Record<string, unknown>[] = [];
+  const candidateItems: RecoveredItem[] = [];
   for (const f of flights) {
     activitiesScanned++;
     // Only consider real completed flights with usable ownership data.
@@ -241,21 +257,30 @@ async function runRecoveryCore(
     // operating pilot. All identifying columns come from that historical
     // record — nothing is derived from current state.
     const raw = f.raw ?? {};
+    const aircraftName = (raw as { aircraft?: string }).aircraft ?? null;
+    const departureIcao = (raw as { departure_icao?: string }).departure_icao ?? null;
+    const destinationIcao = (raw as { destination_icao?: string }).destination_icao ?? null;
+    const pax = (raw as { pax?: number }).pax ?? 0;
+    const tailNumber =
+      (raw as { tail_number?: string; tailNumber?: string; registration?: string }).tail_number ??
+      (raw as { tailNumber?: string }).tailNumber ??
+      (raw as { registration?: string }).registration ??
+      "";
     toInsert.push({
       username: owner,
       flight_id: f.flight_id,
       aircraft_id: f.aircraft_id,
-      aircraft: (raw as { aircraft?: string }).aircraft ?? null,
+      aircraft: aircraftName,
       aircraft_icao: (raw as { aircraft_icao?: string }).aircraft_icao ?? null,
       destination_name: (raw as { destination?: { name?: string } }).destination?.name ?? null,
-      destination_icao: (raw as { destination_icao?: string }).destination_icao ?? null,
+      destination_icao: destinationIcao,
       origin_name: (raw as { origin?: { name?: string } }).origin?.name ?? null,
-      departure_icao: (raw as { departure_icao?: string }).departure_icao ?? null,
+      departure_icao: departureIcao,
       landing_rate: (raw as { landing_rate?: number }).landing_rate ?? null,
       total_distance: (raw as { total_distance?: number }).total_distance ?? null,
       flight_time: (raw as { flight_time?: string }).flight_time ?? null,
       total_reward: (raw as { total_reward?: number }).total_reward ?? null,
-      pax: (raw as { pax?: number }).pax ?? null,
+      pax,
       xp: (raw as { xp?: number }).xp ?? null,
       licence: (raw as { licence?: string }).licence ?? null,
       licence_rank: (raw as { licence_rank?: number }).licence_rank ?? null,
@@ -263,11 +288,23 @@ async function runRecoveryCore(
       mission_start_ts: f.mission_start_ts,
       raw,
     });
+   candidateItems.push({
+      id: `${owner}:${f.flight_id}`,
+      username: owner,
+      pilot: f.username,
+      aircraft: aircraftName ?? "Unknown Aircraft",
+      tailNumber: String(tailNumber ?? ""),
+      route: `${departureIcao ?? "----"} → ${destinationIcao ?? "----"}`,
+      at: f.mission_start_ts ?? "",
+      delta: Number(pax) || 0,
+    });
   }
+  const recoveredItems: RecoveredItem[] = [];
   if (toInsert.length > 0) {
     const CHUNK = 200;
     for (let i = 0; i < toInsert.length; i += CHUNK) {
       const chunk = toInsert.slice(i, i + CHUNK);
+      const items = candidateItems.slice(i, i + CHUNK);
       const { error } = await (supabaseAdmin as unknown as {
         from: (t: string) => {
           upsert: (v: unknown, o?: { onConflict?: string; ignoreDuplicates?: boolean }) => PromiseLike<{
@@ -283,6 +320,7 @@ async function runRecoveryCore(
         continue;
       }
       recovered += chunk.length;
+      recoveredItems.push(...items);
     }
   }
   const usersScanned = new Set(flights.map((f) => f.username).filter((u) => activeUsers.has(u))).size;
@@ -298,6 +336,7 @@ async function runRecoveryCore(
     skipped,
     elapsedMs: Date.now() - started,
     notes,
+    recoveredItems,
   };
 }
 // -------- Public server functions ------------------------------------------
