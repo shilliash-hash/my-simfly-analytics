@@ -1,5 +1,3 @@
-import { runSoftRecovery, runFlightRecovery, type RecoveryProgress } from "@/lib/recovery.functions";
-import { Wrench, ShieldAlert, CheckCircle2, Play } from "lucide-react";
 import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -89,16 +87,16 @@ function AdminPage() {
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
-            {mounted && token ? (
-        <div className="space-y-8">
-          {/* NOWE CENTRUM REPARACJI FLOTY W MIEJSCU NIEAKTYWNEGO WIDGETU ONLINE */}
-          <MaintenanceCenterWidget />
+      {mounted && token ? (
+      <div className="space-y-8">
+        {/* WIDŻET ONLINE NA SAMEJ GÓRZE PANELU ADMINA */}
+        <AdminOnlineUsersWidget />
 
-          <AdminTable token={token} />
-          <HubSupportAdmin token={token} />
-          <AdminChangelog adminToken={token} />
-        </div>
-      ) : (
+        <AdminTable token={token} />
+        <HubSupportAdmin token={token} />
+        <AdminChangelog adminToken={token} />
+      </div>
+    ) : (
 
         <TokenForm />
       )}
@@ -792,152 +790,3 @@ export function AdminOnlineUsersWidget() {
 }
 
 // router-force-reload: v3
-
-// 1. Pamiętaj o dodaniu tych importów na samej górze pliku admin.tsx:
-// import { runSoftRecovery, runFlightRecovery, type RecoveryProgress } from "@/lib/recovery.functions";
-// import { useServerFn } from "@tanstack/react-start";
-// import { useState } from "react";
-// import { Wrench, ShieldAlert, CheckCircle2, Play } from "lucide-react";
-
-{/* ========================================================================= */}
-{/* 🛠 WIDGET: MAINTENANCE CENTER (STRICT ISOLATED PLUG-IN)                  */}
-{/* ========================================================================= */}
-export function MaintenanceCenterWidget() {
-  const softRecoveryFn = useServerFn(runSoftRecovery);
-  const flightRecoveryFn = useServerFn(runFlightRecovery);
-
-  const [progress, setProgress] = useState<RecoveryProgress>({
-    status: "idle",
-    usersScanned: 0,
-    totalUsers: 0,
-    activitiesScanned: 0,
-    flightsScanned: 0,
-    missingActivities: 0,
-    recovered: 0,
-    alreadyCorrect: 0,
-    elapsedTime: "0.0 sec",
-  });
-
-  const handleRunRecovery = async (level: 1 | 2) => {
-    setProgress((p) => ({ ...p, status: "scanning" }));
-    try {
-      const result = level === 1 ? await softRecoveryFn() : await flightRecoveryFn();
-      setProgress(result);
-    } catch (err) {
-      setProgress((p) => ({ ...p, status: "error", error: "Execution timeout or database error." }));
-    }
-  };
-
-  return (
-    <div className="mt-12 border-t border-border/40 pt-8 text-left">
-      <div className="flex items-center gap-2.5">
-        <Wrench className="h-5 w-5 text-amber-500" />
-        <div>
-          <h3 className="font-display text-lg font-bold text-foreground">Maintenance Center</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Administrative repair and recovery utilities for Hub data.</p>
-        </div>
-      </div>
-
-      {/* Grid Kart Wywołań Recovery */}
-      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-        {/* Karta Level 1 */}
-        <div className="panel rounded-xl border border-border/60 bg-background/40 p-5 flex flex-col justify-between">
-          <div className="min-w-0">
-            <span className="mono text-[9px] uppercase tracking-widest bg-green-500/10 text-green-400 px-2 py-0.5 rounded border border-green-500/20">🟢 Level 1</span>
-            <h4 className="font-display font-bold text-sm text-slate-200 mt-2.5">Soft Recovery (Recommended)</h4>
-            <p className="text-[11px] text-muted-foreground mt-1">Cross-checks existing Activity records across all users (Last 10 days) to rebuild missing operational rental feeds without hitting heavy log tables.</p>
-          </div>
-          <button
-            type="button"
-            disabled={progress.status === "scanning"}
-            onClick={() => handleRunRecovery(1)}
-            className="mono mt-5 w-full rounded-lg border border-green-500/30 bg-green-500/10 py-2 text-xs font-bold uppercase tracking-wider text-green-400 transition-all hover:bg-green-400 hover:text-black cursor-pointer disabled:opacity-30 flex items-center justify-center gap-1.5"
-          >
-            <Play className="h-3 w-3 fill-current" /> Run Soft Recovery
-          </button>
-        </div>
-
-        {/* Karta Level 2 */}
-        <div className="panel rounded-xl border border-border/60 bg-background/40 p-5 flex flex-col justify-between">
-          <div className="min-w-0">
-            <span className="mono text-[9px] uppercase tracking-widest bg-amber-500/10 text-amber-400 px-2 py-0.5 rounded border border-amber-500/20">🟡 Level 2</span>
-            <h4 className="font-display font-bold text-sm text-slate-200 mt-2.5">Flight Recovery</h4>
-            <p className="text-[11px] text-muted-foreground mt-1">Inspects the local flight database directly (Last 10 days). Verifies successful financial transactions and checks whether the owner timeline has the record.</p>
-          </div>
-          <button
-            type="button"
-            disabled={progress.status === "scanning"}
-            onClick={() => handleRunRecovery(2)}
-            className="mono mt-5 w-full rounded-lg border border-amber-500/30 bg-amber-500/10 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 transition-all hover:bg-amber-400 hover:text-black cursor-pointer disabled:opacity-30 flex items-center justify-center gap-1.5"
-          >
-            <Play className="h-3 w-3 fill-current" /> Run Flight Recovery
-          </button>
-        </div>
-      </div>
-
-      {/* 📊 PROGRESS UI & FINAL REPORT SUMMARY */}
-      {progress.status !== "idle" && (
-        <div className="panel mt-6 rounded-xl border border-border bg-background/20 p-5 relative overflow-hidden">
-          {progress.status === "scanning" && (
-            <div className="absolute top-0 left-0 h-[2px] bg-amber-500 animate-[pulse_1.5s_infinite] w-full" />
-          )}
-
-          <div className="flex items-center justify-between">
-            <span className="mono text-xs uppercase tracking-wider text-slate-300 flex items-center gap-2">
-              {progress.status === "scanning" ? (
-                <span className="text-amber-400 font-bold animate-pulse">Scanning database... ⏳</span>
-              ) : progress.status === "completed" ? (
-                <span className="text-green-400 font-bold flex items-center gap-1"><CheckCircle2 className="h-4 w-4" /> Maintenance Completed</span>
-              ) : (
-                <span className="text-red-400 font-bold flex items-center gap-1"><ShieldAlert className="h-4 w-4" /> System Error</span>
-              )}
-            </span>
-            <span className="mono text-[10px] text-muted-foreground uppercase">Elapsed: {progress.elapsedTime}</span>
-          </div>
-
-          {/* Statystyki raportu audytorskiego */}
-          <div className="mt-5 grid grid-cols-2 gap-y-3 gap-x-6 sm:grid-cols-4 border-t border-border/30 pt-4">
-            {progress.usersScanned > 0 && (
-              <div>
-                <div className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Users Scanned</div>
-                <div className="mono text-sm font-bold mt-0.5 text-foreground">{progress.usersScanned}</div>
-              </div>
-            )}
-            {progress.activitiesScanned > 0 && (
-              <div>
-                <div className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Activities Audited</div>
-                <div className="mono text-sm font-bold mt-0.5 text-foreground">{progress.activitiesScanned}</div>
-              </div>
-            )}
-            {progress.flightsScanned > 0 && (
-              <div>
-                <div className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Flights Audited</div>
-                <div className="mono text-sm font-bold mt-0.5 text-foreground">{progress.flightsScanned}</div>
-              </div>
-            )}
-            <div>
-              <div className="mono text-[10px] uppercase tracking-wider text-amber-400/80">Gaps Detected</div>
-              <div className="mono text-sm font-bold mt-0.5 text-amber-400">{progress.missingActivities}</div>
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-wider text-green-400/80">Recovered (Inserts)</div>
-              <div className="mono text-sm font-bold mt-0.5 text-green-400">+{progress.recovered}</div>
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-wider text-muted-foreground">Already Intact</div>
-              <div className="mono text-sm font-bold mt-0.5 text-slate-400">{progress.alreadyCorrect}</div>
-            </div>
-          </div>
-          
-          {progress.error && (
-            <div className="mt-4 text-xs font-semibold text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg mono">
-              {progress.error}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// recovery vidget v1 google AI
