@@ -3167,34 +3167,58 @@ export const getOnlineUsersList = createServerFn({
   },
 });
 
-export const getFleetExternalUsage = createServerFn({ method: "GET" })
-  .inputValidator((d?: { username?: string; aircraftIcaos?: string[] }) => d ?? {})
-  .handler(async ({ data, context }) => {
-    const activeUser = data?.username || (context as any)?.user?.username || "";
-    const targetAircrafts = data?.aircraftIcaos || []; // Odbieramy TABLICĘ wszystkich ICAO floty
-
-    if (!activeUser || activeUser === "undefined" || activeUser === "null" || activeUser.length === 0) {
-      return [];
-    }
-
-    // Bezpiecznik: Jeśli pilot nie ma jeszcze żadnych samolotów, od razu zwracamy pustą listę bez męczenia bazy
-    if (!targetAircrafts || targetAircrafts.length === 0) {
-      return [];
-    }
-
+export const runFleetActivityBackfill = createServerFn({ method: "POST" })
+  .handler(async ({ context }) => {
+    // 1. Dynamicznie pobieramy tożsamość zalogowanego właściciela floty
+    const activeUser = (context as any)?.user?.username || "";
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // DYNAMICZNE ZAPYTANIE O CAŁĄ FLOTĘ: 
-    // Zmieniamy filtr .eq() na .in(), który sprawdzi WSZYSTKIE Twoje maszyny jednym zamachem!
-    const { data: externalFlights, error } = await supabaseAdmin
+    // 2. Pobieramy z bazy kody maszyn należących do tego użytkownika
+    const { data: myFlights } = await supabaseAdmin
       .from("simfly_flights")
-      .select("flight_id, username, departure_icao, destination_icao, total_distance, mission_start_ts, aircraft, aircraft_icao")
-      .in("aircraft_icao", targetAircrafts) // SPRAWDZAMY CAŁĄ TABLICĘ ICAO FLOTY!
-      .neq("username", activeUser.trim())   // Pilotem NIE był właściciel
-      .order("mission_start_ts", { ascending: false })
-      .range(0, 9); // Pobieramy max 10 najnowszych rejsów, żeby Dashboard ładował się błyskawicznie
+      .select("aircraft_icao")
+      .eq("username", activeUser);
+    
+    const myAircraftIcaos = [...new Set((myFlights || []).map(f => f.aircraft_icao).filter(Boolean))];
+    if (myAircraftIcaos.length === 0) return { processed: 0, inserted: 0 };
 
-    if (error) throw error;
+    // 3. Skanujemy bazę w poszukiwaniu obcych lotów na naszych maszynach (poza naszymi lotniskami)
+    const { data: externalFlights } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("flight_id, username, departure_icao, destination_icao, total_distance, mission_start_ts, aircraft")
+      .in("aircraft_icao", myAircraftIcaos)
+      .neq("username", activeUser); // Pilotem był ktoś inny!
 
-    return externalFlights || [];
+    if (!externalFlights || externalFlights.length === 0) return { processed: 0, inserted: 0 };
+
+    let insertedCount = 0;
+
+    // 4. Rusza pętla weryfikacyjna — sprawdzamy braki w Activity i naprawiamy historię!
+    for (const flight of externalFlights) {
+      // Szukamy, czy dla tego konkretnego flight_id istnieje już wpis w Activity dla właściciela
+      const { data: existingActivity } = await supabaseAdmin
+        .from("activity")
+        .select("id")
+        .eq("flight_id", flight.flight_id)
+        .eq("username", activeUser) // Czy właściciel ma już ten wpis?
+        .maybeSingle();
+
+      // JESTEŚMY W DOMU: Jeśli wpisu brakuje, wpisujemy go na stałe do bazy z oryginalnym czasem!
+      if (!existingActivity) {
+        await supabaseAdmin.from("activity").insert({
+          username: activeUser,
+          type: "FLEET_RENTAL",
+          aircraft: flight.aircraft,
+          departure_icao: flight.departure_icao,
+          destination_icao: flight.destination_icao,
+          distance: flight.total_distance,
+          pilot: flight.username,
+          // Klucz: używamy oryginalnego timestampu, żeby lot wskoczył chronologicznie na swoje miejsce!
+          created_at: flight.mission_start_ts 
+        });
+        insertedCount++;
+      }
+    }
+
+    return { processed: externalFlights.length, inserted: insertedCount };
   });
