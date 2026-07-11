@@ -138,6 +138,28 @@ function Overview() {
             <div className="flex items-center gap-3">
               <PilotSwitcher current={viewedUser} />
               
+             {/* DYSKRETNY MINI-GUZICZEK DEBUGGINGU / NAPRAWY FLOTY OBOK AWATARA */}
+              <button
+                type="button"
+                title="Execute Fleet Reconciliation Repair (Dev Tool)"
+                onClick={async () => {
+                  try {
+                    const res = await triggerFleetRepair();
+                    if (res && (res as any).error) {
+                      alert(`Error: ${(res as any).error}`);
+                    } else {
+                      alert(`Fleet Sync Success!\n\nProcessed logs: ${res?.processed || 0}\nFixed missing gaps: ${res?.inserted || 0}`);
+                      qc.invalidateQueries({ queryKey: ["simfly"] });
+                    }
+                  } catch (err) {
+                    alert("Failed to execute server backfill repair.");
+                  }
+                }}
+                className="mono flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border/40 bg-secondary/20 text-muted-foreground transition-all hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30"
+              >
+                <History className="h-3.5 w-3.5" />
+              </button>
+              
               {/* twój awatar */}
               {data.me.avatarUrl ? (
                 <img
@@ -152,33 +174,6 @@ function Overview() {
           </div>
         }
       />
-      
-      {/* BURSZTYNOWY PANEL NAPRAWCZY FLOTY — DO URUCHOMIENIA LOTU LUIGIEGO */}
-      <div className="mb-6 panel rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 flex items-center justify-between gap-4 text-left relative z-10">
-        <div className="min-w-0">
-          <h4 className="mono text-xs font-bold text-amber-400 uppercase tracking-wide">⚙️ Fleet Activity Reconciliation</h4>
-          <p className="text-muted-foreground text-[11px] mt-0.5">Scans public flight records, detects third-party usage of your aircraft, and repairs missing entries in your Activity Timeline.</p>
-        </div>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              const res = await triggerFleetRepair();
-              if (res && (res as any).error) {
-                alert(`Error: ${(res as any).error}`);
-              } else {
-                alert(`Fleet Sync Success!\n\nProcessed logs: ${res?.processed || 0}\nFixed missing gaps: ${res?.inserted || 0}`);
-                qc.invalidateQueries({ queryKey: ["simfly"] });
-              }
-            } catch (err) {
-              alert("Failed to execute server backfill repair.");
-            }
-          }}
-          className="mono shrink-0 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs font-bold uppercase tracking-wider text-amber-400 transition-all hover:bg-amber-400 hover:text-black shadow-[0_0_15px_rgba(245,158,11,0.15)] cursor-pointer"
-        >
-          Execute Repair
-        </button>
-      </div>
 
      <CurrentFlightHero
 
