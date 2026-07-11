@@ -796,3 +796,166 @@ export function AdminOnlineUsersWidget() {
 }
 
 // router-force-reload: v3 //
+
+// ---------------------------------------------------------------------------
+// Maintenance Center — manually-triggered recovery utilities.
+// Backed entirely by src/lib/recovery.functions.ts. Adds no automatic
+// behaviour to the Admin page: every action requires an explicit click.
+// ---------------------------------------------------------------------------
+
+function MaintenanceCenter({ token }: { token: string }) {
+  const softFn = useServerFn(runSoftRecovery);
+  const flightFn = useServerFn(runFlightRecovery);
+  const [windowDays, setWindowDays] = useState(10);
+  const [busy, setBusy] = useState<null | "soft" | "flight">(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [report, setReport] = useState<RecoveryReport | null>(null);
+
+  async function run(kind: "soft" | "flight") {
+    setBusy(kind);
+    setErr(null);
+    setReport(null);
+    try {
+      const fn = kind === "soft" ? softFn : flightFn;
+      const r = await fn({ data: { token, windowDays } });
+      setReport(r);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Recovery failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-semibold">Maintenance Center</h2>
+        <p className="text-xs text-muted-foreground">
+          Manual recovery utilities. Nothing runs automatically. Every action
+          is idempotent — existing records are never overwritten and
+          historical ownership is preserved.
+        </p>
+      </div>
+
+      {err && (
+        <div className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+          {err}
+        </div>
+      )}
+
+      <div className="panel rounded-xl p-4">
+        <div className="mb-3 flex flex-wrap items-center gap-3">
+          <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Scan window (days)
+          </label>
+          <input
+            type="number"
+            min={1}
+            max={90}
+            value={windowDays}
+            onChange={(e) => setWindowDays(Math.max(1, Math.min(90, Number(e.target.value) || 10)))}
+            disabled={busy !== null}
+            className="w-24 rounded-md border border-border bg-secondary/40 px-2 py-1 text-sm outline-none focus:border-runway"
+          />
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <RecoveryCard
+            title="Soft Recovery"
+            description="Reconstruct missing Aircraft Owner Activity entries from existing Activity records. Skips generic aircraft, unresolved ownership, and non–Hub users."
+            running={busy === "soft"}
+            disabled={busy !== null}
+            onRun={() => run("soft")}
+          />
+          <RecoveryCard
+            title="Flight Recovery"
+            description="Inspect completed flights directly and create any missing owner Activity entry. Common when the route lies between airports the owner does not operate."
+            running={busy === "flight"}
+            disabled={busy !== null}
+            onRun={() => run("flight")}
+          />
+        </div>
+      </div>
+
+      {busy && (
+        <div className="panel rounded-xl p-4 text-sm">
+          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Running
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-runway" />
+            Scanning users, activities and flights…
+          </div>
+        </div>
+      )}
+
+      {report && <RecoveryReportView report={report} />}
+    </div>
+  );
+}
+
+function RecoveryCard({
+  title,
+  description,
+  running,
+  disabled,
+  onRun,
+}: {
+  title: string;
+  description: string;
+  running: boolean;
+  disabled: boolean;
+  onRun: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-secondary/20 p-3">
+      <div className="mb-1 font-medium">{title}</div>
+      <div className="mb-3 text-xs text-muted-foreground">{description}</div>
+      <button
+        onClick={onRun}
+        disabled={disabled}
+        className={cn(
+          "rounded-md bg-runway px-3 py-1.5 text-xs font-medium text-background hover:bg-runway/90 disabled:opacity-50",
+        )}
+      >
+        {running ? "Running…" : `Run ${title}`}
+      </button>
+    </div>
+  );
+}
+
+function RecoveryReportView({ report }: { report: RecoveryReport }) {
+  const Row = ({ label, value }: { label: string; value: string | number }) => (
+    <div className="flex items-baseline justify-between border-b border-border/40 py-1.5 last:border-none">
+      <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        {label}
+      </span>
+      <span className="mono text-sm">{value}</span>
+    </div>
+  );
+  return (
+    <div className="panel rounded-xl p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <div className="font-medium capitalize">{report.mode} Recovery — report</div>
+        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          window: {report.windowDays}d
+        </div>
+      </div>
+      <Row label="Users scanned" value={report.usersScanned} />
+      <Row label="Activities scanned" value={report.activitiesScanned.toLocaleString()} />
+      <Row label="Flights scanned" value={report.flightsScanned.toLocaleString()} />
+      <Row label="Missing activities" value={report.missingActivities} />
+      <Row label="Recovered" value={report.recovered} />
+      <Row label="Already correct" value={report.alreadyCorrect.toLocaleString()} />
+      <Row label="Skipped" value={report.skipped.toLocaleString()} />
+      <Row label="Elapsed" value={`${(report.elapsedMs / 1000).toFixed(2)}s`} />
+      {report.notes.length > 0 && (
+        <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+          {report.notes.map((n, i) => (
+            <div key={i}>• {n}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
