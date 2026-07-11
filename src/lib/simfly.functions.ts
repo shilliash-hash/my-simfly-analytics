@@ -1265,8 +1265,15 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
       const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
       const tags: string[] = [];
-      if (v.paxAircraft) tags.push("my aircraft");
-      if (v.paxAirport) tags.push("my airport");
+            // UODPORNIONY WARUNEK: Nadajemy fioletowy tag Rental jeśli przylatują zyski, 
+      // lub jeśli rekord pochodzi bezpośrednio z odizolowanego backfilla Twojej maszyny!
+      if (v.paxAircraft || v.paxAircraft === 0 || v.id.startsWith("visitor-")) {
+        tags.push("my aircraft");
+      }
+      if (v.paxAirport) {
+        tags.push("my airport");
+      }
+
       return {
         id: `visitor-${v.id}`,
         kind: "route" as const,
