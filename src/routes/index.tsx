@@ -101,23 +101,23 @@ function Overview() {
 
    // 1. Dynamicznie wyciągamy kody ICAO absolutnie WSZYSTKICH samolotów z Twojej aktywnej floty
   // FUNKCJA ratownicza dla brakujacych lotow w activity (moj samolot / nie moje lotniska / inny pilot) 
- const myFleetIcaos = useMemo(() => {
-   if (!data?.airplanes) return [];
+ //const myFleetIcaos = useMemo(() => {
+  // if (!data?.airplanes) return [];
    // Mapujemy tablicę samolotów i wyciągamy ich kody ICAO (np. C750, B738, TBM9), oczyszczając z pustych wartości
-   return Array.from(new Set(data.airplanes.map((p) => p.aircraftIcao || (p as any).icao).filter(Boolean)));
- }, [data?.airplanes]);
+ //  return Array.from(new Set(data.airplanes.map((p) => p.aircraftIcao || (p as any).icao).filter(Boolean)));
+// }, [data?.airplanes]);
 
  // 2. WYWOŁANIE (INVOCATION): Dashboard budzi funkcję sprawdzania leasingu dla całej Twojej floty na raz!
- const fetchFleetUsage = useServerFn(getFleetExternalUsage);
- const { data: externalFlights = [] } = useQuery({
-   queryKey: ["dashboard-fleet-usage", viewedUser || "", myFleetIcaos],
-   queryFn: () => fetchFleetUsage({ 
-     username: viewedUser || "",
-     aircraftIcaos: myFleetIcaos // Przekazujemy dynamiczną tablicę wszystkich Twoich maszyn!
-   }),
-   enabled: myFleetIcaos.length > 0, // Zapytanie odpali się tylko wtedy, gdy faktycznie posiadasz samoloty
-   staleTime: 5 * 60 * 1000,
- });
+// const fetchFleetUsage = useServerFn(getFleetExternalUsage);
+// const { data: externalFlights = [] } = useQuery({
+//   queryKey: ["dashboard-fleet-usage", viewedUser || "", myFleetIcaos],
+ //  queryFn: () => fetchFleetUsage({ 
+ //    username: viewedUser || "",
+  //   aircraftIcaos: myFleetIcaos // Przekazujemy dynamiczną tablicę wszystkich Twoich maszyn!
+  // }),
+ //  enabled: myFleetIcaos.length > 0, // Zapytanie odpali się tylko wtedy, gdy faktycznie posiadasz samoloty
+ //  staleTime: 5 * 60 * 1000,
+// });
 
   return (
     <AppShell>
