@@ -1,6 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
 
-// Typy danych dla interfejsu postępu UI
 export interface RecoveryProgress {
   status: "idle" | "scanning" | "completed" | "error";
   usersScanned: number;
@@ -15,14 +14,14 @@ export interface RecoveryProgress {
 }
 
 // ==========================================================
-// 🚨 LEVEL 1 – SOFT RECOVERY: MULTI-USER ACTIVITY CROSS-CHECK
+// 🟢 LEVEL 1 – SOFT RECOVERY: MULTI-USER ACTIVITY CROSS-CHECK
 // ==========================================================
 export const runSoftRecovery = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
     const startTime = Date.now();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // 1. Pobieramy wszystkich aktywnych użytkowników HUBA
+    // 1. Pobieramy wszystkich zarejestrowanych użytkowników huba
     const { data: users, error: userError } = await supabaseAdmin
       .from("profiles")
       .select("username");
@@ -33,13 +32,11 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
     let missingActivities = 0;
     let recoveredCount = 0;
     let alreadyCorrect = 0;
-
     const totalUsers = users?.length || 0;
 
-    // Skanujemy aktywności z ostatnich 10 dni (zgodnie ze specyfikacją)
+    // Skanujemy zakres ostatnich 10 dni
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
-    // 2. Przeglądamy Activity każdego zarejestrowanego pilota
     for (const user of users || []) {
       const { data: userActivity } = await supabaseAdmin
         .from("activity")
@@ -50,43 +47,44 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
       for (const act of userActivity || []) {
         activitiesScanned++;
 
-        // Interesują nas wyłącznie wpisy dotyczące wykonanych lotów
-        if (act.kind !== "route" || !act.flight_id) continue;
+        // Interesują nas wpisy powiązane z unikalnym ID wykonanego lotu
+        if (!act.flight_id) continue;
 
-        // Pobieramy surowy rekord powiązanego lotu telemetrycznego
+        // Pobieramy surowy rekord lotu z tabeli public.simfly_flights na podstawie Twojego schematu SQL
         const { data: flight } = await supabaseAdmin
           .from("simfly_flights")
           .select("*")
           .eq("flight_id", act.flight_id)
           .maybeSingle();
 
-        if (!flight) continue;
+        // 🚨 ZGODNOŚĆ Z SQL: Czytamy poprawną kolumnę aircraft_tail_number ze schematu bazy!
+        if (!flight || !flight.aircraft_tail_number || !flight.aircraft || flight.aircraft === "Not in SimFly database" || flight.aircraft.toLowerCase().includes("generic")) continue;
 
-        // 🚨 RYGORISTYCZNA WALIDACJA INTEGRALNOŚCI SAMOLOTU (AIRCRAFT INTEGRITY VALIDATION)
-        if (!flight.tail_number || !flight.aircraft || flight.aircraft === "Not in SimFly database" || flight.aircraft.toLowerCase().includes("generic")) continue;
+        const pilot = flight.username ? flight.username.trim() : "";
+        const tail = flight.aircraft_tail_number.trim();
 
-        // Wyszukujemy właściciela samolotu na podstawie unikalnej rejestracji (Tail Number)
-        const { data: aircraft } = await supabaseAdmin
-          .from("simfly_airplanes")
-          .select("owner_username, id")
-          .eq("tail_number", flight.tail_number)
+        // Szukamy właściciela samolotu w tabeli public.simfly_flights na podstawie Twoich własnych, historycznych logów
+        const { data: ownerRecord } = await supabaseAdmin
+          .from("simfly_flights")
+          .select("username")
+          .eq("aircraft_tail_number", tail)
+          .order("mission_start_ts", { ascending: true }) // Pierwszy zalogowany pilot tej maszyny to jej właściciel w Hubie
+          .limit(1)
           .maybeSingle();
 
-        if (!aircraft || !aircraft.owner_username) continue; // Brak właściciela / nie do rozstrzygnięcia
-        
-        const owner = aircraft.owner_username.trim();
-        const pilot = flight.username.trim();
+        if (!ownerRecord || !ownerRecord.username) continue;
+        const owner = ownerRecord.username.trim();
 
-        if (pilot === owner) continue; // Pilotem był właściciel (to nie jest Rental)
+        // Jeśli pilot wykonujący lot to właściciel samolotu, pomijamy (to nie jest leasing Rental)
+        if (pilot === owner) continue;
 
         // 🚨 BEZPIECZNIK TEMPORALNY (TEMPORAL SAFETY HUB VALIDATION)
-        // Sprawdzamy, czy w DOKŁADNYMtimestampie lotu lotniska należały do właściciela floty
         const { data: historicalHubStart } = await supabaseAdmin
           .from("simfly_hubs")
           .select("id")
           .eq("username", owner)
           .eq("icao", flight.departure_icao)
-          .lt("purchased_at", flight.mission_start_ts) // Kupione PRZED lotem?
+          .lt("purchased_at", flight.mission_start_ts)
           .maybeSingle();
 
         const { data: historicalHubEnd } = await supabaseAdmin
@@ -97,13 +95,13 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
           .lt("purchased_at", flight.mission_start_ts)
           .maybeSingle();
 
-        // Jeśli choć jedno z tych lotnisk należało do właściciela W MOMENCIE LOTU, ignorujemy (to ruch Visitor)
+        // Jeśli lotnisko startu lub lądowania było HUBem właściciela w momencie lotu, ignorujemy
         if (historicalHubStart || historicalHubEnd) {
           alreadyCorrect++;
           continue;
         }
 
-        // 3. CROSS-CHECK: Sprawdzamy, czy właściciel samolotu ma już ten wpis u siebie
+        // 3. CROSS-CHECK: Sprawdzamy czy w Activity właściciela brakuje tego wpisu
         const { data: ownerActivity } = await supabaseAdmin
           .from("activity")
           .select("id")
@@ -114,15 +112,15 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
         if (!ownerActivity) {
           missingActivities++;
           
-          // IDEMPOTENTNY INSERT: Tworzymy fioletowy wpis Rental z oryginalnym timestampem
+          // IDEMPOTENTNY INSERT: Zgodny z formatem camelCase i snake_case struktury tabeli activity
           await supabaseAdmin.from("activity").insert({
             username: owner,
             actor_handle: pilot,
             kind: "rental",
-            message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${flight.tail_number}) from ${flight.departure_icao} to ${flight.destination_icao}`,
-            at: flight.mission_start_ts, // Oryginalny czas zachowuje chronologię!
+            message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${tail}) from ${flight.departure_icao} to ${flight.destination_icao}`,
+            at: flight.mission_start_ts, // Oryginalny czas zachowuje chronologię
             flight_id: flight.flight_id,
-            delta: flight.revenue_pax_owner || 0,
+            delta: flight.pax || 0, // Pobieramy zysk z kolumny pax Twojego schematu SQL
             hub_icao: flight.departure_icao
           });
 
@@ -147,7 +145,7 @@ export const runSoftRecovery = createServerFn({ method: "POST" })
   });
 
 // ==========================================================
-// 🚨 LEVEL 2 – FLIGHT RECOVERY: LOCAL FLIGHT DATABASE ANALYSIS
+// 🟡 LEVEL 2 – FLIGHT RECOVERY: LOCAL FLIGHT DATABASE ANALYSIS
 // ==========================================================
 export const runFlightRecovery = createServerFn({ method: "POST" })
   .handler(async ({ context }) => {
@@ -156,7 +154,7 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
 
     const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString();
 
-    // Pobieramy loty z ostatnich 10 dni directly z bazy lotów
+    // Pobieramy loty bezpośrednio ze zwalidowanej tabeli public.simfly_flights
     const { data: flights, error: flightError } = await supabaseAdmin
       .from("simfly_flights")
       .select("*")
@@ -172,23 +170,24 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
     for (const flight of flights || []) {
       flightsScanned++;
 
-      // 🚨 INTEGRITY CHECK
-      if (!flight.tail_number || !flight.aircraft || flight.aircraft === "Not in SimFly database" || flight.aircraft.toLowerCase().includes("generic")) continue;
+      if (!flight.aircraft_tail_number || !flight.aircraft || flight.aircraft === "Not in SimFly database" || flight.aircraft.toLowerCase().includes("generic")) continue;
 
-      const { data: aircraft } = await supabaseAdmin
-        .from("simfly_airplanes")
-        .select("owner_username")
-        .eq("tail_number", flight.tail_number)
+      const pilot = flight.username ? flight.username.trim() : "";
+      const tail = flight.aircraft_tail_number.trim();
+
+      const { data: ownerRecord } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("username")
+        .eq("aircraft_tail_number", tail)
+        .order("mission_start_ts", { ascending: true })
+        .limit(1)
         .maybeSingle();
 
-      if (!aircraft || !aircraft.owner_username) continue;
-
-      const owner = aircraft.owner_username.trim();
-      const pilot = flight.username.trim();
+      if (!ownerRecord || !ownerRecord.username) continue;
+      const owner = ownerRecord.username.trim();
 
       if (pilot === owner) continue;
 
-      // Sprawdzamy czy właściciel ma wpis dla tej misji
       const { data: ownerActivity } = await supabaseAdmin
         .from("activity")
         .select("id")
@@ -203,10 +202,10 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
           username: owner,
           actor_handle: pilot,
           kind: "rental",
-          message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${flight.tail_number}) from ${flight.departure_icao} to ${flight.destination_icao}`,
+          message: `(Rental) @${pilot} operated your aircraft ${flight.aircraft} (${tail}) from ${flight.departure_icao} to ${flight.destination_icao}`,
           at: flight.mission_start_ts,
           flight_id: flight.flight_id,
-          delta: flight.revenue_pax_owner || 0,
+          delta: flight.pax || 0,
           hub_icao: flight.departure_icao
         });
 
@@ -229,6 +228,5 @@ export const runFlightRecovery = createServerFn({ method: "POST" })
     } as RecoveryProgress;
   });
 
-// STUBS / PLACEHOLDERS Operacyjne dla przyszłych modułów Level 3 i Level 4 (Zgodnie z planem)
 export const runDeepRecoveryPlaceholder = () => { return { error: "Level 3 Deep Recovery is locked for Phase 2." }; };
 export const runAtomicVerificationPlaceholder = () => { return { error: "Level 4 Atomic API Verification is locked for Phase 2." }; };
