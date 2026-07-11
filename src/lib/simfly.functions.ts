@@ -1265,14 +1265,8 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
       const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
       const tags: string[] = [];
-        if (v.paxAircraft > 0) {
-        tags.push("my aircraft");
-      }
-      if (v.paxAirport > 0) {
-        tags.push("my airport");
-      }
-
-
+      if (v.paxAircraft) tags.push("my aircraft");
+      if (v.paxAirport) tags.push("my airport");
       return {
         id: `visitor-${v.id}`,
         kind: "route" as const,
