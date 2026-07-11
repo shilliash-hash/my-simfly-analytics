@@ -185,9 +185,6 @@ function Overview() {
 
       <CurrentFlightHero
 
-
-
-      <CurrentFlightHero
         live={(() => {
           const completedIds = new Set(data.flights.map((f) => f.id));
           return myFlights.find((f) => !completedIds.has(f.id)) ?? null;
