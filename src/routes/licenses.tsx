@@ -85,7 +85,7 @@ function LicensesPage() {
                 <div className="min-w-0">
                   <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">License №</div>
                   <div className="font-display mono mt-0.5 text-lg font-semibold tracking-wide text-foreground">{l.code || l.sku}</div>
-                   <LicenceLocationRow location={lic.location} />
+                   <LicenceLocationRow location={l.location} />
                 </div>
                 <div className="text-right">
                   <div className="mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Rank</div>
