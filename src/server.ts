@@ -67,25 +67,10 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 }
 
 export default {
-  async fetch(request: Request, env: any, ctx: unknown) {
+  async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
-      // Bezpieczne dziedziczenie zamiast klonowania operatorem ...
-      const clonedEnv = Object.create(env);
-
-      // Sprawdzamy czy zapytanie idzie na domenę testową workers.dev
-      if (request.url.includes("workers.dev") && env.SUPABASE_URL_STAGING) {
-        clonedEnv.SUPABASE_URL = env.SUPABASE_URL_STAGING;
-        clonedEnv.SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY_STAGING;
-        clonedEnv.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY_STAGING;
-      } else {
-        // Na wypadek gdyby silnik wymagał jawnych kluczy bazowych na obiekcie-potomku
-        clonedEnv.SUPABASE_URL = env.SUPABASE_URL;
-        clonedEnv.SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY;
-        clonedEnv.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY;
-      }
-
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, clonedEnv, ctx);
+      const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
@@ -93,4 +78,3 @@ export default {
     }
   },
 };
-
