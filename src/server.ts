@@ -67,10 +67,19 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 }
 
 export default {
-  async fetch(request: Request, env: unknown, ctx: unknown) {
+  async fetch(request: Request, env: any, ctx: unknown) {
     try {
+      // Bezpieczna kopia środowiska bez uszkadzania Proxy Cloudflare
+      const clonedEnv = Object.create(env);
+
+      // Jeśli zapytanie idzie na Twój adres testowy, podstawiamy sekret testowy jako główny
+      if (request.url.includes("test-cloudflare-duo") && env.SUPABASE_SERVICE_ROLE_KEY_STAGING) {
+        clonedEnv.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY_STAGING;
+      }
+
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      // Przekazujemy zmodyfikowany obiekt clonedEnv dalej do aplikacji
+      const response = await handler.fetch(request, clonedEnv, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
       console.error(error);
@@ -78,3 +87,4 @@ export default {
     }
   },
 };
+
