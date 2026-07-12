@@ -68,12 +68,19 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 
 export default {
   async fetch(request: Request, env: any, ctx: unknown) {
-    try {
-      env.SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY_STAGING || env.SUPABASE_SERVICE_ROLE_KEY;
+        try {
+      // Tworzymy bezpieczną kopię obiektu env, aby uniknąć błędów blokady zapisu
+      const clonedEnv = { 
+        ...env,
+        SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY_STAGING || env.SUPABASE_SERVICE_ROLE_KEY 
+      };
+
       const handler = await getServerEntry();
-      const response = await handler.fetch(request, env, ctx);
+      // Przekazujemy naszą zmodyfikowaną kopię (clonedEnv) zamiast oryginalnego env
+      const response = await handler.fetch(request, clonedEnv, ctx);
       return await normalizeCatastrophicSsrResponse(response);
     } catch (error) {
+
       console.error(error);
       return brandedErrorResponse();
     }
