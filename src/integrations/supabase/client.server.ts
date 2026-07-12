@@ -30,12 +30,8 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
 }
 
 function createSupabaseAdminClient() {
-  // 1. Bezpiecznie pobieramy globalny obiekt env z Cloudflare za pomocą globalThis
-  const cfEnv = (globalThis as any).process?.env || {};
-
-  // 2. Mapujemy zmienne testowe z priorytetem dla _STAGING
-  const SUPABASE_URL = cfEnv.SUPABASE_URL_STAGING || cfEnv.SUPABASE_URL;
-  const SUPABASE_SERVICE_ROLE_KEY = cfEnv.SUPABASE_SERVICE_ROLE_KEY_STAGING || cfEnv.SUPABASE_SERVICE_ROLE_KEY;
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     const missing = [
