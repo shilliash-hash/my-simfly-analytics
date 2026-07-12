@@ -5,16 +5,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "main": "src/server.ts",
   "vars": {
-    "SUPABASE_URL": "https://ljyzjyaqtsqxhxkphuxj.supabase.co",
-    "SUPABASE_ANON_KEY": "sb_publishable_UluczBuLHGZF0v5bh1g_Xg_BpkVOZDC"
-  },
-  "env": {
-    "staging": {
-      "vars": {
-        "SUPABASE_URL": "https://zrntpsvzmuapaekhugzv.supabase.co",
-        "SUPABASE_ANON_KEY": "sb_publishable_axhBuymBHYRByBdJGNK1fw__q96gwMx"
-      }
-    }
+    "SUPABASE_URL": "https://zrntpsvzmuapaekhugzv.supabase.co",
+    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpybnRwc3Z6bXVhcGFla2h1Z3p2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODM4NzIyNDgsImV4cCI6MjA5OTQ0ODI0OH0.W5d7Pt4ekjYF4AUbV6MIxU9-EFBU4NjVcHFwl2oEg8s" 
   }
 }
 
