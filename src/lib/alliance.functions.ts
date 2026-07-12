@@ -317,7 +317,11 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
       lastVisitAt: string;
     };
     const byPilot = new Map<string, Agg>();
-
+ // [Alliance Debug] Track nonce-source hits per pilot across the visitor scan.
+    const debugSources = new Map<
+      string,
+      { pilotUsernonce: number; airplaneOwnerNonce: number; noNonce: number; firstFlight?: unknown }
+    >();
     for (const { icao, pages } of perAirport) {
       for (const page of pages) {
         for (const raw of page?.flights ?? []) {
@@ -333,7 +337,23 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
             role === "takeoff"
               ? airportSideCredit(raw.origin)
               : airportSideCredit(raw.destination);
-
+          
+          // [Alliance Debug] record which source (if any) provided a nonce on this flight row.
+          const dbg = debugSources.get(pilot) ?? {
+            pilotUsernonce: 0,
+            airplaneOwnerNonce: 0,
+            noNonce: 0,
+            firstFlight: {
+              pilot: raw.pilot,
+              airplaneOwner: raw.airplane?.owner,
+            },
+          };
+          if (typeof raw.pilot?.usernonce === "number") dbg.pilotUsernonce += 1;
+          else if (typeof raw.airplane?.owner?.nonce === "number") dbg.airplaneOwnerNonce += 1;
+          else dbg.noNonce += 1;
+          debugSources.set(pilot, dbg);
+         
+          
           const cur =
             byPilot.get(pilot) ??
             ({
@@ -364,6 +384,21 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
           byPilot.set(pilot, cur);
         }
       }
+    }
+// [Alliance Debug] Per-pilot nonce-resolution summary from visitor scan (Lookup 1).
+    for (const [pilotName, agg] of byPilot.entries()) {
+      const dbg = debugSources.get(pilotName);
+      console.log(
+        `[Alliance Debug] Pilot: ${pilotName} | Lookup 1: Visitor flight rows` +
+          ` | pilot.usernonce hits=${dbg?.pilotUsernonce ?? 0}` +
+          ` | airplane.owner.nonce hits=${dbg?.airplaneOwnerNonce ?? 0}` +
+          ` | rows w/o nonce=${dbg?.noNonce ?? 0}` +
+          ` | resolved nonce=${agg.nonce ?? "null"}` +
+          ` | avatar=${agg.avatarUrl ? "yes" : "no"}` +
+          (agg.nonce == null
+            ? ` | sampleFlight=${JSON.stringify(dbg?.firstFlight ?? null)}`
+            : ""),
+      );
     }
 
     // Sort by Alliance Factor and keep top N for expensive portfolio lookup.
@@ -404,6 +439,11 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
 
         if (p.nonce != null) {
           const pQs = `username=${encodeURIComponent(p.username)}&nonce=${encodeURIComponent(String(p.nonce))}`;
+           console.log(
+            `[Alliance Debug] Pilot: ${p.username} | Lookup 2: Portfolio attempt` +
+              ` | nonce=${p.nonce}` +
+              ` | endpoints=[/user/v2, /user/assets/all]`,
+          );
           const [profile, assets] = await Promise.all([
             avatarUrl
               ? Promise.resolve(null)
@@ -431,6 +471,17 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
               } satisfies AllianceAirport;
             })
             .sort((a, b) => b.weeklySlots - a.weeklySlots);
+          console.log(
+            `[Alliance Debug] Pilot: ${p.username} | Portfolio lookup: ${assets ? "SUCCESS" : "FAILED (no assets response)"}` +
+              ` | airports=${airports.length}` +
+              ` | avatar=${avatarUrl ? "resolved" : "missing"}`,
+          );
+        } else {
+          console.log(
+            `[Alliance Debug] Pilot: ${p.username} | Portfolio lookup skipped` +
+              ` | Reason: nonce could not be resolved from visitor flight rows` +
+              ` (no pilot.usernonce and no airplane.owner.nonce on any observed flight)`,
+          );
         }
 
         const totalWeeklySlots = airports.reduce((s, a) => s + a.weeklySlots, 0);
