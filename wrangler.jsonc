@@ -6,12 +6,16 @@
   "main": "src/server.ts",
   "vars": {
     "SUPABASE_URL": "https://ljyzjyaqtsqxhxkphuxj.supabase.co",
-    "SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxqeXpqeWFxdHNxeGh4a3BodXhqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODMwMTczNzksImV4cCI6MjA5ODU5MzM3OX0.q8lIhK9Hq5Gaa8f9m3rI9SippQXUMuPvWUM5zXS7qxM",
-  }
-},
-
+    "SUPABASE_ANON_KEY": "sb_publishable_UluczBuLHGZF0v5bh1g_Xg_BpkVOZDC"
+  },
   "env": {
-    "staging": {}
+    "staging": {
+      "vars": {
+        "SUPABASE_URL": "https://zrntpsvzmuapaekhugzv.supabase.co",
+        "SUPABASE_ANON_KEY": "sb_publishable_axhBuymBHYRByBdJGNK1fw__q96gwMx"
+      }
+    }
   }
 }
+
 
