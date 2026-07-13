@@ -436,7 +436,21 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
       focus.map(async (p) => {
         let avatarUrl = p.avatarUrl;
         let airports: AllianceAirport[] = [];
+    // =========================================================================
+    // 🛟 ARCHITEKTONICZNY FALLBACK: Ratujemy brakujący token z naszej bazy pilot_nonces!
+    // =========================================================================
+    if (p.nonce == null) {
+      const { data: dbNonce } = await supabaseAdmin
+        .from("pilot_nonces")
+        .select("nonce")
+        .eq("username", p.username)
+        .maybeSingle();
 
+      if (dbNonce?.nonce) {
+        p.nonce = dbNonce.nonce; // Nadpisujemy null naszym wstrzykniętym tokenem-bypass!
+      }
+    }
+       
         if (p.nonce != null) {
           const pQs = `username=${encodeURIComponent(p.username)}&nonce=${encodeURIComponent(String(p.nonce))}`;
            console.log(
