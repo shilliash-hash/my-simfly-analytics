@@ -10,6 +10,17 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
  {
   id: "1",
+  version: "v 0.909 STABLE 13.Jul.26",
+  type: ["FEATURE", "UPGRADE", "FIX"],
+  text: `• Added the new Alliance Intelligence module.
+  • Interactive alliance visualization with pilot relationships and airport intelligence.
+  • Introduced session-based SimFly identity with per-pilot nonce resolution.
+  • Improved Alliance build pipeline with automatic resume after interrupted builds.
+  • Enhanced caching, reliability and overall performance of Alliance data generation.
+  • Alliance Intelligence is now available exclusively for Hub Supporters.`
+},  
+  {
+  id: "2",
   version: "v 0.908 STABLE 10.Jul.26",
   type: ["FEATURE", "FIX"],
   text: `• Introduced the new My Team Activity module.
@@ -20,7 +31,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
   • License page - revised UI and functionality for timers.`
 },  
   {
-  id: "1",
+  id: "3",
   version: "v 0.907 STABLE 08.Jul.26",
   type: ["FEATURE"],
   text: `• Introduced the Counter-Visit Finder widget for planning return flights.
@@ -29,7 +40,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
   • Search results display all owned airports with detailed hub information in a dedicated pop-up window.`
 },
   {
-  id: "1",
+  id: "4",
   version: "v 0.906 STABLE 08.Jul.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
   text: `• Introduced Pilots Career - a new personal aviation history page.
@@ -41,7 +52,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
   • Enhanced layout and readability on all device sizes.`
 },
     {
-    id: "1",
+    id: "5",
     version: "v 0.905 STABLE 7.Jul.24",
     type: ["UPGRADE", "FEATURE", "FIX"],
     text: `• Improved visitor cards for better readability.
@@ -49,26 +60,26 @@ export const staticChangelogFeed: ChangelogItem[] = [
 • Improved the robustness of the weekly Hub Support logic.`
   },
   {
-    id: "2",
+    id: "6",
     version: "v 0.904",
     type: ["UPGRADE", "FIX"],
     text: `•Single airport license checker option added. 
     •DB traffic from server reduced.`
   },
   {
-    id: "3",
+    id: "7",
     version: "v 0.903",
     type: ["FEATURE"],
     text: `•Dynamic database architecture optimized and cloud sweeps operational.`
   },
   {
-    id: "4",
+    id: "8",
     version: "v 0.902",
     type: ["FIX"],
     text: `•Fixed hydration mismatches and stabilized dashboard components.`
   },
   {
-    id: "5",
+    id: "9",
     version: "v 0.901",
     type: ["UPGRADE"],
     text: `•Upgraded edge server transport layers for smoother performance.`
