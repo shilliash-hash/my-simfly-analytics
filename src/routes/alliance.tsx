@@ -392,10 +392,10 @@ function IntelligencePopup({ pilot }: { pilot: AlliancePilot }) {
           Airport portfolio · {pilot.airports.length}
         </div>
         {pilot.airports.length === 0 ? (
-          <div className="mono rounded-md border border-dashed border-border/40 p-3 text-[11px] text-muted-foreground">
-            Portfolio unavailable — pilot nonce could not be resolved.
+          <div className="mono rounded-md border border-dashed border-border/40 p-3 text-[11px] text-muted-foreground text-center">
+          No airports in portfolio — pilot doesn't own any airports till date.
           </div>
-        ) : (
+         ) : (
           <ul className="grid gap-2">
             {pilot.airports.map((a) => (
               <AirportCard key={a.icao} airport={a} />
