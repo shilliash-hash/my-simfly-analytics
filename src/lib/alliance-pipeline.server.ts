@@ -28,8 +28,8 @@ import type {
 
 const SIMFLY_BASE = "https://simfly.io/api";
 const FETCH_TIMEOUT_MS = 12_000;
-const MAX_PAGES_PER_AIRPORT = 40;
-const MAX_ALLIED_PILOTS_FOR_PORTFOLIO = 30;
+const MAX_PAGES_PER_AIRPORT = 1;
+const MAX_ALLIED_PILOTS_FOR_PORTFOLIO = 40;
 const CACHE_TTL_MS = 6 * 60 * 60_000;
 const BUILD_STALE_MS = 30 * 60_000;
 const DEFAULT_BUDGET_MS = 5_000;
