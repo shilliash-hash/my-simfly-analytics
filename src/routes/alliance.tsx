@@ -3,8 +3,10 @@ import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import {
-  getAllianceIntel,
+  getAllianceStatus,
+  type AllianceBuildProgress,
   type AllianceCamp,
+  type AllianceIntelPayload,
   type AlliancePilot,
   type AllianceAirport,
 } from "@/lib/alliance.functions";
@@ -16,7 +18,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
-import { Mountain, Sparkles, Users, Radar, ArrowUpRight } from "lucide-react";
+import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
 
 export const Route = createFileRoute("/alliance")({
   component: AllianceIntelligence,
@@ -54,23 +56,37 @@ const CAMPS: CampDef[] = [
 ];
 
 function AllianceIntelligence() {
-  const fn = useServerFn(getAllianceIntel);
+  const fn = useServerFn(getAllianceStatus);
   const { keyTag, username } = useSimflyArgs();
   const { data } = useSuspenseQuery(
     queryOptions({
-      queryKey: ["alliance", keyTag],
-      queryFn: () =>
-        fn(username ? { data: { username } } : undefined),
-      staleTime: 5 * 60_000,
+      queryKey: ["alliance-status", keyTag],
+      queryFn: () => fn(username ? { data: { username } } : undefined),
+      staleTime: 30_000,
+      refetchInterval: (q) => {
+        const d = q.state.data;
+        return d && d.status === "building" ? 3_000 : false;
+      },
     }),
   );
+
+  // While a build is in progress and no stale cache is available, show the
+  // "Alliance build in progress" screen instead of the mountain.
+  if (data.status === "building" && !data.payload) {
+    return <AllianceBuildingScreen progress={data.progress} />;
+  }
+
+  const payload: AllianceIntelPayload =
+    data.status === "ready" ? data.payload : data.payload!; // stale cache while re-building
+  const building = data.status === "building";
 
   const grouped = useMemo(() => {
     const map = new Map<AllianceCamp, AlliancePilot[]>();
     for (const c of CAMPS) map.set(c.id, []);
-    for (const p of data.pilots) map.get(p.camp)?.push(p);
+    for (const p of payload.pilots) map.get(p.camp)?.push(p);
     return map;
-  }, [data.pilots]);
+  }, [payload.pilots]);
+
 
   return (
     <AppShell>
@@ -80,33 +96,44 @@ function AllianceIntelligence() {
         description="Who invests most in your ecosystem — and where to fly next to strengthen the strongest alliances."
         actions={
           <div className="mono flex items-center gap-2 rounded-lg border border-border/40 bg-secondary/40 px-3 py-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <Radar className="h-3.5 w-3.5 text-runway" />
-            {new Date(data.generatedAt).toISOString().slice(11, 16)}Z
+            {building ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-instrument" />
+            ) : (
+              <Radar className="h-3.5 w-3.5 text-runway" />
+            )}
+            {building
+              ? "Refreshing…"
+              : `${new Date(payload.generatedAt).toISOString().slice(11, 16)}Z`}
           </div>
         }
       />
+
+      {building && data.progress && (
+        <BuildProgressBanner progress={data.progress} />
+      )}
 
       {/* KPI strip */}
       <section className="mb-8 grid gap-3 sm:grid-cols-3">
         <KpiTile
           icon={Users}
           label="Allied pilots"
-          value={formatNumber(data.totals.pilots)}
+          value={formatNumber(payload.totals.pilots)}
           accent="runway"
         />
         <KpiTile
           icon={Sparkles}
           label="Total Alliance Factor"
-          value={formatNumber(Math.round(data.totals.totalAllianceFactor))}
+          value={formatNumber(Math.round(payload.totals.totalAllianceFactor))}
           accent="gold"
         />
         <KpiTile
           icon={ArrowUpRight}
           label="Outstanding returns"
-          value={String(data.totals.outstandingReturns)}
+          value={String(payload.totals.outstandingReturns)}
           accent="instrument"
         />
       </section>
+
 
       {/* Mountain */}
       <section className="panel relative overflow-hidden rounded-2xl p-6">
@@ -597,3 +624,152 @@ function MountainSilhouette() {
     </svg>
   );
 }
+
+// -----------------------------------------------------------------------------
+// Build-in-progress UI
+// -----------------------------------------------------------------------------
+
+const PHASE_COPY: Record<AllianceBuildProgress["phase"], string> = {
+  queued: "Queued — worker will pick this up on the next tick.",
+  scanning: "Scanning visitor history across every one of your airports.",
+  aggregating: "Aggregating pilots across your ecosystem.",
+  enriching: "Fetching each allied pilot's airport portfolio.",
+  finalizing: "Building recommendations and camps.",
+  done: "Alliance data is ready.",
+  failed: "Build failed — retry shortly.",
+};
+
+function BuildProgressBanner({ progress }: { progress: AllianceBuildProgress }) {
+  const { airportPct, pilotPct } = progressPercents(progress);
+  return (
+    <div className="panel mb-6 flex flex-col gap-3 rounded-xl border border-instrument/30 bg-instrument/5 p-4">
+      <div className="flex items-center gap-2">
+        <Loader2 className="h-4 w-4 animate-spin text-instrument" />
+        <div className="font-display text-sm">
+          Alliance Intelligence is being refreshed in the background
+        </div>
+        <span className="mono ml-auto rounded bg-instrument/10 px-2 py-0.5 text-[10px] uppercase tracking-widest text-instrument ring-1 ring-instrument/30">
+          {progress.phase}
+        </span>
+      </div>
+      <div className="mono text-[11px] text-muted-foreground">
+        {PHASE_COPY[progress.phase]}
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <ProgressBar
+          label="Airports scanned"
+          done={progress.airportsDone}
+          total={progress.airportsTotal}
+          pct={airportPct}
+        />
+        <ProgressBar
+          label="Pilots enriched"
+          done={progress.pilotsDone}
+          total={progress.pilotsTotal}
+          pct={pilotPct}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AllianceBuildingScreen({ progress }: { progress: AllianceBuildProgress }) {
+  const { airportPct, pilotPct } = progressPercents(progress);
+  return (
+    <AppShell>
+      <PageHeader
+        eyebrow="Relationship intelligence"
+        title="Alliance Intelligence"
+        description="Analysing your ecosystem — this only runs once, then results are cached."
+      />
+      <div className="panel relative overflow-hidden rounded-2xl p-8">
+        <div className="pointer-events-none absolute inset-0 opacity-40">
+          <MountainSilhouette />
+        </div>
+        <div className="relative flex flex-col items-center gap-6 py-8 text-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-instrument/10 ring-2 ring-instrument/30">
+            <Loader2 className="h-8 w-8 animate-spin text-instrument" />
+          </div>
+          <div>
+            <div className="mono text-[10px] uppercase tracking-[0.25em] text-instrument">
+              {progress.phase}
+            </div>
+            <h2 className="mt-2 font-display text-xl">
+              Alliance data is being generated
+            </h2>
+            <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
+              {PHASE_COPY[progress.phase]} This process analyses historical
+              flights, airport activity, aircraft ownership, pilot portfolios,
+              and Alliance metrics. Estimated completion: up to 5 minutes.
+            </p>
+          </div>
+          <div className="grid w-full max-w-lg gap-3">
+            <ProgressBar
+              label="Airports scanned"
+              done={progress.airportsDone}
+              total={progress.airportsTotal}
+              pct={airportPct}
+            />
+            <ProgressBar
+              label="Pilots enriched"
+              done={progress.pilotsDone}
+              total={progress.pilotsTotal}
+              pct={pilotPct}
+            />
+          </div>
+          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Auto-refreshing every 3 seconds — you can leave this page and come back.
+          </div>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
+
+function ProgressBar({
+  label,
+  done,
+  total,
+  pct,
+}: {
+  label: string;
+  done: number;
+  total: number;
+  pct: number;
+}) {
+  return (
+    <div>
+      <div className="mono mb-1 flex items-center justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
+        <span>{label}</span>
+        <span>
+          {done}/{total || "…"}
+        </span>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-secondary/60">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-runway to-instrument transition-all"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function progressPercents(progress: AllianceBuildProgress) {
+  const airportPct =
+    progress.airportsTotal > 0
+      ? Math.round((progress.airportsDone / progress.airportsTotal) * 100)
+      : progress.phase === "scanning"
+        ? 0
+        : 100;
+  const pilotPct =
+    progress.pilotsTotal > 0
+      ? Math.round((progress.pilotsDone / progress.pilotsTotal) * 100)
+      : progress.phase === "enriching"
+        ? 0
+        : progress.phase === "done" || progress.phase === "finalizing"
+          ? 100
+          : 0;
+  return { airportPct, pilotPct };
+}
+
