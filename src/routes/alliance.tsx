@@ -19,6 +19,9 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
+import { HubSupportGate } from "@/components/hub-support";
+import { getHubSupportStatus } from "@/lib/hub-support.functions";
+import { useQuery } from "@tanstack/react-query"; // potrzebne do asynchronicznego sp
 
 export const Route = createFileRoute("/alliance")({
   component: AllianceIntelligence,
@@ -58,6 +61,14 @@ const CAMPS: CampDef[] = [
 function AllianceIntelligence() {
   const fn = useServerFn(getAllianceStatus);
   const { keyTag, username } = useSimflyArgs();
+ // === 1. DODAJEMY STRZAŁ SPRAWDZAJĄCY STATUS PREMIUM ===
+  const supportStatusFn = useServerFn(getHubSupportStatus);
+  const { data: supportStatus, isLoading: supportLoading } = useQuery({
+    queryKey: ["hub-support", keyTag],
+    queryFn: () => supportStatusFn(username ? { data: { username } } : undefined),
+    staleTime: 5 * 60_000, // cache'ujemy status na 5 minut, aby nie obciążać serwera
+  });
+  
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["alliance-status", keyTag],
@@ -76,6 +87,30 @@ function AllianceIntelligence() {
     return <AllianceBuildingScreen progress={data.progress} />;
   }
 
+   // === 2. ŻELAZNY RYGIEL BRAMKI SUPPORTU ===
+  // Jeśli status subskrypcji wciąż się ładuje, pokazujemy sterylny pasek ładowania
+  if (supportLoading) {
+    return (
+      <AppShell>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
+          Verifying security clearance…
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Jeśli użytkownik NIE jest supporterem (status active jest false lub undefined), 
+  // odcinamy go od widoku i renderujemy dedykowany popup blokujący!
+  if (!supportStatus?.active) {
+    return (
+      <AppShell>
+        <HubSupportGate featureName="Alliance Intelligence" />
+      </AppShell>
+    );
+  }
+
+  // === KOD PONIŻEJ URUCHOMI SIĘ WYŁĄCZNIE DLA KONT PREMIUM ===
+  
   const payload: AllianceIntelPayload =
     data.status === "ready" ? data.payload : data.payload!; // stale cache while re-building
   const building = data.status === "building";
