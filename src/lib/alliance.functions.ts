@@ -116,7 +116,7 @@ export const getAllianceStatus = createServerFn({ method: "GET" })
     }
 
     // 2) Run one bounded worker slice (kickoff if no job exists).
-    //await advanceBuild({ username, force, budgetMs: 5_000 });
+    await advanceBuild({ username, force, budgetMs: 5_000 });
 
     // 3) Re-read snapshot and report status.
     const after = await getBuildSnapshot(username);
@@ -127,100 +127,23 @@ export const getAllianceStatus = createServerFn({ method: "GET" })
         progress: toProgress(after.job),
       };
     }
-     // 🟢 AUTONOMICZNY SILNIK LOKALNY: Budujemy profil CRM wyłącznie na podstawie naszej tabeli simfly_flights!
-  if (!after.job || after.job.phase === "completed" || after.job.phase === "done" || after.job.airports_total === 0) {
-    
-    // 1. Pobieramy realne misje innych pilotów bezpośrednio z naszej tabeli
-    const { data: localFlights } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("pilot, origin_icao, destination_icao, created_at, pax_count")
-      .eq("status", "COMPLETED")
-      .not("pilot", "eq", username); // wykluczamy Shilla, zliczamy tylko sojuszników
-
-    const hasFlights = localFlights && localFlights.length > 0;
-    
-    // Fallback: Jeśli baza misji jest pusta, oddajemy krystalicznie czysty Day Zero
-    if (!hasFlights) {
-      return {
-        status: "ready",
-        payload: after.cache || {
-          generatedAt: new Date().toISOString(),
-          me: { username },
-          totals: { pilots: 0, totalAllianceFactor: 0, outstandingReturns: 0 },
-          pilots: []
-        },
-        progress: after.job ? toProgress(after.job) : null,
-      };
-    }
-
-    // 2. 📊 PEŁNY PARSER LOKALNY: Agregujemy statystyki bezpośrednio z pobranych logów!
-    const pilotStats = new Map<string, { visits: number; totalPax: number; lastVisit: string }>();
-
-    for (const f of localFlights) {
-      const pName = f.pilot;
-      if (!pName) continue;
-
-      const cur = pilotStats.get(pName) || { visits: 0, totalPax: 0, lastVisit: f.created_at };
-      cur.visits += 1;
-      cur.totalPax += (f.pax_count ?? 0);
-      
-      if (new Date(f.created_at).getTime() > new Date(cur.lastVisit).getTime()) {
-        cur.lastVisit = f.created_at;
-      }
-      pilotStats.set(pName, cur);
-    }
-
-    // 3. Mapujemy zagregowane dane do oficjalnej struktury AlliancePilot oczekiwanej przez frontend
-    const mappedPilots = Array.from(pilotStats.entries()).map(([pName, stats]) => {
-      const allianceFactor = stats.visits * stats.totalPax;
-      return {
-        username: pName,
-        nonce: null, // nie potrzebujemy już nonce z SimFly!
-        avatarUrl: undefined, // frontend automatycznie podstawi literę (L, P), dopóki nie wdrożymy lokalnych awatarów
-        visits: stats.visits,
-        paxForMe: stats.totalPax,
-        allianceFactor: Math.round(allianceFactor * 100) / 100,
-        lastVisitAt: stats.lastVisit,
-        returnStatus: "completed" as const, // na bazie zamkniętych lotów u Ciebie status to zawsze completed
-        camp: "trek" as const, // ranga startowa
-        airports: [], // pomijamy puste assets z SimFly
-        totalFreeSlots: 0,
-        totalWeeklySlots: 0,
-        recommendation: { code: "free_slots", icon: " ", label: "Local Alliance Active 🟢", tone: "runway" as const }
-      };
-    });
-
-    // Sortujemy pilotów od najwyższego Alliance Factor (tak jak chciał oryginalny algorytm bota)
-    mappedPilots.sort((a, b) => b.allianceFactor - a.allianceFactor);
-
-    // Przypisujemy obozy (Camps) na podstawie pozycji w rankingu
-    mappedPilots.forEach((p, index) => {
-      if (index < 1) p.camp = "summit";
-      else if (index < 3) p.camp = "camp3";
-      else if (index < 6) p.camp = "camp2";
-      else if (index < 10) p.camp = "camp1";
-      else p.camp = "base";
-    });
-
-    const totalAllianceFactor = Math.round(mappedPilots.reduce((s, p) => s + p.allianceFactor, 0) * 100) / 100;
-
-    // Zwracamy w 100% dynamiczny, gotowy payload wyliczony w milisekundy prosto z Twojej bazy!
     return {
-      status: "ready",
-      payload: {
-        generatedAt: new Date().toISOString(),
-        me: { username },
-        totals: {
-          pilots: mappedPilots.length,
-          totalAllianceFactor,
-          outstandingReturns: 0
-        },
-        pilots: mappedPilots
-      },
-      progress: after.job ? toProgress(after.job) : null,
+      status: "building",
+      payload: after.cache, // stale cache (if any) shown as fallback in UI
+      progress: after.job
+        ? toProgress(after.job)
+        : {
+            phase: "queued",
+            airportsTotal: 0,
+            airportsDone: 0,
+            pilotsTotal: 0,
+            pilotsDone: 0,
+            startedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            errorMessage: null,
+          },
     };
-  }
-
+  });
 
 // -----------------------------------------------------------------------------
 // tickAllianceBuild — cron/manual worker tick that advances every in-flight
@@ -264,3 +187,4 @@ function toProgress(job: JobRowLike): AllianceBuildProgress {
     errorMessage: job.error_message,
   };
 }
+
