@@ -116,7 +116,7 @@ export const getAllianceStatus = createServerFn({ method: "GET" })
     }
 
     // 2) Run one bounded worker slice (kickoff if no job exists).
-    await advanceBuild({ username, force, budgetMs: 5_000 });
+    //await advanceBuild({ username, force, budgetMs: 5_000 });
 
     // 3) Re-read snapshot and report status.
     const after = await getBuildSnapshot(username);
