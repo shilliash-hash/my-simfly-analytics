@@ -127,23 +127,38 @@ export const getAllianceStatus = createServerFn({ method: "GET" })
         progress: toProgress(after.job),
       };
     }
+     // === TUTAJ JEST TWÓJ WSTAWIONY BLOK (SPRAWDŹ CZY ZAMKNĄŁEŚ GO POPRAWNIE) ===
+  if (!after.job || after.job.phase === "completed" || after.job.phase === "done" || after.job.airports_total === 0) {
     return {
-      status: "building",
-      payload: after.cache, // stale cache (if any) shown as fallback in UI
-      progress: after.job
-        ? toProgress(after.job)
-        : {
-            phase: "queued",
-            airportsTotal: 0,
-            airportsDone: 0,
-            pilotsTotal: 0,
-            pilotsDone: 0,
-            startedAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            errorMessage: null,
-          },
+      status: "ready",
+      payload: after.cache || {
+        generatedAt: new Date().toISOString(),
+        me: { username },
+        totals: { pilots: 0, totalAllianceFactor: 0, outstandingReturns: 0 },
+        pilots: []
+      },
+      progress: after.job ? toProgress(after.job) : null,
     };
-  });
+  }
+
+  // === NA SAMYM DOLE ZOSTAJE ORYGINALNY RETURN BOTA JAKO FALLBACK ===
+  return {
+    status: "building",
+    payload: after.cache,
+    progress: after.job
+      ? toProgress(after.job)
+      : {
+          phase: "queued",
+          airportsTotal: 0,
+          airportsDone: 0,
+          pilotsTotal: 0,
+          pilotsDone: 0,
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          errorMessage: null,
+        },
+  };
+}); // <-- Zamknięcie handlera serwerowego (musi tu być!)
 
 // -----------------------------------------------------------------------------
 // tickAllianceBuild — cron/manual worker tick that advances every in-flight
