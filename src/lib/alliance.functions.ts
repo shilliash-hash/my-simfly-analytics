@@ -439,17 +439,17 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
         // =========================================================================
     // 🛟 ARCHITEKTONICZNY BEZPIECZNIK: Zapobiegamy crashom sieciowym API SimFly!
     // =========================================================================
-    if (p.nonce == null) {
+ if (p.nonce == null) {
       const { data: dbNonce } = await supabaseAdmin
         .from("pilot_nonces")
         .select("nonce")
         .eq("username", p.username)
         .maybeSingle();
 
-      // Jeśli w bazie siedzi nasz sztuczny bypass, NIE przekazujemy go do API SimFly,
-      // bo serwer SimFly rzuci błędem 401 i wysadzi całą aplikację!
-      if (dbNonce?.nonce && dbNonce.nonce !== 'active_alliance_bypass_token') {
-        p.nonce = dbNonce.nonce;
+      // Jeśli baza posiada prawdziwy, numeryczny token dla tego pilota, 
+      // wstrzykujemy go do pętli, omijając ślepe API SimFly!
+      if (dbNonce?.nonce) {
+        p.nonce = dbNonce.nonce; 
       }
     }
 
