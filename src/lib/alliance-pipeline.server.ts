@@ -27,14 +27,14 @@ import type {
 // -----------------------------------------------------------------------------
 
 const SIMFLY_BASE = "https://simfly.io/api";
-const FETCH_TIMEOUT_MS = 60_000;
+const FETCH_TIMEOUT_MS = 75_000;
 const MAX_PAGES_PER_AIRPORT = 10;
 const MAX_ALLIED_PILOTS_FOR_PORTFOLIO = 40;
-const CACHE_TTL_MS = 6 * 60 * 60_000;
+const CACHE_TTL_MS = 24 * 60 * 60_000;
 const BUILD_STALE_MS = 30 * 60_000;
-const DEFAULT_BUDGET_MS = 45_000;
-const AIRPORT_SCAN_CONCURRENCY = 3;
-const PILOT_ENRICH_CONCURRENCY = 4;
+const DEFAULT_BUDGET_MS = 60_000;
+const AIRPORT_SCAN_CONCURRENCY = 6;
+const PILOT_ENRICH_CONCURRENCY = 6;
 
 // -----------------------------------------------------------------------------
 // Small helpers (fetch, tier mapping, aggregation math) — same logic as before
