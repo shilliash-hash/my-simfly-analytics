@@ -436,8 +436,8 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
       focus.map(async (p) => {
         let avatarUrl = p.avatarUrl;
         let airports: AllianceAirport[] = [];
-    // =========================================================================
-    // 🛟 ARCHITEKTONICZNY FALLBACK: Ratujemy brakujący token z naszej bazy pilot_nonces!
+        // =========================================================================
+    // 🛟 ARCHITEKTONICZNY BEZPIECZNIK: Zapobiegamy crashom sieciowym API SimFly!
     // =========================================================================
     if (p.nonce == null) {
       const { data: dbNonce } = await supabaseAdmin
@@ -446,10 +446,13 @@ export const getAllianceIntel = createServerFn({ method: "GET" })
         .eq("username", p.username)
         .maybeSingle();
 
-      if (dbNonce?.nonce) {
-        p.nonce = dbNonce.nonce; // Nadpisujemy null naszym wstrzykniętym tokenem-bypass!
+      // Jeśli w bazie siedzi nasz sztuczny bypass, NIE przekazujemy go do API SimFly,
+      // bo serwer SimFly rzuci błędem 401 i wysadzi całą aplikację!
+      if (dbNonce?.nonce && dbNonce.nonce !== 'active_alliance_bypass_token') {
+        p.nonce = dbNonce.nonce;
       }
     }
+
        
         if (p.nonce != null) {
           const pQs = `username=${encodeURIComponent(p.username)}&nonce=${encodeURIComponent(String(p.nonce))}`;
