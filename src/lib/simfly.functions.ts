@@ -933,7 +933,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           .select("*")
           .eq("username", username)
           .order("mission_start_ts", { ascending: false })
-          .limit(200);
+          .limit(2000);
         return data ?? [];
       },
     );
