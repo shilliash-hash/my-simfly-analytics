@@ -58,11 +58,68 @@ const CAMPS: CampDef[] = [
   { id: "trek", label: "Trekking", cap: Infinity, altitudePct: 4, glow: "" },
 ];
 
+import { createFileRoute } from "@tanstack/react-router";
+import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useMemo, useState } from "react";
+import {
+  getAllianceStatus,
+  type AllianceBuildProgress,
+  type AllianceCamp,
+  type AllianceIntelPayload,
+  type AlliancePilot,
+  type AllianceAirport,
+} from "@/lib/alliance.functions";
+import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
+import { useSimflyArgs } from "@/lib/viewed-user";
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card";
+import { cn } from "@/lib/utils";
+import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
+import { HubSupportGate } from "@/components/hub-support";
+import { getHubSupportStatus } from "@/lib/hub-support.functions";
+
+export const Route = createFileRoute("/alliance")({
+  component: AllianceIntelligence,
+  head: () => ({
+    meta: [
+      { title: "Alliance Intelligence — SimFly Hub" },
+      {
+        name: "description",
+        content:
+          "Premium relationship analytics — see which pilots invest most in your airport ecosystem and where to fly next.",
+      },
+    ],
+  }),
+});
+
+type CampDef = {
+  id: AllianceCamp;
+  label: string;
+  cap: number;
+  altitudePct: number;
+  glow: string;
+};
+
+const CAMPS: CampDef[] = [
+  { id: "summit", label: "Summit", cap: 1, altitudePct: 92, glow: "shadow-[0_0_40px_-4px_var(--color-tier-gold)]" },
+  { id: "camp3", label: "Camp III", cap: 2, altitudePct: 74, glow: "shadow-[0_0_30px_-6px_var(--color-runway)]" },
+  { id: "camp2", label: "Camp II", cap: 3, altitudePct: 55, glow: "shadow-[0_0_24px_-8px_var(--color-runway)]" },
+  { id: "camp1", label: "Camp I", cap: 4, altitudePct: 36, glow: "shadow-[0_0_20px_-8px_var(--color-instrument)]" },
+  { id: "base", label: "Base Camp", cap: 6, altitudePct: 18, glow: "shadow-[0_0_16px_-8px_var(--color-tier-silver)]" },
+  { id: "trek", label: "Trekking", cap: Infinity, altitudePct: 4, glow: "" },
+];
+
+// =========================================================================
+// 1. KOMPONENT NADRZĘDNY (Bramka Security - Lekka jak piórko)
+// =========================================================================
 function AllianceIntelligence() {
-  const fn = useServerFn(getAllianceStatus);
   const { keyTag, username } = useSimflyArgs();
 
-  // 1. Sprawdzanie statusu subskrypcji premium (Zawsze na samym szczycie)
+  // Najpierw sprawdzamy wyłącznie status subskrypcji
   const supportStatusFn = useServerFn(getHubSupportStatus);
   const { data: supportStatus, isLoading: supportLoading } = useQuery({
     queryKey: ["hub-support", keyTag],
@@ -70,26 +127,6 @@ function AllianceIntelligence() {
     staleTime: 5 * 60_000,
   });
 
-  const isSupporter = supportStatus?.active === true;
-
-  // 2. NOWY HOOK WARUNKOWY (Zadeklarowany bezpiecznie na górze dla zasad Reacta)
-  // Parametr 'enabled' kategorycznie blokuje to zapytanie sieciowe dla kont darmowych!
-  const { data: allianceData, isLoading: allianceLoading } = useQuery({
-    queryKey: ["alliance-status", keyTag],
-    queryFn: () => fn(username ? { data: { username } } : undefined),
-    staleTime: 30_000,
-    enabled: !supportLoading && isSupporter, // 🔒 Twardy rygiel sieciowy
-    refetchInterval: (q) => {
-      const d = q.state.data;
-      return d && d.status === "building" ? 3_000 : false;
-    },
-  });
-
-  // =========================================================================
-  // SEKCJA WARUNKÓW RENDEROWANIA (Bezpieczne przerywanie działania strony)
-  // =========================================================================
-
-  // A. Jeśli status subskrypcji wciąż się ładuje, pokazujemy sterylny pasek ładowania
   if (supportLoading) {
     return (
       <AppShell>
@@ -100,8 +137,10 @@ function AllianceIntelligence() {
     );
   }
 
-  // B. BAM! Jeśli użytkownik NIE jest supporterem, odcinamy go NATYCHMIAST bez żadnego spinnera!
-  if (!isSupporter) {
+  // 🔥 RYGIEL DOSKONAŁY: Jeśli to darmowy użytkownik, wyrzucamy bramkę monetyzacji.
+  // Komponent 'RealAllianceDashboard' na dole w ogóle nie zostanie wczytany do pamięci,
+  // co daje 100% gwarancji, że useSuspenseQuery NIE URUCHOMI pobierania danych z API!
+  if (!supportStatus?.active) {
     return (
       <AppShell>
         <HubSupportGate featureName="Alliance Intelligence" />
@@ -109,26 +148,37 @@ function AllianceIntelligence() {
     );
   }
 
-  // C. Jeśli jesteś supporterem, ale dane sojuszu jeszcze lecą z bazy/API
-  if (allianceLoading || !allianceData) {
-    return (
-      <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
-          Loading Alliance metrics…
-        </div>
-      </AppShell>
-    );
-  }
+  // Jeśli użytkownik jest supporterem, wpuszczamy go do pełnego Dashboardu
+  return <RealAllianceDashboard />;
+}
 
-  // Przypisujemy pobrane dane do starej zmiennej bota, aby reszta kodu niżej działała bez zmian:
-  const data = allianceData;
+// =========================================================================
+// 2. KOMPONENT PODRZĘDNY (Dashboard Analityczny - Tylko dla Supporterów)
+// =========================================================================
+function RealAllianceDashboard() {
+  const fn = useServerFn(getAllianceStatus);
+  const { keyTag, username } = useSimflyArgs();
 
-  // Ekran budowania w tle (oryginalna logika bota):
+  // Przywracamy oryginalny hook bota z pełną mechaniką Suspense, 3-sekundowym 
+  // odświeżaniem w tle i obsługą ekranów budowania/wznawiania potoku!
+  const { data } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ["alliance-status", keyTag],
+      queryFn: () => fn(username ? { data: { username } } : undefined),
+      staleTime: 30_000,
+      refetchInterval: (q) => {
+        const d = q.state.data;
+        return d && d.status === "building" ? 3_000 : false;
+      },
+    }),
+  );
+
+  // Jeśli system buduje dane w tle lub przerwał i odlicza postęp — błąd naprawiony,
+  // ekran postępu i przyciski wznawiania znowu działają bezbłędnie!
   if (data.status === "building" && !data.payload) {
     return <AllianceBuildingScreen progress={data.progress} />;
   }
 
-  // Oryginalna struktura bota do wyliczania danych na stronie:
   const payload: AllianceIntelPayload =
     data.status === "ready" ? data.payload : data.payload!;
     
@@ -140,7 +190,6 @@ function AllianceIntelligence() {
     for (const p of payload.pilots) map.get(p.camp)?.push(p);
     return map;
   }, [payload.pilots]);
-
 
   return (
     <AppShell>
@@ -188,13 +237,11 @@ function AllianceIntelligence() {
         />
       </section>
 
-
       {/* Mountain */}
       <section className="panel relative overflow-hidden rounded-2xl p-6">
         <div className="pointer-events-none absolute inset-0">
           <MountainSilhouette />
         </div>
-
         <div className="relative flex items-center justify-between">
           <div>
             <div className="mono text-[10px] uppercase tracking-[0.25em] text-runway">
@@ -208,7 +255,7 @@ function AllianceIntelligence() {
           </div>
         </div>
 
-        {/* Mountain layout: absolute-positioned camp rows over the SVG */}
+        {/* Mountain layout */}
         <div className="relative mt-8 h-[520px] w-full">
           {CAMPS.map((camp) => {
             const pilots = grouped.get(camp.id) ?? [];
@@ -240,6 +287,8 @@ function AllianceIntelligence() {
     </AppShell>
   );
 }
+
+// ... poniższy kod pomocniczy (CampRow, EmptyCamp, PilotMarker, AvatarBadge, IntelligencePopup, Stat, Legend, AirportCard, ApronStands, KpiTile, MountainSilhouette, BuildProgressBanner, AllianceBuildingScreen, ProgressBar, progressPercents) zostaje bez zmian, jak w wygenerowanym wcześniej pliku ...
 
 // -----------------------------------------------------------------------------
 // Camp row
