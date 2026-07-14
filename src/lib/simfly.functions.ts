@@ -153,14 +153,20 @@ function sanitiseNonce(raw: string | undefined | null): string {
 }
 
 async function resolveIdentity(input?: { username?: string; nonce?: string }) {
-  const username = (input?.username || defaultUsername()).trim();
   const supplied = sanitiseNonce(input?.nonce);
-  if (supplied) return { username, nonce: supplied };
-  if (username.toLowerCase() === defaultUsername().toLowerCase()) {
-    return { username, nonce: defaultNonce() };
+  if (supplied) {
+    const username = (input?.username || defaultUsername()).trim();
+    return { username, nonce: supplied };
   }
-  const n = await resolveNonce(username);
-  return { username, nonce: n ? String(n) : defaultNonce() };
+   // Stage 2: route through the session identity layer so every module
+  // inherits per-pilot nonces. Falls back to env for owner + cron paths.
+  const { getSessionIdentity } = await import("./identity.server");
+  const identity = await getSessionIdentity({ username: input?.username });
+  // Warm the local in-isolate nonceCache so paginated scans inside this
+  // file skip the DB round-trip for the rest of the request.
+  const nAsNum = Number(identity.nonce);
+  if (Number.isFinite(nAsNum)) rememberNonce(identity.username, nAsNum);
+  return { username: identity.username, nonce: identity.nonce };
 }
 
 // Sync fallback for legacy call sites that don't (yet) need per-user nonce.
@@ -2411,7 +2417,7 @@ export type RouteLicenceEvaluation = {
 export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
   .inputValidator((d: { departure: string; arrival: string; licences: string[]; username?: string }) => d)
   .handler(async ({ data }): Promise<RouteLicenceEvaluation> => {
-    const username = (data.username || defaultUsername()).trim();
+    const { username } = await resolveIdentity({ username: data.username });
     const departure = (data.departure || "").trim().toUpperCase();
     const arrival = (data.arrival || "").trim().toUpperCase();
     const codes = Array.from(
