@@ -2354,22 +2354,6 @@ export type LicenceRouteCheckResult = {
 export const checkLicenceRoute = createServerFn({ method: "GET" })
   .inputValidator((d: { licence: string; departure: string; arrival: string; username?: string }) => d)
   .handler(async ({ data }): Promise<LicenceRouteCheckResult> => {
-  
-      // 🟢 BEZPIECZNIK HYDRACJI: Zwracamy pełny, legalny obiekt LicenceRouteCheckResult
-    if (!data.departure || !data.arrival) {
-      const { startIso, endIso } = currentSimflyWeekRangeUtc();
-      return {
-        weekStart: startIso,
-        weekEnd: endIso,
-        licence: data.licence || "",
-        departure: "",
-        arrival: "",
-        matches: [],
-      };
-    }
-
-   
-    
     const { username } = await resolveIdentity({ username: data.username });
     const licence = (data.licence || "").trim().toUpperCase();
     const departure = (data.departure || "").trim().toUpperCase();
@@ -2433,11 +2417,6 @@ export type RouteLicenceEvaluation = {
 export const evaluateRouteForAllLicences = createServerFn({ method: "GET" })
   .inputValidator((d: { departure: string; arrival: string; licences: string[]; username?: string }) => d)
   .handler(async ({ data }): Promise<RouteLicenceEvaluation> => {
-
- if (!data.departure || !data.arrival) {
-      return { licences: [], recommended: null, codes: [] };
-    }
-    
     const { username } = await resolveIdentity({ username: data.username });
     const departure = (data.departure || "").trim().toUpperCase();
     const arrival = (data.arrival || "").trim().toUpperCase();
