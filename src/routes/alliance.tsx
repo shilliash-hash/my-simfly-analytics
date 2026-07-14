@@ -61,14 +61,39 @@ const CAMPS: CampDef[] = [
 function AllianceIntelligence() {
   const fn = useServerFn(getAllianceStatus);
   const { keyTag, username } = useSimflyArgs();
- // === 1. DODAJEMY STRZAŁ SPRAWDZAJĄCY STATUS PREMIUM ===
+
+  // 1. Sprawdzanie statusu premium (Zostaje na samej górze pliku)
   const supportStatusFn = useServerFn(getHubSupportStatus);
   const { data: supportStatus, isLoading: supportLoading } = useQuery({
     queryKey: ["hub-support", keyTag],
     queryFn: () => supportStatusFn(username ? { data: { username } } : undefined),
-    staleTime: 5 * 60_000, // cache'ujemy status na 5 minut, aby nie obciążać serwera
+    staleTime: 5 * 60_000,
   });
-  
+
+  // === 🟢 TUTAJ WKLEIŁEŚ SWÓJ WYCIĘTY NIEBIESKI BLOK (ŻELAZNY RYGIEL BRAMKI) ===
+    // Jeśli status subskrypcji wciąż się ładuje, pokazujemy sterylny pasek ładowania
+  if (supportLoading) {
+    return (
+      <AppShell>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
+          Verifying security clearance...
+        </div>
+      </AppShell>
+    );
+  }
+
+  // BAM! Jeśli użytkownik NIE jest supporterem, kod robi natychmiastowy RETURN.
+  // Dzięki temu silnik Reacta przerywa dalsze czytanie pliku w tym miejscu!
+  if (!supportStatus?.active) {
+    return (
+      <AppShell>
+        <HubSupportGate featureName="Alliance Intelligence" />
+      </AppShell>
+    );
+  }
+
+  // === 🛫 DOPIERO TUTAJ ZNAJDUJE SIĘ ORYGINALNY KOD BOTA (STARA LINIA 72) ===
+  // Ponieważ ten kod jest TERAZ PONIŻEJ rygla, uruchomi się WYŁĄCZNIE dla kont premium!
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["alliance-status", keyTag],
@@ -81,35 +106,7 @@ function AllianceIntelligence() {
     }),
   );
 
-  // While a build is in progress and no stale cache is available, show the
-  // "Alliance build in progress" screen instead of the mountain.
-  if (data.status === "building" && !data.payload) {
-    return <AllianceBuildingScreen progress={data.progress} />;
-  }
-
-   // === 2. ŻELAZNY RYGIEL BRAMKI SUPPORTU ===
-  // Jeśli status subskrypcji wciąż się ładuje, pokazujemy sterylny pasek ładowania
-  if (supportLoading) {
-    return (
-      <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
-          Verifying security clearance…
-        </div>
-      </AppShell>
-    );
-  }
-
-  // Jeśli użytkownik NIE jest supporterem (status active jest false lub undefined), 
-  // odcinamy go od widoku i renderujemy dedykowany popup blokujący!
-  if (!supportStatus?.active) {
-    return (
-      <AppShell>
-        <HubSupportGate featureName="Alliance Intelligence" />
-      </AppShell>
-    );
-  }
-
-  // === KOD PONIŻEJ URUCHOMI SIĘ WYŁĄCZNIE DLA KONT PREMIUM ===
+   // === KOD PONIŻEJ URUCHOMI SIĘ WYŁĄCZNIE DLA KONT PREMIUM ===
   
   const payload: AllianceIntelPayload =
     data.status === "ready" ? data.payload : data.payload!; // stale cache while re-building
