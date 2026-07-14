@@ -2,6 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useSuspenseQuery, queryOptions, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
+import { HubSupportGate } from "@/components/hub-support";
+import { getHubSupportStatus } from "@/lib/hub-support.functions";
 import {
   getAllianceStatus,
   type AllianceBuildProgress,
@@ -21,9 +23,10 @@ import { cn } from "@/lib/utils";
 import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
 import { HubSupportGate } from "@/components/hub-support";
 import { getHubSupportStatus } from "@/lib/hub-support.functions";
+import { useQuery } from "@tanstack/react-query"; // potrzebne do asynchronicznego sp
 
 export const Route = createFileRoute("/alliance")({
-  component: AllianceIntelligence,
+  component: AllianceRoute,
   head: () => ({
     meta: [
       { title: "Alliance Intelligence — SimFly Hub" },
@@ -36,11 +39,15 @@ export const Route = createFileRoute("/alliance")({
   }),
 });
 
+// -----------------------------------------------------------------------------
+// Camps
+// -----------------------------------------------------------------------------
+
 type CampDef = {
   id: AllianceCamp;
   label: string;
   cap: number;
-  altitudePct: number;
+  altitudePct: number; // 0 (base) → 100 (summit)
   glow: string;
 };
 
@@ -53,54 +60,47 @@ const CAMPS: CampDef[] = [
   { id: "trek", label: "Trekking", cap: Infinity, altitudePct: 4, glow: "" },
 ];
 
-// =========================================================================
-// 1. KOMPONENT NADRZĘDNY (Bramka Security - Lekka jak piórko)
-// =========================================================================
-function AllianceIntelligence() {
-  const { keyTag, username } = useSimflyArgs();
-
-  // Najpierw sprawdzamy wyłącznie status subskrypcji
-  const supportStatusFn = useServerFn(getHubSupportStatus);
-  const { data: supportStatus, isLoading: supportLoading } = useQuery({
+function AllianceRoute() {
+  const statusFn = useServerFn(getHubSupportStatus);
+  const { keyTag, username, payload } = useSimflyArgs();
+  const { data: status, isLoading } = useQuery({
     queryKey: ["hub-support", keyTag],
-    queryFn: () => supportStatusFn(username ? { data: { username } } : undefined),
+    queryFn: () => statusFn(payload ? { data: payload } : undefined),
     staleTime: 5 * 60_000,
   });
-
-  if (supportLoading) {
+  if (isLoading) {
     return (
       <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
-          Verifying security clearance…
-        </div>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Loading…</div>
       </AppShell>
     );
   }
-
-  // 🔥 RYGIEL DOSKONAŁY: Jeśli to darmowy użytkownik, wyrzucamy bramkę monetyzacji.
-  // Komponent 'RealAllianceDashboard' na dole w ogóle nie zostanie wczytany do pamięci,
-  // co daje 100% gwarancji, że useSuspenseQuery NIE URUCHOMI pobierania danych z API!
-  if (!supportStatus?.active) {
+  if (!status?.active) {
     return (
       <AppShell>
+        <PageHeader
+          eyebrow="Premium"
+          title="Alliance Intelligence"
+          description="Relationship analytics across the pilots investing in your airport ecosystem."
+        />
         <HubSupportGate featureName="Alliance Intelligence" />
       </AppShell>
     );
   }
-
-  // Jeśli użytkownik jest supporterem, wpuszczamy go do pełnego Dashboardu
-  return <RealAllianceDashboard />;
+  return <AllianceIntelligence />;
 }
 
-// =========================================================================
-// 2. KOMPONENT PODRZĘDNY (Dashboard Analityczny - Tylko dla Supporterów)
-// =========================================================================
-function RealAllianceDashboard() {
+function AllianceIntelligence() {
   const fn = useServerFn(getAllianceStatus);
   const { keyTag, username } = useSimflyArgs();
-
-  // Przywracamy oryginalny hook bota z pełną mechaniką Suspense, 3-sekundowym 
-  // odświeżaniem w tle i obsługą ekranów budowania/wznawiania potoku!
+ // === 1. DODAJEMY STRZAŁ SPRAWDZAJĄCY STATUS PREMIUM ===
+  const supportStatusFn = useServerFn(getHubSupportStatus);
+  const { data: supportStatus, isLoading: supportLoading } = useQuery({
+    queryKey: ["hub-support", keyTag],
+    queryFn: () => supportStatusFn(username ? { data: { username } } : undefined),
+    staleTime: 5 * 60_000, // cache'ujemy status na 5 minut, aby nie obciążać serwera
+  });
+  
   const { data } = useSuspenseQuery(
     queryOptions({
       queryKey: ["alliance-status", keyTag],
@@ -113,15 +113,38 @@ function RealAllianceDashboard() {
     }),
   );
 
-  // Jeśli system buduje dane w tle lub przerwał i odlicza postęp — błąd naprawiony,
-  // ekran postępu i przyciski wznawiania znowu działają bezbłędnie!
+  // While a build is in progress and no stale cache is available, show the
+  // "Alliance build in progress" screen instead of the mountain.
   if (data.status === "building" && !data.payload) {
     return <AllianceBuildingScreen progress={data.progress} />;
   }
 
+   // === 2. ŻELAZNY RYGIEL BRAMKI SUPPORTU ===
+  // Jeśli status subskrypcji wciąż się ładuje, pokazujemy sterylny pasek ładowania
+  if (supportLoading) {
+    return (
+      <AppShell>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
+          Verifying security clearance…
+        </div>
+      </AppShell>
+    );
+  }
+
+  // Jeśli użytkownik NIE jest supporterem (status active jest false lub undefined), 
+  // odcinamy go od widoku i renderujemy dedykowany popup blokujący!
+  if (!supportStatus?.active) {
+    return (
+      <AppShell>
+        <HubSupportGate featureName="Alliance Intelligence" />
+      </AppShell>
+    );
+  }
+
+  // === KOD PONIŻEJ URUCHOMI SIĘ WYŁĄCZNIE DLA KONT PREMIUM ===
+  
   const payload: AllianceIntelPayload =
-    data.status === "ready" ? data.payload : data.payload!;
-    
+    data.status === "ready" ? data.payload : data.payload!; // stale cache while re-building
   const building = data.status === "building";
 
   const grouped = useMemo(() => {
@@ -130,6 +153,7 @@ function RealAllianceDashboard() {
     for (const p of payload.pilots) map.get(p.camp)?.push(p);
     return map;
   }, [payload.pilots]);
+
 
   return (
     <AppShell>
@@ -177,11 +201,13 @@ function RealAllianceDashboard() {
         />
       </section>
 
+
       {/* Mountain */}
       <section className="panel relative overflow-hidden rounded-2xl p-6">
         <div className="pointer-events-none absolute inset-0">
           <MountainSilhouette />
         </div>
+
         <div className="relative flex items-center justify-between">
           <div>
             <div className="mono text-[10px] uppercase tracking-[0.25em] text-runway">
@@ -195,7 +221,7 @@ function RealAllianceDashboard() {
           </div>
         </div>
 
-        {/* Mountain layout */}
+        {/* Mountain layout: absolute-positioned camp rows over the SVG */}
         <div className="relative mt-8 h-[520px] w-full">
           {CAMPS.map((camp) => {
             const pilots = grouped.get(camp.id) ?? [];
@@ -227,8 +253,6 @@ function RealAllianceDashboard() {
     </AppShell>
   );
 }
-
-// ... poniższy kod pomocniczy (CampRow, EmptyCamp, PilotMarker, AvatarBadge, IntelligencePopup, Stat, Legend, AirportCard, ApronStands, KpiTile, MountainSilhouette, BuildProgressBanner, AllianceBuildingScreen, ProgressBar, progressPercents) zostaje bez zmian, jak w wygenerowanym wcześniej pliku ...
 
 // -----------------------------------------------------------------------------
 // Camp row
@@ -815,4 +839,5 @@ function progressPercents(progress: AllianceBuildProgress) {
           : 0;
   return { airportPct, pilotPct };
 }
+
 
