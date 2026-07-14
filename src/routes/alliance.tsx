@@ -21,9 +21,7 @@ import {
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
 import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
-import { HubSupportGate } from "@/components/hub-support";
-import { getHubSupportStatus } from "@/lib/hub-support.functions";
-import { useQuery } from "@tanstack/react-query"; // potrzebne do asynchronicznego sp
+
 
 export const Route = createFileRoute("/alliance")({
   component: AllianceRoute,
