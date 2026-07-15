@@ -251,6 +251,64 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
           </div>
         </section>
       )}
+
+      {/* ========================================================================= */}
+      {/* 🟢 NOWA SEKCJA — STATYSTYKI PRZYCHODU PASYWNEGO Z TWYCH SAMOLOTÓW (FLEET LEASE) */}
+      {/* ========================================================================= */}
+      <section className="panel rounded-xl p-6 mt-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="mono text-[10px] uppercase tracking-[0.25em] text-runway">
+              Fleet Analytics
+            </div>
+            <div className="font-display text-lg font-semibold">
+              Passive income by aircraft
+            </div>
+          </div>
+          <div className="mono text-[11px] uppercase tracking-widest text-muted-foreground">
+            Lease payouts
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm text-left">
+            <thead>
+              <tr className="mono text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border/40">
+                <th className="p-2">Aircraft Tail</th>
+                <th className="p-2 text-right">Visitor Flights</th>
+                <th className="p-2 text-right">PAX Generated</th>
+                <th className="p-2 text-right">Share</th>
+              </tr>
+            </thead>
+            <tbody>
+              {!perAircraftPassive || perAircraftPassive.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="mono text-center text-xs text-muted-foreground/60 py-6 border-b border-dashed border-border/30 rounded-xl">
+                    no passive fleet lease income detected in this range
+                  </td>
+                </tr>
+              ) : (
+                perAircraftPassive.map((air) => {
+                  const share = totals.passive > 0 ? air.pax / totals.passive : 0;
+                  return (
+                    <tr key={air.tailNumber} className="border-t border-border/40 hover:bg-secondary/25 transition-colors">
+                      <td className="p-2">
+                        <span className="mono text-runway font-semibold">{air.tailNumber}</span>
+                      </td>
+                      <td className="mono p-2 text-right text-muted-foreground">{formatNumber(air.flights)}</td>
+                      <td className="mono p-2 text-right text-tier-gold font-medium">{formatNumber(Math.round(air.pax))}</td>
+                      <td className="mono p-2 text-right text-instrument">{(share * 100).toFixed(1)}%</td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      {/* ========================================================================= */}
+
+      
       {/* Coverage note */}
       <section className="panel rounded-xl border border-instrument/30 bg-instrument/5 p-4">
         <div className="flex items-start gap-3">
