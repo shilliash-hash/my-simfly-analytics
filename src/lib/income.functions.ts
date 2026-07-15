@@ -213,12 +213,11 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     let totalPassive = 0;
     let passiveFlights = 0;
     const perAirportPassive = new Map<string, { pax: number; flights: number }>();
-    // =========================================================================
-    // 🟢 WKLEJ TO DOKŁADNIE TUTAJ (Pod 'const perAirportPassive...'):
-    // =========================================================================
-    const perAircraftPassive = new Map<string, { pax: number; flights: number }>();
-    // =========================================================================
-    for (const r of passiveRows) {
+   for (const tail of myTails) {
+  perAircraftPassive.set(tail, { pax: 0, flights: 0 });
+}
+
+for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
       const amt = Number(r.pax ?? 0) || 0;
       totalPassive += amt;
