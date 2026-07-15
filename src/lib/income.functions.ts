@@ -100,25 +100,46 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
         // =========================================================================
-    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: AGREGATOR HISTORII WŁASNEJ FLOTY PILOTA
+    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: PANCERNY SELEKTOR SAMOLOTÓW Z PROFILU
     // =========================================================================
-    // Pobieramy unikalne rejestracje samolotów, którymi dany pilot lądował 
-    // na swoich własnych lotniskach (HUB), co automatycznie odcina cudze leasingi.
+    // Pobieramy zarejestrowany profil użytkownika z bazy, aby wyciągnąć jego
+    // oficjalną, zsynchronizowaną listę maszyn (identycznie jak podstrona /aircraft).
     let myTails: string[] = [];
 
-    if (ownedIcaos.length > 0) {
-      const { data: fleetDiscovery } = await supabaseAdmin
-        .from("simfly_flights")
-        .select("aircraft_tail_number")
-        .eq("username", username)
-        .in("destination_icao", ownedIcaos)
-        .not("aircraft_tail_number", "is", null);
+    // Odpytujemy tabelę użytkowników (w zależności od nazwy w Twoim Supabase: simfly_users lub simfly_profiles)
+    const { data: userProfile } = await supabaseAdmin
+      .from("simfly_users")
+      .select("payload")
+      .eq("username", username)
+      .single();
 
+    const rawPayload = (userProfile?.payload as any) || {};
+    const profileAirplanes = rawPayload.airplanes || rawPayload.fleet || [];
+
+    if (profileAirplanes.length > 0) {
       myTails = Array.from(
-        new Set((fleetDiscovery ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
+        new Set(profileAirplanes.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
+      ).filter(Boolean);
+    }
+
+    // FALLBACK AWARYJNY: Jeśli Twoja tabela użytkowników nazywa się simfly_profiles, 
+    // a kolumna to 'raw', system zabezpiecza pobranie danych:
+    if (myTails.length === 0) {
+      const { data: altProfile } = await supabaseAdmin
+        .from("simfly_profiles")
+        .select("raw")
+        .eq("username", username)
+        .single();
+        
+      const altPayload = (altProfile?.raw as any) || {};
+      const altAirplanes = altPayload.airplanes || altPayload.fleet || [];
+      
+      myTails = Array.from(
+        new Set(altAirplanes.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
       ).filter(Boolean);
     }
     // =========================================================================
+
 
 
 
