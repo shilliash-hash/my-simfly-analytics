@@ -153,7 +153,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         <HeadlineTile
           label="Total Income"
           value={formatNumber(Math.round(totals.total))}
-          hint={`Across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"}`}
+         hint={`Across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"} and traffic summary (visitor + own flights)`}
           accent="gold"
           icon={Coins}
         />
