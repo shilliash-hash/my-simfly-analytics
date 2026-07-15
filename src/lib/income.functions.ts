@@ -99,7 +99,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-       // =========================================================================
+         // =========================================================================
     // 🟢 PANCERNY I BEZPIECZNY PUNKT A: AGREGATOR FLOTY Z RYGLEM SKŁADNIOWYM SQL
     // =========================================================================
     // Zapytanie SQL wykona się wyłącznie wtedy, gdy tablica ownedIcaos posiada 
