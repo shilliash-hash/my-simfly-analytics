@@ -99,22 +99,21 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-       // =========================================================================
-    // 🟢 DYNAMICZNY I SYSTEMOWY PUNKT A: IMPORT PEŁNEJ FLOTY Z PAYLOADU SIMFLY
+         // =========================================================================
+    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: AGREGATOR HISTORII CAŁEJ FLOTY PILOTA
     // =========================================================================
-    // Importujemy oficjalną funkcję ładującą profil, dokładnie tak jak w /aircraft
-    const { getSimflyPayload } = await import("@/lib/simfly.functions");
-    
-    // Pobieramy pełną paczkę danych profilu użytkownika
-    const simflyPayload = await getSimflyPayload({ username });
-    
-    // Wyciągamy czystą listę wszystkich Twoich 6 samolotów systemowych
+    // Pobieramy absolutnie każdy unikalny numer ogonowy, na którym dany pilot
+    // osobiście wykonał jakikolwiek lot w bazie, co gwarantuje pełną listę 6 maszyn.
+    const { data: allTimeMyFlights } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("aircraft_tail_number")
+      .eq("username", username)
+      .not("aircraft_tail_number", "is", null);
+
     const myTails = Array.from(
-      new Set((simflyPayload?.airplanes || []).map((p: any) => (p.tailNumber || "").toUpperCase().trim()))
+      new Set((allTimeMyFlights ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
     ).filter(Boolean);
     // =========================================================================
-
-
 
 
     
