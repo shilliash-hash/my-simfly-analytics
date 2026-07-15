@@ -98,6 +98,19 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const owned = await fetchOwnedAirports(username, identity.nonce);
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
+
+    // =========================================================================
+    // 🟢 Dodatkowa funkcja: POBIERANIE NUMERÓW REJESTRACYJNYCH TWOJEJ FLOTY
+    // =========================================================================
+    const { data: myAircrafts } = await supabaseAdmin
+      .from("simfly_aircraft")
+      .select("tail_number")
+      .eq("owner_username", username);
+      
+    const myTails = (myAircrafts ?? []).map(a => (a.tail_number || "").toUpperCase().trim());
+    // =========================================================================
+
+    
     // 1) Active income — my flights.
     let activeQuery = supabaseAdmin
       .from("simfly_flights")
@@ -120,6 +133,33 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       const { data: rows } = await passiveQuery;
       passiveRows = (rows ?? []) as typeof passiveRows;
     }
+
+        // =========================================================================
+    // 🟢 KROK 2: TRZECIE, NIEZALEŻNE ZAPYTANIE — CZYSTY ZYSK Z LEASINGU FLOTY
+    // =========================================================================
+    let fleetLeaseRows: { mission_start_ts: string | null; pax: number | null; destination_icao: string | null; aircraft_tail_number: string | null }[] = [];
+    
+    if (myTails.length > 0) {
+      let fleetQuery = supabaseAdmin
+        .from("simfly_flights")
+        .select("mission_start_ts, pax, destination_icao, aircraft_tail_number")
+        .neq("username", username) // Lot visitora
+        .in("aircraft_tail_number", myTails); // Wykonany Twoim samolotem
+        
+      // Jeśli mamy zdefiniowane lotniska, odrzucamy lądowania u Ciebie (bo one już są bezpiecznie w passiveRows!)
+      if (ownedIcaos.length > 0) {
+        fleetQuery = fleetQuery.not("destination_icao", "in", `(${ownedIcaos.join(",")})`);
+      }
+        
+      if (startIso) fleetQuery = fleetQuery.gte("mission_start_ts", startIso);
+      fleetQuery = fleetQuery.order("mission_start_ts", { ascending: true }).limit(20000);
+      
+      const { data: fRows } = await fleetQuery;
+      fleetLeaseRows = (fRows ?? []) as typeof fleetLeaseRows;
+    }
+    // =========================================================================
+
+    
     const { data: activeData } = await activeQuery;
     const activeRows =
       ((activeData ?? []) as { mission_start_ts: string | null; total_reward: number | null; pax: number | null }[]);
@@ -141,6 +181,11 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     let totalPassive = 0;
     let passiveFlights = 0;
     const perAirportPassive = new Map<string, { pax: number; flights: number }>();
+    // =========================================================================
+    // 🟢 WKLEJ TO DOKŁADNIE TUTAJ (Pod 'const perAirportPassive...'):
+    // =========================================================================
+    const perAircraftPassive = new Map<string, { pax: number; flights: number }>();
+    // =========================================================================
     for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
       const amt = Number(r.pax ?? 0) || 0;
@@ -157,7 +202,40 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
         cur2.flights += 1;
         perAirportPassive.set(r.destination_icao, cur2);
       }
+      // =========================================================================
+      // 🟢 KROK B-1: ZLICZANIE FLOTY NA TWOICH LOTNISKACH (Wklejasz w linii 204)
+      // =========================================================================
+      const tail = (r.aircraft_tail_number || "").toUpperCase().trim();
+      if (tail && myTails.includes(tail)) {
+        const curFleet = perAircraftPassive.get(tail) ?? { pax: 0, flights: 0 };
+        curFleet.pax += amt; // Zliczamy tokeny PAX
+        curFleet.flights += 1;
+        perAircraftPassive.set(tail, curFleet);
+      }
     }
+        // 🟢 KROK B-2: NOWA PĘTLA DLA TWOICH SAMOLOTÓW NA OBCYCH PORTACH (Wklejasz w linii 216)
+    for (const r of fleetLeaseRows) {
+      if (!r.mission_start_ts) continue;
+      const k = dateKey(r.mission_start_ts);
+      const tokenEarnings = Number(r.pax ?? 0) || 0;
+      
+      totalPassive += tokenEarnings;
+      passiveFlights += 1;
+
+      const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
+      cur.passive += tokenEarnings;
+      cur.total += tokenEarnings;
+      buckets.set(k, cur);
+
+      const tail = (r.aircraft_tail_number || "").toUpperCase().trim();
+      if (tail) {
+        const curFleet = perAircraftPassive.get(tail) ?? { pax: 0, flights: 0 };
+        curFleet.pax += tokenEarnings;
+        curFleet.flights += 1;
+        perAircraftPassive.set(tail, curFleet);
+      }
+    }
+
     // Fill gaps in the timeseries for continuous charts.
     const timeseries = fillDailyGaps(buckets, startIso);
     // KPIs.
@@ -227,6 +305,17 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
         coverageFlights: activeFlights + passiveFlights,
       },
       perAirportPassive: perAirportArr,
+       // =========================================================================
+      // 🟢 KROK C: SFORMATOWANIE I WYPUSZCZENIE TABLICY FLOTY DO FRONTENDU (Linia 308)
+      // =========================================================================
+      perAircraftPassive: Array.from(perAircraftPassive.entries())
+        .map(([tail, v]) => ({
+          tailNumber: tail,
+          pax: v.pax,
+          flights: v.flights,
+        }))
+        .sort((a, b) => b.pax - a.pax),
+      // =========================================================================
       coverage: {
         earliestFlight: earliest,
         latestFlight: latest,
