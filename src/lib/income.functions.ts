@@ -143,7 +143,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const perAirportPassive = new Map<string, { pax: number; flights: number }>();
     for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
-      const amt = Number(r.pax ?? 0) || 0;
+      const amt = Number(r.total_reward ?? 0) || 0;
       totalPassive += amt;
       passiveFlights += 1;
       const k = dateKey(r.mission_start_ts);
