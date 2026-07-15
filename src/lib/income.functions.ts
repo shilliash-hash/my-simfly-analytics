@@ -104,15 +104,14 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao.toUpperCase().trim());
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
+       // =========================================================================
+    // 🟢 DYNAMICZNY PUNKT A: AGREGATOR FLOTY BAZUJĄCY NA ISTNIEJĄCYCH LOTNISKACH
     // =========================================================================
-    // 🟢 OSTATECZNY PUNKT A: AGREGATOR FLOTY BAZUJĄCY NA TWOICH LOTNISKACH HUB
-    // =========================================================================
-    // Wyciągamy Twoje samoloty z Twoich lotów, pod warunkiem, że dotyczyły one 
-    // Twojej własnej infrastruktury lotniskowej. Zapobiega to wciąganiu 
-    // cudzych leasingów branych na obcych portach i rozwiązuje błąd 500.
+    // Wykorzystujemy zadeklarowane już wyżej przez Ciebie zmienne ownedIcaos 
+    // oraz username. Pobieramy wyłącznie Twoje maszyny powiązane z Twoim HUB-em.
     let myTails: string[] = [];
     
-    if (ownedIcaos.length > 0) {
+    if (ownedIcaos && ownedIcaos.length > 0) {
       const { data: fleetDiscovery } = await supabaseAdmin
         .from("simfly_flights")
         .select("aircraft_tail_number")
@@ -125,6 +124,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       ).filter(Boolean);
     }
     // =========================================================================
+
 
     
     // 1) Active income — my flights.
