@@ -100,28 +100,20 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
        // =========================================================================
-    // 🟢 POPRAWIONY PUNKT A: PANCERNE I CZYSTE POBIERANIE WŁASNYCH SAMOLOTÓW
+    // 🟢 DYNAMICZNY I SYSTEMOWY PUNKT A: IMPORT PEŁNEJ FLOTY Z PAYLOADU SIMFLY
     // =========================================================================
-    // Wyciągamy Twoje samoloty bezpośrednio z tego samego źródła co podstrona /aircraft
-    // bez ponownego deklarowania istniejących już wyżej stałych lotniskowych.
+    // Importujemy oficjalną funkcję ładującą profil, dokładnie tak jak w /aircraft
+    const { getSimflyPayload } = await import("@/lib/simfly.functions");
+    
+    // Pobieramy pełną paczkę danych profilu użytkownika
+    const simflyPayload = await getSimflyPayload({ username });
+    
+    // Wyciągamy czystą listę wszystkich Twoich 6 samolotów systemowych
     const myTails = Array.from(
-      new Set((owned as any).airplanes?.map((p: any) => (p.tailNumber || "").toUpperCase().trim()) || [])
+      new Set((simflyPayload?.airplanes || []).map((p: any) => (p.tailNumber || "").toUpperCase().trim()))
     ).filter(Boolean);
-
-    // Bezpieczny fallback: jeśli obiekt owned nie ma w sobie sekcji airplanes,
-    // pobieramy rejestracje z Twoich lotów z wykluczeniem cudzych leasingów
-    if (myTails.length === 0) {
-      const { data: profilePayload } = await supabaseAdmin
-        .from("simfly_flights")
-        .select("aircraft_tail_number")
-        .eq("username", username)
-        .eq("total_reward", 0) 
-        .not("aircraft_tail_number", "is", null);
-        
-      const backupTails = (profilePayload ?? []).map(f => (f.aircraft_tail_number || "").toUpperCase().trim());
-      myTails.push(...Array.from(new Set(backupTails)));
-    }
     // =========================================================================
+
 
 
 
