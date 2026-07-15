@@ -99,21 +99,27 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-         // =========================================================================
-    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: AGREGATOR HISTORII CAŁEJ FLOTY PILOTA
+        // =========================================================================
+    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: AGREGATOR HISTORII WŁASNEJ FLOTY PILOTA
     // =========================================================================
-    // Pobieramy absolutnie każdy unikalny numer ogonowy, na którym dany pilot
-    // osobiście wykonał jakikolwiek lot w bazie, co gwarantuje pełną listę 6 maszyn.
-    const { data: allTimeMyFlights } = await supabaseAdmin
-      .from("simfly_flights")
-      .select("aircraft_tail_number")
-      .eq("username", username)
-      .not("aircraft_tail_number", "is", null);
+    // Pobieramy unikalne rejestracje samolotów, którymi dany pilot lądował 
+    // na swoich własnych lotniskach (HUB), co automatycznie odcina cudze leasingi.
+    let myTails: string[] = [];
 
-    const myTails = Array.from(
-      new Set((allTimeMyFlights ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
-    ).filter(Boolean);
+    if (ownedIcaos.length > 0) {
+      const { data: fleetDiscovery } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("aircraft_tail_number")
+        .eq("username", username)
+        .in("destination_icao", ownedIcaos)
+        .not("aircraft_tail_number", "is", null);
+
+      myTails = Array.from(
+        new Set((fleetDiscovery ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
+      ).filter(Boolean);
+    }
     // =========================================================================
+
 
 
     
