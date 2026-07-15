@@ -137,16 +137,15 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
         // =========================================================================
     // 🟢 KROK 2: TRZECIE, NIEZALEŻNE ZAPYTANIE — CZYSTY ZYSK Z LEASINGU FLOTY
     // =========================================================================
-    let fleetLeaseRows: { mission_start_ts: string | null; pax: number | null; destination_icao: string | null; aircraft_tail_number: string | null }[] = [];
+       let fleetLeaseRows: { mission_start_ts: string | null; pax: number | null; destination_icao: string | null; aircraft_tail_number: string | null }[] = [];
     
     if (myTails.length > 0) {
       let fleetQuery = supabaseAdmin
         .from("simfly_flights")
-        .select("mission_start_ts, pax, destination_icao, aircraft_tail_number")
-        .neq("username", username) // Lot visitora
-        .in("aircraft_tail_number", myTails); // Wykonany Twoim samolotem
+        // 🔥 DODAJEMY "raw" DO SELECTA, ABY MÓC PRZESZUKAĆ SUROWY LOG JSONB Z APILOTU!
+        .select("mission_start_ts, pax, destination_icao, aircraft_tail_number, raw")
+        .neq("username", username);
         
-      // Jeśli mamy zdefiniowane lotniska, odrzucamy lądowania u Ciebie (bo one już są bezpiecznie w passiveRows!)
       if (ownedIcaos.length > 0) {
         fleetQuery = fleetQuery.not("destination_icao", "in", `(${ownedIcaos.join(",")})`);
       }
@@ -155,8 +154,26 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       fleetQuery = fleetQuery.order("mission_start_ts", { ascending: true }).limit(20000);
       
       const { data: fRows } = await fleetQuery;
-      fleetLeaseRows = (fRows ?? []) as typeof fleetLeaseRows;
+      
+      // 🔥 PANCERNY PARSER: Filtrujemy dane, oczyszczając rejestracje z myślników i spacji!
+      if (fRows && fRows.length > 0) {
+        fleetLeaseRows = fRows.filter((r: any) => {
+          const colTail = (r.aircraft_tail_number || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+          const rawTail = (r.raw?.aircraft_tail_number || r.raw?.tail_number || "")
+            .toUpperCase()
+            .replace(/[^A-Z0-9]/g, "");
+            
+          const cleanMyTails = myTails.map(t => t.replace(/[^A-Z0-9]/g, ""));
+          return cleanMyTails.includes(colTail) || cleanMyTails.includes(rawTail);
+        }).map((r: any) => ({
+          mission_start_ts: r.mission_start_ts,
+          pax: r.pax,
+          destination_icao: r.destination_icao,
+          aircraft_tail_number: r.aircraft_tail_number || r.raw?.aircraft_tail_number || r.raw?.tail_number || ""
+        }));
+      }
     }
+
     // =========================================================================
 
     
