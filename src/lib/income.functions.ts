@@ -129,13 +129,12 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     let activeFlights = 0;
     for (const r of activeRows) {
       if (!r.mission_start_ts) continue;
-      const amt = Number((r as any).raw?.pax ?? r.pax ?? 0) || 0;
+      const amt = Number(r.pax ?? 0) || 0;
       totalActive += amt;
       activeFlights += 1;
       const k = dateKey(r.mission_start_ts);
       const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
       cur.active += amt;
-      cur.total += amt;
       buckets.set(k, cur);
     }
     let totalPassive = 0;
@@ -153,7 +152,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     
     for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
-     const amt = Number((r as any).raw?.pax ?? r.pax ?? 0) || 0;
+      const amt = Number(r.pax ?? 0) || 0;
       totalPassive += amt;
       passiveFlights += 1;
       const k = dateKey(r.mission_start_ts);
@@ -183,7 +182,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       if (!r.mission_start_ts) continue;
       const t = new Date(r.mission_start_ts).getTime();
       const age = now - t;
-      const amt = Number((r as any).raw?.pax ?? r.pax ?? 0) || 0;
+      const amt = Number(r.pax ?? 0) || 0;
       if (age <= 30 * day) last30 += amt;
       else if (age <= 60 * day) prev30 += amt;
     }
