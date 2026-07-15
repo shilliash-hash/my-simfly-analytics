@@ -99,25 +99,29 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-          // =========================================================================
-    // 🟢 POPRAWIONY DYNAMICZNY PUNKT A: PURE OWNED AIRCRAFT FILTER
+            // =========================================================================
+    // 🟢 OSTATECZNY PUNKT A: PARSER PRAWDZIWEJ WŁASNOŚCI FLOTY (AUTOMATYCZNY)
     // =========================================================================
-    const { data: myFlightTails } = await supabaseAdmin
+    // Twoje prawdziwe samoloty to te, które wygenerowały dla Ciebie przychód pasywny,
+    // gdy leciał nimi INNY pilot (visitor). To eliminuje maszyny, które Ty od kogoś pożyczałeś!
+    const { data: passiveFleetTails } = await supabaseAdmin
       .from("simfly_flights")
       .select("aircraft_tail_number")
-      .eq("username", username)
+      .neq("username", username) // Lot wykonany przez kogoś innego (visitora)
       .not("aircraft_tail_number", "is", null);
 
-    // Lista cudzych rejestracji, które Ty wypożyczałeś od innych i trzeba je odciąć:
-    const EXCLUDED_TAILS = ["XA-CCC", "TF-STR"]; // <-- Tutaj wpisujesz ogony, które nie są Twoje
+    // Aby filtr był super bezpieczny, dorzucamy Twoje 3 potwierdzone polskie maszyny na sztywno,
+    // na wypadek gdyby któraś w wybranym zakresie czasu nie wykonała lotu pasywnego.
+    const CORE_OWNED_TAILS = ["SP-EEK", "SP-SAT", "SP-SHY"];
 
-    // Tworzymy unikalną listę maszyn z bezwzględnym odcięciem cudzej własności
+    const discoveredTails = (passiveFleetTails ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim());
+    
+    // Łączymy wykryte pasywnie ogony z Twoim żelaznym rdzeniem floty i tworzymy czystą unikalną listę
     const myTails = Array.from(
-      new Set((myFlightTails ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
-    )
-    .filter(Boolean)
-    .filter((tail) => !EXCLUDED_TAILS.includes(tail)); // 🔥 BINGO: Usuwamy cudze samoloty z analizy!
+      new Set([...CORE_OWNED_TAILS, ...discoveredTails])
+    ).filter(Boolean);
     // =========================================================================
+
 
 
 
