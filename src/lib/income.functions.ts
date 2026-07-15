@@ -99,48 +99,30 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-        // =========================================================================
-    // 🟢 GENERYCZNY I AUTOMATYCZNY PUNKT A: PANCERNY SELEKTOR SAMOLOTÓW Z PROFILU
+         // =========================================================================
+    // 🟢 OSTATECZNY PUNKT A: SYSTEMOWY SELEKTOR SAMOLOTÓW Z PROFILU (GENERYCZNY)
     // =========================================================================
-    // Pobieramy zarejestrowany profil użytkownika z bazy, aby wyciągnąć jego
-    // oficjalną, zsynchronizowaną listę maszyn (identycznie jak podstrona /aircraft).
+    // Pobieramy oficjalny profil użytkownika dokładnie tak, jak robi to główna funkcja
+    // getSimflyPayload, co gwarantuje 100% dopasowania bez historii tras i cudzych leasingów.
     let myTails: string[] = [];
 
-    // Odpytujemy tabelę użytkowników (w zależności od nazwy w Twoim Supabase: simfly_users lub simfly_profiles)
-    const { data: userProfile } = await supabaseAdmin
-      .from("simfly_users")
-      .select("payload")
+    const { data: profile } = await supabaseAdmin
+      .from("simfly_profiles")
+      .select("raw")
       .eq("username", username)
       .single();
 
-    const rawPayload = (userProfile?.payload as any) || {};
-    const profileAirplanes = rawPayload.airplanes || rawPayload.fleet || [];
-
-    if (profileAirplanes.length > 0) {
-      myTails = Array.from(
-        new Set(profileAirplanes.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
-      ).filter(Boolean);
-    }
-
-    // FALLBACK AWARYJNY: Jeśli Twoja tabela użytkowników nazywa się simfly_profiles, 
-    // a kolumna to 'raw', system zabezpiecza pobranie danych:
-    if (myTails.length === 0) {
-      const { data: altProfile } = await supabaseAdmin
-        .from("simfly_profiles")
-        .select("raw")
-        .eq("username", username)
-        .single();
-        
-      const altPayload = (altProfile?.raw as any) || {};
-      const altAirplanes = altPayload.airplanes || altPayload.fleet || [];
+    if (profile?.raw) {
+      const rawData = profile.raw as any;
+      
+      // Wyciągamy samoloty z obiektu raw (obsługujemy pole 'airplanes', 'fleet' lub 'aircraft')
+      const aircraftList = rawData.airplanes || rawData.fleet || rawData.aircraft || [];
       
       myTails = Array.from(
-        new Set(altAirplanes.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
+        new Set(aircraftList.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
       ).filter(Boolean);
     }
     // =========================================================================
-
-
 
 
     
