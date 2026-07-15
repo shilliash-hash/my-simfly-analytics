@@ -241,8 +241,6 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       composition,
       timeseries: cleanTimeseries, // 🟢 PODMIENIAMY LINIE 245: Przekazujemy wyprostowany wykres!
       kpis: {
-
-      kpis: {
         passiveShare,
         dailyAverage,
         passiveMomentum,
