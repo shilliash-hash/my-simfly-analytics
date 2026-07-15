@@ -99,16 +99,23 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
+       // =========================================================================
+    // 🟢 DYNAMICZNY PUNKT A: WYCIĄGAMY REJESTRACJE MOICH MASZYN Z MOICH LOTÓW
     // =========================================================================
-    // 🟢 Dodatkowa funkcja: POBIERANIE NUMERÓW REJESTRACYJNYCH TWOJEJ FLOTY
+    // Ponieważ nie ma tabeli simfly_aircraft, pobieramy unikalne numery ogonowe, 
+    // na których Ty ('shill') osobiście wykonałeś misje w historii.
+    const { data: myFlightTails } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("aircraft_tail_number")
+      .eq("username", username)
+      .not("aircraft_tail_number", "is", null);
+
+    // Oczyszczamy i tworzymy unikalną listę Twoich maszyn (np. ["LN-RTA", "LN-KEY"])
+    const myTails = Array.from(
+      new Set((myFlightTails ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
+    ).filter(Boolean);
     // =========================================================================
-    const { data: myAircrafts } = await supabaseAdmin
-      .from("simfly_aircraft")
-      .select("tail_number")
-      .eq("owner_username", username);
-      
-    const myTails = (myAircrafts ?? []).map(a => (a.tail_number || "").toUpperCase().trim());
-    // =========================================================================
+
 
     
     // 1) Active income — my flights.
