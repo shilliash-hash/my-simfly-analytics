@@ -252,8 +252,8 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         </section>
       )}
 
-            {/* ========================================================================= */}
-      {/* 🟢 NOWA, ODPOWNA NA ReferenceError SEKCJA — INCOME Z SAMOLOTÓW FLOTY     */}
+           {/* ========================================================================= */}
+      {/* 🟢 PANCERNA SEKCJA — STATYSTYKI PRZYCHODU FLOTY (ODPORNA NA ReferenceError)*/}
       {/* ========================================================================= */}
       <section className="panel rounded-xl p-6 mt-6">
         <div className="flex items-center justify-between mb-4">
@@ -266,7 +266,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
             </div>
           </div>
           <div className="mono text-[11px] uppercase tracking-widest text-muted-foreground">
-            Lease payouts
+            % of passive income
           </div>
         </div>
 
@@ -281,7 +281,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
               </tr>
             </thead>
             <tbody>
-              {/* 🔒 ZABEZPIECZENIE: Czytamy perAircraftPassive bezpośrednio z obiektu data */}
+              {/* Zabezpieczenie: czytamy perAircraftPassive bezpośrednio z obiektu data */}
               {!data?.perAircraftPassive || data.perAircraftPassive.length === 0 ? (
                 <tr>
                   <td colSpan={4} className="mono text-center text-xs text-muted-foreground/60 py-6 border-b border-dashed border-border/30 rounded-xl">
@@ -290,7 +290,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
                 </tr>
               ) : (
                 data.perAircraftPassive.map((air) => {
-                  {/* 🔒 ZABEZPIECZENIE: Pobieramy dane totals z obiektu data */}
+                  {/* Pancerne wyliczanie procentów bezpośrednio z obiektu totals */}
                   const totalPassivePax = data.totals?.passive || 1;
                   const share = air.pax / totalPassivePax;
                   
@@ -317,7 +317,6 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         </div>
       </section>
       {/* ========================================================================= */}
-
 
 
       
