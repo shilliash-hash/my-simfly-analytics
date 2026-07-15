@@ -99,32 +99,16 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-         // =========================================================================
-    // 🟢 OSTATECZNY PUNKT A: SYSTEMOWY SELEKTOR SAMOLOTÓW Z PROFILU (GENERYCZNY)
+      // =========================================================================
+    // 🟢 PUNKT A: POBIERANIE SAMOLOTÓW 1:1 ZE ŹRÓDŁA LOVABLE (Dopasowane do lotnisk!)
     // =========================================================================
-    // Pobieramy oficjalny profil użytkownika dokładnie tak, jak robi to główna funkcja
-    // getSimflyPayload, co gwarantuje 100% dopasowania bez historii tras i cudzych leasingów.
-    let myTails: string[] = [];
-
-    const { data: profile } = await supabaseAdmin
-      .from("simfly_profiles")
-      .select("raw")
-      .eq("username", username)
-      .single();
-
-    if (profile?.raw) {
-      const rawData = profile.raw as any;
-      
-      // Wyciągamy samoloty z obiektu raw (obsługujemy pole 'airplanes', 'fleet' lub 'aircraft')
-      const aircraftList = rawData.airplanes || rawData.fleet || rawData.aircraft || [];
-      
-      myTails = Array.from(
-        new Set(aircraftList.map((p: any) => (p.tailNumber || p.tail_number || "").toUpperCase().trim()))
-      ).filter(Boolean);
-    }
+    // Nie odpytujemy baz danych ani nieistniejących funkcji. Wyciągamy Twoje 
+    // oficjalne samoloty z tablicy "airplanes", którą system już posiada w pamięci!
+    const myTails = Array.from(
+      new Set((airplanes ?? []).map((p: any) => (p.tailNumber || "").toUpperCase().trim()))
+    ).filter(Boolean);
     // =========================================================================
-
-
+ 
     
     // 1) Active income — my flights.
     let activeQuery = supabaseAdmin
