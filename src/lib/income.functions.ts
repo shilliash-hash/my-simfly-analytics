@@ -99,24 +99,29 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
+       // =========================================================================
+    // 🟢 PANCERNY I BEZPIECZNY PUNKT A: AGREGATOR FLOTY Z RYGLEM SKŁADNIOWYM SQL
     // =========================================================================
-    // 🟢 DYNAMICZNY PUNKT A: AGREGATOR FLOTY BAZUJĄCY NA ISTNIEJĄCYCH LOTNISKACH
-    // =========================================================================
-    // Wykorzystujemy zadeklarowane już wyżej przez Ciebie zmienne ownedIcaos 
-    // oraz username. Pobieramy wyłącznie Twoje maszyny powiązane z Twoim HUB-em.
+    // Zapytanie SQL wykona się wyłącznie wtedy, gdy tablica ownedIcaos posiada 
+    // kody lotnisk. Zapobiega to wstrzykiwaniu pustych nawiasów .in.(), które 
+    // crashowały serwer i wywoływały błąd "No data yet".
     let myTails: string[] = [];
     
     if (ownedIcaos && ownedIcaos.length > 0) {
-      const { data: fleetDiscovery } = await supabaseAdmin
+      const { data: fleetDiscovery, error: fleetError } = await supabaseAdmin
         .from("simfly_flights")
         .select("aircraft_tail_number")
         .eq("username", username)
         .or(`departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`)
         .not("aircraft_tail_number", "is", null);
 
-      myTails = Array.from(
-        new Set((fleetDiscovery ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
-      ).filter(Boolean);
+      if (fleetError) {
+        console.error("[FLEET DISCOVERY SQL ERROR]:", fleetError);
+      } else if (fleetDiscovery) {
+        myTails = Array.from(
+          new Set(fleetDiscovery.map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
+        ).filter(Boolean);
+      }
     }
     // =========================================================================
 
