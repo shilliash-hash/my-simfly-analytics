@@ -252,8 +252,8 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         </section>
       )}
 
-      {/* ========================================================================= */}
-      {/* 🟢 NOWA SEKCJA — STATYSTYKI PRZYCHODU PASYWNEGO Z TWYCH SAMOLOTÓW (FLEET LEASE) */}
+         {/* ========================================================================= */}
+      {/* 🟢 NOWA, ODPOWNA NA BŁĘDY HYDRACJI SEKCJA — STATYSTYKI PRZYCHODU FLOTY    */}
       {/* ========================================================================= */}
       <section className="panel rounded-xl p-6 mt-6">
         <div className="flex items-center justify-between mb-4">
@@ -270,43 +270,50 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
           </div>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm text-left">
-            <thead>
-              <tr className="mono text-[10px] uppercase tracking-widest text-muted-foreground border-b border-border/40">
-                <th className="p-2">Aircraft Tail</th>
-                <th className="p-2 text-right">Visitor Flights</th>
-                <th className="p-2 text-right">PAX Generated</th>
-                <th className="p-2 text-right">Share</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!perAircraftPassive || perAircraftPassive.length === 0 ? (
-                <tr>
-                  <td colSpan={4} className="mono text-center text-xs text-muted-foreground/60 py-6 border-b border-dashed border-border/30 rounded-xl">
-                    no passive fleet lease income detected in this range
-                  </td>
-                </tr>
-              ) : (
-                perAircraftPassive.map((air) => {
-                  const share = totals.passive > 0 ? air.pax / totals.passive : 0;
-                  return (
-                    <tr key={air.tailNumber} className="border-t border-border/40 hover:bg-secondary/25 transition-colors">
-                      <td className="p-2">
-                        <span className="mono text-runway font-semibold">{air.tailNumber}</span>
-                      </td>
-                      <td className="mono p-2 text-right text-muted-foreground">{formatNumber(air.flights)}</td>
-                      <td className="mono p-2 text-right text-tier-gold font-medium">{formatNumber(Math.round(air.pax))}</td>
-                      <td className="mono p-2 text-right text-instrument">{(share * 100).toFixed(1)}%</td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+        <div className="grid gap-2">
+          {/* Bezpieczne nagłówki kolumn oparte na Flexbox/Grid */}
+          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground grid grid-cols-4 px-3 py-2 border-b border-border/40">
+            <span>Aircraft Tail</span>
+            <span className="text-right">Visitor Flights</span>
+            <span className="text-right">PAX Generated</span>
+            <span className="text-right">Share</span>
+          </div>
+
+          {/* Renderowanie bezpiecznych wierszy */}
+          {!perAircraftPassive || perAircraftPassive.length === 0 ? (
+            <div className="mono text-center text-xs text-muted-foreground/60 py-6 border border-dashed border-border/30 rounded-xl mt-2">
+              no passive fleet lease income detected in this range
+            </div>
+          ) : (
+            perAircraftPassive.map((air) => {
+              const share = totalPassive > 0 ? air.pax / totalPassive : 0;
+              return (
+                <div 
+                  key={air.tailNumber} 
+                  className="grid grid-cols-4 items-center px-3 py-2.5 text-sm border-b border-border/10 hover:bg-secondary/25 rounded-lg transition-all group"
+                >
+                  <span>
+                    <span className="mono text-runway font-semibold group-hover:text-runway/80 transition-colors">
+                      {air.tailNumber}
+                    </span>
+                  </span>
+                  <span className="mono text-right text-muted-foreground">
+                    {formatNumber(air.flights)}
+                  </span>
+                  <span className="mono text-right text-tier-gold font-medium">
+                    {formatNumber(Math.round(air.pax))}
+                  </span>
+                  <span className="mono text-right text-instrument">
+                    {(share * 100).toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })
+          )}
         </div>
       </section>
       {/* ========================================================================= */}
+
 
       
       {/* Coverage note */}
