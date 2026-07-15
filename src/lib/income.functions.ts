@@ -135,21 +135,12 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       const k = dateKey(r.mission_start_ts);
       const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
       cur.active += amt;
+      cur.total += amt;
       buckets.set(k, cur);
     }
     let totalPassive = 0;
     let passiveFlights = 0;
     const perAirportPassive = new Map<string, { pax: number; flights: number }>();
-
-     // =========================================================================
-    // 🟢 TUTAJ WKLEJASZ INICJALIZACJĘ FLOTY ZERAMI (W linii 144):
-    // =========================================================================
-    const perAircraftPassive = new Map<string, { pax: number; flights: number }>();
-    for (const tail of myTails) {
-      perAircraftPassive.set(tail, { pax: 0, flights: 0 });
-    }
-    // =========================================================================
-    
     for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
       const amt = Number(r.pax ?? 0) || 0;
@@ -158,6 +149,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       const k = dateKey(r.mission_start_ts);
       const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
       cur.passive += amt;
+      cur.total += amt;
       buckets.set(k, cur);
       if (r.destination_icao) {
         const cur2 = perAirportPassive.get(r.destination_icao) ?? { pax: 0, flights: 0 };
@@ -211,35 +203,21 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     ];
     const earliest = timeseries[0]?.date ?? null;
     const latest = timeseries[timeseries.length - 1]?.date ?? null;
-    
-      // 🟢 BEZPIECZNE WYRÓWNANIE WYKRESÓW NA SAMYM DOLE (PRZED RETURNEM):
-    const cleanTimeseries = timeseries
-      .sort((a, b) => a.date.localeCompare(b.date))
-      .map(b => {
-        const isTargetDay = b.date === "2026-07-14";
-        return {
-          ...b,
-          active: isTargetDay ? 9.8 : Number(Number(b.active || 0).toFixed(2)),
-          passive: isTargetDay ? 6.63 : Number(Number(b.passive || 0).toFixed(2)),
-          total: isTargetDay ? 16.43 : Number((Number(b.active || 0) + Number(b.passive || 0)).toFixed(2))
-        };
-      });
-
-    return { // (To jest istniejąca linia 231 z Twojego zdjęcia)
+    return {
       generatedAt: new Date().toISOString(),
       me: { username },
       range,
-      rangeStart: startIso || (earliest ? `${earliest}T00:00:00.000Z` : new Date(0).toISOString()),
+      rangeStart: startIso ?? (earliest ? `${earliest}T00:00:00.000Z` : new Date(0).toISOString()),
       totals: {
-        active: Number(totalActive.toFixed(2)),
-        passive: Number(totalPassive.toFixed(2)),
-        total: Number((totalActive + totalPassive).toFixed(2)), // Wymuszamy bezpieczną sumę ułamkową
+        active: totalActive,
+        passive: totalPassive,
+        total,
         activeFlights,
         passiveFlights,
         ownedAirports: owned.length,
       },
       composition,
-      timeseries: cleanTimeseries, // 🟢 PODMIENIAMY LINIE 245: Przekazujemy wyprostowany wykres!
+      timeseries,
       kpis: {
         passiveShare,
         dailyAverage,
