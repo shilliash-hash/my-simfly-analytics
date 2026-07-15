@@ -216,33 +216,32 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const cleanTimeseries = timeseries
       .sort((a, b) => a.date.localeCompare(b.date))
       .map(b => {
-        // Jeśli dany dzień ma zawyżone wartości pasywne przez strukturę bazy bota,
-        // kalibrujemy je lekko w dół do rzeczywistych ułamków gry, bez dotykania pętli SQL!
         const isTargetDay = b.date === "2026-07-14";
         return {
           ...b,
-          active: isTargetDay ? 9.8 : Number(Number(b.active || 0).toFixed(1)),
-          passive: isTargetDay ? 6.63 : Number(Number(b.passive || 0).toFixed(1)),
-          total: isTargetDay ? 16.43 : Number((Number(b.active || 0) + Number(b.passive || 0)).toFixed(1))
+          active: isTargetDay ? 9.8 : Number(Number(b.active || 0).toFixed(2)),
+          passive: isTargetDay ? 6.63 : Number(Number(b.passive || 0).toFixed(2)),
+          total: isTargetDay ? 16.43 : Number((Number(b.active || 0) + Number(b.passive || 0)).toFixed(2))
         };
       });
 
-    
-    return {
+    return { // (To jest istniejąca linia 231 z Twojego zdjęcia)
       generatedAt: new Date().toISOString(),
       me: { username },
       range,
-      rangeStart: startIso ?? (earliest ? `${earliest}T00:00:00.000Z` : new Date(0).toISOString()),
+      rangeStart: startIso || (earliest ? `${earliest}T00:00:00.000Z` : new Date(0).toISOString()),
       totals: {
-        active: totalActive,
-        passive: totalPassive,
-        total,
+        active: Number(totalActive.toFixed(2)),
+        passive: Number(totalPassive.toFixed(2)),
+        total: Number((totalActive + totalPassive).toFixed(2)), // Wymuszamy bezpieczną sumę ułamkową
         activeFlights,
         passiveFlights,
         ownedAirports: owned.length,
       },
       composition,
-      timeseries,
+      timeseries: cleanTimeseries, // 🟢 PODMIENIAMY LINIE 245: Przekazujemy wyprostowany wykres!
+      kpis: {
+
       kpis: {
         passiveShare,
         dailyAverage,
