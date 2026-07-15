@@ -129,7 +129,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     let activeFlights = 0;
     for (const r of activeRows) {
       if (!r.mission_start_ts) continue;
-      const amt = Number(r.total_reward ?? 0) || 0;
+      const amt = Number(r.pax ?? 0) || 0;
       totalActive += amt;
       activeFlights += 1;
       const k = dateKey(r.mission_start_ts);
