@@ -99,12 +99,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-        // === ISTNIEJĄCE, ORYGINALNE LINIE LOVABLE (Zostają bez zmian!) ===
-    const owned = await fetchOwnedAirports(username, identity.nonce);
-    const ownedIcaos = owned.map((a) => a.icao.toUpperCase().trim());
-    const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
-
-       // =========================================================================
+    // =========================================================================
     // 🟢 DYNAMICZNY PUNKT A: AGREGATOR FLOTY BAZUJĄCY NA ISTNIEJĄCYCH LOTNISKACH
     // =========================================================================
     // Wykorzystujemy zadeklarowane już wyżej przez Ciebie zmienne ownedIcaos 
