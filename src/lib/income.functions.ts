@@ -99,22 +99,26 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-       // =========================================================================
-    // 🟢 DYNAMICZNY PUNKT A: WYCIĄGAMY REJESTRACJE MOICH MASZYN Z MOICH LOTÓW
+          // =========================================================================
+    // 🟢 POPRAWIONY DYNAMICZNY PUNKT A: PURE OWNED AIRCRAFT FILTER
     // =========================================================================
-    // Ponieważ nie ma tabeli simfly_aircraft, pobieramy unikalne numery ogonowe, 
-    // na których Ty ('shill') osobiście wykonałeś misje w historii.
     const { data: myFlightTails } = await supabaseAdmin
       .from("simfly_flights")
       .select("aircraft_tail_number")
       .eq("username", username)
       .not("aircraft_tail_number", "is", null);
 
-    // Oczyszczamy i tworzymy unikalną listę Twoich maszyn (np. ["LN-RTA", "LN-KEY"])
+    // Lista cudzych rejestracji, które Ty wypożyczałeś od innych i trzeba je odciąć:
+    const EXCLUDED_TAILS = ["XA-CCC", "TF-STR"]; // <-- Tutaj wpisujesz ogony, które nie są Twoje
+
+    // Tworzymy unikalną listę maszyn z bezwzględnym odcięciem cudzej własności
     const myTails = Array.from(
       new Set((myFlightTails ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
-    ).filter(Boolean);
+    )
+    .filter(Boolean)
+    .filter((tail) => !EXCLUDED_TAILS.includes(tail)); // 🔥 BINGO: Usuwamy cudze samoloty z analizy!
     // =========================================================================
+
 
 
     
