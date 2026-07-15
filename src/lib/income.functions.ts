@@ -99,16 +99,33 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-      // =========================================================================
-    // 🟢 PUNKT A: POBIERANIE SAMOLOTÓW 1:1 ZE ŹRÓDŁA LOVABLE (Dopasowane do lotnisk!)
+        // === ISTNIEJĄCE, ORYGINALNE LINIE LOVABLE (Zostają bez zmian!) ===
+    const owned = await fetchOwnedAirports(username, identity.nonce);
+    const ownedIcaos = owned.map((a) => a.icao.toUpperCase().trim());
+    const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
+
     // =========================================================================
-    // Nie odpytujemy baz danych ani nieistniejących funkcji. Wyciągamy Twoje 
-    // oficjalne samoloty z tablicy "airplanes", którą system już posiada w pamięci!
-    const myTails = Array.from(
-      new Set((airplanes ?? []).map((p: any) => (p.tailNumber || "").toUpperCase().trim()))
-    ).filter(Boolean);
+    // 🟢 OSTATECZNY PUNKT A: AGREGATOR FLOTY BAZUJĄCY NA TWOICH LOTNISKACH HUB
     // =========================================================================
- 
+    // Wyciągamy Twoje samoloty z Twoich lotów, pod warunkiem, że dotyczyły one 
+    // Twojej własnej infrastruktury lotniskowej. Zapobiega to wciąganiu 
+    // cudzych leasingów branych na obcych portach i rozwiązuje błąd 500.
+    let myTails: string[] = [];
+    
+    if (ownedIcaos.length > 0) {
+      const { data: fleetDiscovery } = await supabaseAdmin
+        .from("simfly_flights")
+        .select("aircraft_tail_number")
+        .eq("username", username)
+        .or(`departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`)
+        .not("aircraft_tail_number", "is", null);
+
+      myTails = Array.from(
+        new Set((fleetDiscovery ?? []).map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
+      ).filter(Boolean);
+    }
+    // =========================================================================
+
     
     // 1) Active income — my flights.
     let activeQuery = supabaseAdmin
