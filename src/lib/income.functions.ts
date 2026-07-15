@@ -99,42 +99,29 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
 
-        // =========================================================================
-    // 🟢 OSTATECZNY PUNKT A: PANCERNY I GENERYCZNY FILTR SAMOLOTÓW Z PAYLOADU
+       // =========================================================================
+    // 🟢 POPRAWIONY PUNKT A: PANCERNE I CZYSTE POBIERANIE WŁASNYCH SAMOLOTÓW
     // =========================================================================
-    // Pobieramy lotniska pilota (istniejący kod)
-    const owned = await fetchOwnedAirports(username, identity.nonce);
-    const ownedIcaos = owned.map((a) => a.icao.toUpperCase().trim());
-    const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
-
-    // 🔥 NOWOŚĆ: Wyciągamy Twoje samoloty bezpośrednio z tego samego źródła co podstrona /aircraft!
-    // Kod jest w 100% dynamiczny i wyciągnie własne maszyny dla każdego zalogowanego pilota.
-    const { data: simflyData } = await supabaseAdmin
-      .from("simfly_flights") // lub wywołanie funkcji jeśli bot mapował to przez funkcję serwerową
-      .select("raw") // Jeśli dane lecą z cache, bot pobiera cały stan użytkownika
-      
-    // Ponieważ funkcja fetchOwnedAirports dostarcza nam już pełną strukturę profilu użytkownika z chmury,
-    // najbezpieczniej jest zmapować tablicę bezpośrednio z Twoich lotów lub wyciągnąć z obiektu 'owned', 
-    // jeśli posiada on sekcję airplanes. Jeśli nie, pobieramy zarejestrowane ogony z Twojej bazy profilu:
+    // Wyciągamy Twoje samoloty bezpośrednio z tego samego źródła co podstrona /aircraft
+    // bez ponownego deklarowania istniejących już wyżej stałych lotniskowych.
     const myTails = Array.from(
       new Set((owned as any).airplanes?.map((p: any) => (p.tailNumber || "").toUpperCase().trim()) || [])
     ).filter(Boolean);
 
-    // Awaryjny, bezpieczny fallback (Gwarancja, że jeśli powyższe pole zmieni nazwę, system przeczyta Twoje własne loty):
+    // Bezpieczny fallback: jeśli obiekt owned nie ma w sobie sekcji airplanes,
+    // pobieramy rejestracje z Twoich lotów z wykluczeniem cudzych leasingów
     if (myTails.length === 0) {
       const { data: profilePayload } = await supabaseAdmin
         .from("simfly_flights")
         .select("aircraft_tail_number")
         .eq("username", username)
-        .eq("total_reward", 0) // w SimFly własne loty bez leasingu mają unikalną sygnaturę opłat
+        .eq("total_reward", 0) 
         .not("aircraft_tail_number", "is", null);
         
       const backupTails = (profilePayload ?? []).map(f => (f.aircraft_tail_number || "").toUpperCase().trim());
       myTails.push(...Array.from(new Set(backupTails)));
     }
     // =========================================================================
-
-
 
 
 
