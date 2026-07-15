@@ -149,7 +149,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       const k = dateKey(r.mission_start_ts);
       const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
       cur.passive += amt;
-      cur.total += amt;
+      //     cur.total += amt;
       buckets.set(k, cur);
       if (r.destination_icao) {
         const cur2 = perAirportPassive.get(r.destination_icao) ?? { pax: 0, flights: 0 };
@@ -159,7 +159,14 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       }
     }
     // Fill gaps in the timeseries for continuous charts.
-    const timeseries = fillDailyGaps(buckets, startIso);
+    const timeseriesRaw = fillDailyGaps(buckets, startIso);
+
+const timeseries = timeseriesRaw.map(b => ({
+  ...b,
+  active: Number(Number(b.active || 0).toFixed(2)),
+  passive: Number(Number(b.passive || 0).toFixed(2)),
+  total: Number((Number(b.active || 0) + Number(b.passive || 0)).toFixed(2))
+}));
     // KPIs.
     const total = totalActive + totalPassive;
     const passiveShare = total > 0 ? totalPassive / total : 0;
