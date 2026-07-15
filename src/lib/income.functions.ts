@@ -98,35 +98,6 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     const owned = await fetchOwnedAirports(username, identity.nonce);
     const ownedIcaos = owned.map((a) => a.icao);
     const ownedNameByIcao = new Map(owned.map((a) => [a.icao, a.name]));
-
-         // =========================================================================
-    // 🟢 PANCERNY I BEZPIECZNY PUNKT A: AGREGATOR FLOTY Z RYGLEM SKŁADNIOWYM SQL
-    // =========================================================================
-    // Zapytanie SQL wykona się wyłącznie wtedy, gdy tablica ownedIcaos posiada 
-    // kody lotnisk. Zapobiega to wstrzykiwaniu pustych nawiasów .in.(), które 
-    // crashowały serwer i wywoływały błąd "No data yet".
-    let myTails: string[] = [];
-    
-    if (ownedIcaos && ownedIcaos.length > 0) {
-      const { data: fleetDiscovery, error: fleetError } = await supabaseAdmin
-        .from("simfly_flights")
-        .select("aircraft_tail_number")
-        .eq("username", username)
-        .or(`departure_icao.in.(${ownedIcaos.join(",")}),destination_icao.in.(${ownedIcaos.join(",")})`)
-        .not("aircraft_tail_number", "is", null);
-
-      if (fleetError) {
-        console.error("[FLEET DISCOVERY SQL ERROR]:", fleetError);
-      } else if (fleetDiscovery) {
-        myTails = Array.from(
-          new Set(fleetDiscovery.map((f) => (f.aircraft_tail_number || "").toUpperCase().trim()))
-        ).filter(Boolean);
-      }
-    }
-    // =========================================================================
-
-
-    
     // 1) Active income — my flights.
     let activeQuery = supabaseAdmin
       .from("simfly_flights")
@@ -149,50 +120,6 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
       const { data: rows } = await passiveQuery;
       passiveRows = (rows ?? []) as typeof passiveRows;
     }
-
-        // =========================================================================
-    // 🟢 KROK 2: TRZECIE, NIEZALEŻNE ZAPYTANIE — CZYSTY ZYSK Z LEASINGU FLOTY
-    // =========================================================================
-       let fleetLeaseRows: { mission_start_ts: string | null; pax: number | null; destination_icao: string | null; aircraft_tail_number: string | null }[] = [];
-    
-    if (myTails.length > 0) {
-      let fleetQuery = supabaseAdmin
-        .from("simfly_flights")
-        // 🔥 DODAJEMY "raw" DO SELECTA, ABY MÓC PRZESZUKAĆ SUROWY LOG JSONB Z APILOTU!
-        .select("mission_start_ts, pax, destination_icao, aircraft_tail_number, raw")
-        .neq("username", username);
-        
-      if (ownedIcaos.length > 0) {
-        fleetQuery = fleetQuery.not("destination_icao", "in", `(${ownedIcaos.join(",")})`);
-      }
-        
-      if (startIso) fleetQuery = fleetQuery.gte("mission_start_ts", startIso);
-      fleetQuery = fleetQuery.order("mission_start_ts", { ascending: true }).limit(20000);
-      
-      const { data: fRows } = await fleetQuery;
-      
-      // 🔥 PANCERNY PARSER: Filtrujemy dane, oczyszczając rejestracje z myślników i spacji!
-      if (fRows && fRows.length > 0) {
-        fleetLeaseRows = fRows.filter((r: any) => {
-          const colTail = (r.aircraft_tail_number || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-          const rawTail = (r.raw?.aircraft_tail_number || r.raw?.tail_number || "")
-            .toUpperCase()
-            .replace(/[^A-Z0-9]/g, "");
-            
-          const cleanMyTails = myTails.map(t => t.replace(/[^A-Z0-9]/g, ""));
-          return cleanMyTails.includes(colTail) || cleanMyTails.includes(rawTail);
-        }).map((r: any) => ({
-          mission_start_ts: r.mission_start_ts,
-          pax: r.pax,
-          destination_icao: r.destination_icao,
-          aircraft_tail_number: r.aircraft_tail_number || r.raw?.aircraft_tail_number || r.raw?.tail_number || ""
-        }));
-      }
-    }
-
-    // =========================================================================
-
-    
     const { data: activeData } = await activeQuery;
     const activeRows =
       ((activeData ?? []) as { mission_start_ts: string | null; total_reward: number | null; pax: number | null }[]);
@@ -214,11 +141,7 @@ export const getIncomeSummary = createServerFn({ method: "GET" })
     let totalPassive = 0;
     let passiveFlights = 0;
     const perAirportPassive = new Map<string, { pax: number; flights: number }>();
-   for (const tail of myTails) {
-  perAircraftPassive.set(tail, { pax: 0, flights: 0 });
-}
-
-for (const r of passiveRows) {
+    for (const r of passiveRows) {
       if (!r.mission_start_ts) continue;
       const amt = Number(r.pax ?? 0) || 0;
       totalPassive += amt;
@@ -234,40 +157,7 @@ for (const r of passiveRows) {
         cur2.flights += 1;
         perAirportPassive.set(r.destination_icao, cur2);
       }
-      // =========================================================================
-      // 🟢 KROK B-1: ZLICZANIE FLOTY NA TWOICH LOTNISKACH (Wklejasz w linii 204)
-      // =========================================================================
-      const tail = (r.aircraft_tail_number || "").toUpperCase().trim();
-      if (tail && myTails.includes(tail)) {
-        const curFleet = perAircraftPassive.get(tail) ?? { pax: 0, flights: 0 };
-        curFleet.pax += amt; // Zliczamy tokeny PAX
-        curFleet.flights += 1;
-        perAircraftPassive.set(tail, curFleet);
-      }
     }
-        // 🟢 KROK B-2: NOWA PĘTLA DLA TWOICH SAMOLOTÓW NA OBCYCH PORTACH (Wklejasz w linii 216)
-    for (const r of fleetLeaseRows) {
-      if (!r.mission_start_ts) continue;
-      const k = dateKey(r.mission_start_ts);
-      const tokenEarnings = Number(r.pax ?? 0) || 0;
-      
-      totalPassive += tokenEarnings;
-      passiveFlights += 1;
-
-      const cur = buckets.get(k) ?? { date: k, active: 0, passive: 0, total: 0 };
-      cur.passive += tokenEarnings;
-      cur.total += tokenEarnings;
-      buckets.set(k, cur);
-
-      const tail = (r.aircraft_tail_number || "").toUpperCase().trim();
-      if (tail) {
-        const curFleet = perAircraftPassive.get(tail) ?? { pax: 0, flights: 0 };
-        curFleet.pax += tokenEarnings;
-        curFleet.flights += 1;
-        perAircraftPassive.set(tail, curFleet);
-      }
-    }
-
     // Fill gaps in the timeseries for continuous charts.
     const timeseries = fillDailyGaps(buckets, startIso);
     // KPIs.
@@ -337,17 +227,6 @@ for (const r of passiveRows) {
         coverageFlights: activeFlights + passiveFlights,
       },
       perAirportPassive: perAirportArr,
-       // =========================================================================
-      // 🟢 KROK C: SFORMATOWANIE I WYPUSZCZENIE TABLICY FLOTY DO FRONTENDU (Linia 308)
-      // =========================================================================
-      perAircraftPassive: Array.from(perAircraftPassive.entries())
-        .map(([tail, v]) => ({
-          tailNumber: tail,
-          pax: v.pax,
-          flights: v.flights,
-        }))
-        .sort((a, b) => b.pax - a.pax),
-      // =========================================================================
       coverage: {
         earliestFlight: earliest,
         latestFlight: latest,
@@ -374,4 +253,3 @@ function fillDailyGaps(
   }
   return out;
 }
- 
