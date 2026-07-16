@@ -56,6 +56,7 @@ const RANGES: { id: IncomeRange; label: string }[] = [
   { id: "30d", label: "30d" },
   { id: "90d", label: "90d" },
   { id: "365d", label: "1y" },
+  { id: "180d", label: "180d" },
   { id: "all", label: "All" },
 ];
 
