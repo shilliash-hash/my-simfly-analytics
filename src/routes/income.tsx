@@ -156,21 +156,21 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         <HeadlineTile
           label="Active Income"
           value={formatNumber(Math.round(totals.active))}
-          hint={`${formatNumber(totals.activeFlights)} flights, licenses, used airplanes, airports landing income with its respective pilot share`}
+          hint={`${formatNumber(totals.activeFlights)} flights analysed Includes mission rewards, airports, aircraft and licence earnings.`}
           accent="runway"
           icon={Activity}
         />
         <HeadlineTile
           label="Passive Income"
           value={formatNumber(Math.round(totals.passive))}
-          hint={`${formatNumber(totals.passiveFlights)} visitor arrivals and/or departures from your airpots, planes rentals - both with its respective owner share`}
+          hint={`${formatNumber(totals.passiveFlights)} visitor events analysed Airport owner income and aircraft rental earnings.`}
           accent="instrument"
           icon={Building2}
         />
         <HeadlineTile
           label="Total Income"
           value={formatNumber(Math.round(totals.total))}
-          hint={`Summary of passive and active income from all flights and assets. All ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"} inclusive`}
+          hint={`All active and passive income events across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"}`}
           accent="gold"
           icon={Coins}
         />
