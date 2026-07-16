@@ -47,12 +47,7 @@ function Overview() {
   const triggerFleetRepair = useServerFn(runFleetActivityBackfill);
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
-// (To są Twoje obecne linie 47-49 ze zdjęcia, zostawiasz je bez zmian):
-const triggerFleetRepair = useServerFn(runFleetActivityBackfill);
-console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
-const liveChangelogFeed = [];
 // stala powyzej blokuje tabele na gorze (zle miejsce wyswietalania updejtow)
-
 // naprawa TOTAL 30D / 7D na dashu
 const fnIncome = useServerFn(getIncomeSummary);
 
