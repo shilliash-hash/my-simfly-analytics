@@ -1,3 +1,4 @@
+import { getIncomeSummary } from "@/lib/income.functions";
 import { supabase } from "@/integrations/supabase/client";
 import { staticChangelogFeed } from "../lib/changelog-data";
 import { createFileRoute, Link } from "@tanstack/react-router";
@@ -46,7 +47,27 @@ function Overview() {
   const triggerFleetRepair = useServerFn(runFleetActivityBackfill);
   console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
   const liveChangelogFeed = [];
- // stala powyzej blokuje tabele na gorze (zle miejsce wyswietalania updejtow)
+// (To są Twoje obecne linie 47-49 ze zdjęcia, zostawiasz je bez zmian):
+const triggerFleetRepair = useServerFn(runFleetActivityBackfill);
+console.log("SimFly Hub: App Changelog Live Reload Initialized [v2]");
+const liveChangelogFeed = [];
+// stala powyzej blokuje tabele na gorze (zle miejsce wyswietalania updejtow)
+
+// naprawa TOTAL 30D / 7D na dashu
+const fnIncome = useServerFn(getIncomeSummary);
+
+const { data: income7d } = useQuery({
+  queryKey: ["income-summary-main", viewedUser || "", "7d"],
+  queryFn: () => fnIncome({ data: { range: "7d", ...(viewedUser ? { username: viewedUser } : {}) } }),
+  staleTime: 5 * 60_000,
+});
+
+const { data: income30d } = useQuery({
+  queryKey: ["income-summary-main", viewedUser || "", "30d"],
+  queryFn: () => fnIncome({ data: { range: "30d", ...(viewedUser ? { username: viewedUser } : {}) } }),
+  staleTime: 5 * 60_000,
+});
+// =========================================================================
    
  const { data } = useSuspenseQuery(
     queryOptions({
@@ -202,13 +223,13 @@ function Overview() {
         />
         <StatCard
           label="PAX last 7d"
-          value={formatNumber(data.paxLast7d)}
+          value={formatNumber(Math.round(income7d?.totals?.total ?? data.paxLast7d))}
           hint="Earned this week"
           icon={Coins}
         />
         <StatCard
           label="PAX last 30d"
-          value={formatNumber(data.paxLast30d)}
+          value={formatNumber(Math.round(income30d?.totals?.total ?? data.paxLast30d))}
           hint="Earned this month"
           icon={Coins}
         />
