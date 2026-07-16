@@ -257,7 +257,46 @@ export interface AirportFlightHistoryItem {
   paxAirport: number;         // earnedPax credited to the airport
   paxAircraft?: number;       // earnedPax credited to my aircraft (rental)
   aircraft: string;
+  aircraftId?: string;        // airplane.aircraftId — used for per-aircraft income attribution
 }
+
+/** Per-flight income ledger — the single accounting source consumed by Income Intelligence. */
+export interface IncomeLedgerMyFlight {
+  flightId: string;
+  ts: string;
+  pax: number;               // total credited to me on this flight (= RawFlightLite.pax)
+  paxAircraftOwn: number;    // aircraft-owner share when I own the plane I flew, else 0
+  paxAirportOwn: number;     // airport-owner share for my owned origin/dest, else 0
+  paxOther: number;          // remainder: pilot base + licence share + anything else
+  aircraftId?: string;
+  aircraftLabel?: string;
+  ownAircraft: boolean;
+  ownOrigin: boolean;
+  ownDest: boolean;
+  originIcao: string;
+  destIcao: string;
+  licence?: string;
+}
+export interface IncomeLedgerVisitorFlight {
+  flightId: string;
+  ts: string;
+  pilot: string;
+  paxAirport: number;
+  paxAircraft: number;
+  aircraftId?: string;
+  aircraftLabel?: string;
+  airportIcao?: string;
+  originIcao?: string;
+  destIcao?: string;
+}
+export interface IncomeLedger {
+  myFlights: IncomeLedgerMyFlight[];
+  visitorFlights: IncomeLedgerVisitorFlight[];
+  ownedAircraft: { aircraftId: string; label: string; registration?: string }[];
+  ownedAirports: { icao: string; name: string }[];
+  window: { earliestIso: string | null; latestIso: string | null };
+}
+
 
 /** Aggregated visitor-history snapshot across all my airports. */
 export interface VisitorHistoryPayload {
@@ -290,6 +329,8 @@ export interface SimflyPayload {
   flights: FlightLog[];
   visitors: VisitorAggregate[];
   community: Player[];
+   /** Per-flight income ledger — the single accounting source consumed by Income Intelligence. */
+  incomeLedger?: IncomeLedger;
   _source?: "live" | "mock";
   _stale?: boolean;
   _fetchedAt?: string;
