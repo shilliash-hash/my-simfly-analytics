@@ -36,6 +36,7 @@ import {
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { cn } from "@/lib/utils";
+
 export const Route = createFileRoute("/income")({
   component: IncomeRoute,
   head: () => ({
@@ -49,13 +50,15 @@ export const Route = createFileRoute("/income")({
     ],
   }),
 });
+
 const RANGES: { id: IncomeRange; label: string }[] = [
   { id: "7d", label: "7d" },
   { id: "30d", label: "30d" },
   { id: "90d", label: "90d" },
   { id: "365d", label: "1y" },
-  //{ id: "all", label: "All" },
+  { id: "all", label: "All" },
 ];
+
 function IncomeRoute() {
   const statusFn = useServerFn(getHubSupportStatus);
   const { keyTag, payload } = useSimflyArgs();
@@ -64,6 +67,7 @@ function IncomeRoute() {
     queryFn: () => statusFn(payload ? { data: payload } : undefined),
     staleTime: 5 * 60_000,
   });
+
   if (isLoading) {
     return (
       <AppShell>
@@ -85,15 +89,18 @@ function IncomeRoute() {
   }
   return <IncomeIntelligence />;
 }
+
 function IncomeIntelligence() {
   const fn = useServerFn(getIncomeSummary);
   const { keyTag, username } = useSimflyArgs();
   const [range, setRange] = useState<IncomeRange>("30d");
+
   const { data, isFetching } = useQuery({
     queryKey: ["income", keyTag, range],
     queryFn: () => fn({ data: { range, ...(username ? { username } : {}) } }),
     staleTime: 15 * 60_000,
   });
+
   return (
     <AppShell>
       <PageHeader
@@ -120,6 +127,7 @@ function IncomeIntelligence() {
           </div>
         }
       />
+
       {!data ? (
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
           {isFetching ? "Computing income breakdown…" : "No data yet."}
@@ -130,11 +138,19 @@ function IncomeIntelligence() {
     </AppShell>
   );
 }
+
 function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
-  const { totals, composition, timeseries, kpis, perAirportPassive } = data;
+  const { totals, composition, timeseries, kpis, perAirportPassive, perAircraft, reconciliation } = data;
+
   return (
     <>
-      {/* Headline tiles */}
+      {!reconciliation.withinTolerance && (
+        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-300">
+          <div className="mono mb-1 text-[10px] uppercase tracking-widest">Reconciliation warning</div>
+          Active + Passive ({formatNumber(Math.round(reconciliation.computedTotal))}) does not equal the ledger total ({formatNumber(Math.round(reconciliation.ledgerTotal))}) — diff {reconciliation.diff.toFixed(2)}. Please report.
+        </div>
+      )}
+
       <section className="mb-6 grid gap-4 sm:grid-cols-3">
         <HeadlineTile
           label="Active Income"
@@ -153,16 +169,18 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         <HeadlineTile
           label="Total Income"
           value={formatNumber(Math.round(totals.total))}
-         hint={`Across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"} and traffic summary (visitor + own flights)`}
+          hint={`Across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"}`}
           accent="gold"
           icon={Coins}
         />
       </section>
+
       {/* Composition donut + description */}
       <section className="mb-6 grid gap-4 lg:grid-cols-[380px_1fr]">
         <CompositionDonut composition={composition} total={totals.total} />
         <TrendChart series={timeseries} />
       </section>
+
       {/* KPI strip */}
       <section className="mb-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile
@@ -206,6 +224,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
           accent={kpis.concentration > 0.5 ? "instrument" : "runway"}
         />
       </section>
+
       {/* Component breakdown grid */}
       <section className="panel mb-6 rounded-xl p-5">
         <h2 className="font-display mb-4 text-lg font-semibold">Income by component</h2>
@@ -215,6 +234,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
           ))}
         </div>
       </section>
+
       {/* Passive airport table */}
       {perAirportPassive.length > 0 && (
         <section className="panel mb-6 rounded-xl p-5">
@@ -251,6 +271,51 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
           </div>
         </section>
       )}
+
+      {/* Income by aircraft */}
+      {perAircraft.length > 0 && (
+        <section className="panel mb-6 rounded-xl p-5">
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="font-display text-lg font-semibold">Income by aircraft</h2>
+            <span className="text-[11px] text-muted-foreground">
+              Aircraft income only — airport and licence earnings are shown elsewhere.
+            </span>
+          </div>
+          <div className="overflow-hidden rounded-lg border border-border/40">
+            <table className="w-full text-sm">
+              <thead className="bg-secondary/40">
+                <tr className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <th className="p-2 text-left">Aircraft</th>
+                  <th className="p-2 text-left">Reg</th>
+                  <th className="p-2 text-right">Flights (me)</th>
+                  <th className="p-2 text-right">Flights (others)</th>
+                  <th className="p-2 text-right">Active</th>
+                  <th className="p-2 text-right">Passive rental</th>
+                  <th className="p-2 text-right">Total</th>
+                  <th className="p-2 text-right">Active %</th>
+                  <th className="p-2 text-right">Passive %</th>
+                </tr>
+              </thead>
+              <tbody>
+                {perAircraft.map((a) => (
+                  <tr key={a.aircraftId} className="border-t border-border/40">
+                    <td className="p-2">{a.label}</td>
+                    <td className="mono p-2 text-muted-foreground">{a.registration ?? "—"}</td>
+                    <td className="mono p-2 text-right">{formatNumber(a.flightsMe)}</td>
+                    <td className="mono p-2 text-right">{formatNumber(a.flightsOthers)}</td>
+                    <td className="mono p-2 text-right text-runway">{formatNumber(Math.round(a.active))}</td>
+                    <td className="mono p-2 text-right text-instrument">{formatNumber(Math.round(a.passive))}</td>
+                    <td className="mono p-2 text-right">{formatNumber(Math.round(a.total))}</td>
+                    <td className="mono p-2 text-right">{(a.activePct * 100).toFixed(0)}%</td>
+                    <td className="mono p-2 text-right">{(a.passivePct * 100).toFixed(0)}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {/* Coverage note */}
       <section className="panel rounded-xl border border-instrument/30 bg-instrument/5 p-4">
         <div className="flex items-start gap-3">
@@ -268,6 +333,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
     </>
   );
 }
+
 function HeadlineTile({
   label,
   value,
@@ -318,6 +384,7 @@ function HeadlineTile({
     </div>
   );
 }
+
 function KpiTile({
   icon: Icon,
   label,
@@ -352,6 +419,7 @@ function KpiTile({
     </div>
   );
 }
+
 function CompositionDonut({
   composition,
   total,
@@ -420,11 +488,13 @@ function CompositionDonut({
     </div>
   );
 }
+
 function TrendChart({ series }: { series: IncomeSummaryPayload["timeseries"] }) {
   const trimmed = useMemo(() => {
     if (series.length <= 90) return series;
     return series.slice(series.length - 90);
   }, [series]);
+
   return (
     <div className="panel rounded-xl p-5">
       <div className="mb-3 flex items-baseline justify-between">
@@ -492,6 +562,7 @@ function TrendChart({ series }: { series: IncomeSummaryPayload["timeseries"] }) 
     </div>
   );
 }
+
 function ComponentRow({
   c,
   total,
