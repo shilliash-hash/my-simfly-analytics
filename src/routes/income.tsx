@@ -156,7 +156,7 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         <HeadlineTile
           label="Active Income"
           value={formatNumber(Math.round(totals.active))}
-          hint={`${formatNumber(totals.activeFlights)} flights, licenses used airplanes, airports landing incomes with its respective pilot share`}
+          hint={`${formatNumber(totals.activeFlights)} flights, licenses, used airplanes, airports landing income with its respective pilot share`}
           accent="runway"
           icon={Activity}
         />
