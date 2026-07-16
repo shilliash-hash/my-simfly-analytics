@@ -776,6 +776,7 @@ function normaliseAircraftVisitorFlight(
     paxAirport: 0,
     paxAircraft: raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0,
     aircraft: raw.airplane?.name ?? plane.name,
+    aircraftId: raw.airplane?.aircraftId ?? plane.aircraftId,
     airportIcao: origin || destination,
     _origin: origin,
     _destination: destination,
@@ -795,10 +796,16 @@ export type AircraftBackfillPlaneSummary = {
 async function fetchAircraftOwnedVisitorBackfill(
   airplanes: AircraftExt[],
   username: string,
-): Promise<{ items: AircraftVisitorHistoryItem[]; summary: AircraftBackfillPlaneSummary[] }> {
+): Promise<{
+  items: AircraftVisitorHistoryItem[];
+  summary: AircraftBackfillPlaneSummary[];
+  myOwnSlots: { flightId: string; aircraftId: string; paxAircraft: number; ts: string }[];
+}> {
   const cutoffMs = Date.now() - AIRCRAFT_BACKFILL_DAYS * 86_400_000;
   const all: AircraftVisitorHistoryItem[] = [];
   const summary: AircraftBackfillPlaneSummary[] = [];
+  const myOwnSlots: { flightId: string; aircraftId: string; paxAircraft: number; ts: string }[] = [];
+  const meLc = username.toLowerCase();
 
   const scanPlane = async (plane: AircraftExt): Promise<AircraftVisitorHistoryItem[]> => {
     const s: AircraftBackfillPlaneSummary = {
@@ -847,6 +854,26 @@ async function fetchAircraftOwnedVisitorBackfill(
             const ms = histFlightTimeMs(raw);
             if (ms === null || ms >= cutoffMs) sawInBackfillWindow = true;
             if (ms !== null && ms < cutoffMs) continue;
+            // Additive: capture own-pilot own-aircraft flights so Income
+            // Intelligence can attribute the aircraft-owner share to me.
+            // Stats never reads myOwnSlots — this is byte-identical for Stats.
+            try {
+              const pilot = raw.pilot?.username ?? "";
+              const planeOwner = raw.airplane?.owner?.username ?? "";
+              const isOwnedPlane =
+                planeOwner.toLowerCase() === meLc ||
+                raw.airplane?.aircraftId === plane.aircraftId;
+              if (raw.flightID && pilot.toLowerCase() === meLc && isOwnedPlane) {
+                myOwnSlots.push({
+                  flightId: raw.flightID,
+                  aircraftId: plane.aircraftId,
+                  paxAircraft: raw.airplane?.totalEarnedPax ?? raw.airplane?.earnedPax ?? 0,
+                  ts: raw.departureTime ?? raw.takeoffTime ?? raw.landingTime ?? "",
+                });
+              }
+            } catch {
+              // ignore malformed own-slot row
+            }
             try {
               const item = normaliseAircraftVisitorFlight(raw, plane, username);
               if (item) out.push(item);
@@ -900,10 +927,122 @@ async function fetchAircraftOwnedVisitorBackfill(
     }
   }
 
-  return { items: all, summary };
+ return { items: all, summary, myOwnSlots };
 }
-
+// ----- Income ledger (pure) --------------------------------------------------
+//
+// Extracts a per-flight income ledger from the arrays Stats already computes.
+// PURE: no fetches, no side effects, no mutation of its arguments. Stats never
+// reads the returned value — attaching it to the payload keeps every existing
+// Stats field byte-identical.
+import type {
+  IncomeLedger,
+  IncomeLedgerMyFlight,
+  IncomeLedgerVisitorFlight,
+} from "./types";
+function buildIncomeLedger(args: {
+  username: string;
+  flights: RawFlightLite[];
+  uniqueVisitorFlights: (AirportFlightHistoryItem & { airportIcao: string; _origin?: string; _destination?: string })[];
+  airplanes: AircraftExt[];
+  airports: AirportExt[];
+  myAirportSlots: { flightId: string; airportIcao: string; paxAirport: number; ts: string }[];
+  myAircraftSlots: { flightId: string; aircraftId: string; paxAircraft: number; ts: string }[];
+}): IncomeLedger {
+  const { flights, uniqueVisitorFlights, airplanes, airports, myAirportSlots, myAircraftSlots } = args;
+  const ownedAircraftIds = new Set(airplanes.map((p) => p.aircraftId).filter(Boolean) as string[]);
+  const ownedAircraftLabelById = new Map<string, string>(
+    airplanes.map((p) => [p.aircraftId, p.tailNumber || p.icao || p.name || p.aircraftId]),
+  );
+  const ownedIcaos = new Set(airports.map((a) => a.icao.toUpperCase()));
+  const ownedAirportNameByIcao = new Map<string, string>(
+    airports.map((a) => [a.icao.toUpperCase(), a.name]),
+  );
+  // Sum airport-owner slot per flight across origin/destination hubs.
+  const airportSlotByFlight = new Map<string, number>();
+  for (const s of myAirportSlots) {
+    airportSlotByFlight.set(s.flightId, (airportSlotByFlight.get(s.flightId) ?? 0) + (s.paxAirport || 0));
+  }
+  // Aircraft owner slot per flight (max across pages, per plane).
+  const aircraftSlotByFlight = new Map<string, number>();
+  for (const s of myAircraftSlots) {
+    const prev = aircraftSlotByFlight.get(s.flightId) ?? 0;
+    aircraftSlotByFlight.set(s.flightId, Math.max(prev, s.paxAircraft || 0));
+  }
+  const myFlights: IncomeLedgerMyFlight[] = flights.map((f) => {
+    const originUp = (f.departure_icao || "").toUpperCase();
+    const destUp = (f.destination_icao || "").toUpperCase();
+    const ownOrigin = originUp !== "" && ownedIcaos.has(originUp);
+    const ownDest = destUp !== "" && ownedIcaos.has(destUp);
+    const ownAircraft = !!f.aircraftId && ownedAircraftIds.has(f.aircraftId);
+    const pax = Number(f.pax) || 0;
+    const rawAircraft = ownAircraft ? (aircraftSlotByFlight.get(f.id) ?? 0) : 0;
+    const rawAirport = ownOrigin || ownDest ? (airportSlotByFlight.get(f.id) ?? 0) : 0;
+    // Clamp so the three components never exceed the trusted total `pax`.
+    // If SimFly reports slot values whose sum > pax (rare rounding), rescale.
+    let paxAircraftOwn = Math.max(0, rawAircraft);
+    let paxAirportOwn = Math.max(0, rawAirport);
+    const slotSum = paxAircraftOwn + paxAirportOwn;
+    if (slotSum > pax && slotSum > 0) {
+      const k = pax / slotSum;
+      paxAircraftOwn *= k;
+      paxAirportOwn *= k;
+    }
+    const paxOther = Math.max(0, pax - paxAircraftOwn - paxAirportOwn);
+    return {
+      flightId: f.id,
+      ts: f.mission_start_ts,
+      pax,
+      paxAircraftOwn,
+      paxAirportOwn,
+      paxOther,
+      aircraftId: f.aircraftId,
+      aircraftLabel: f.aircraftId ? ownedAircraftLabelById.get(f.aircraftId) ?? f.aircraft_tailNumber ?? f.aircraft : f.aircraft_tailNumber ?? f.aircraft,
+      ownAircraft,
+      ownOrigin,
+      ownDest,
+      originIcao: originUp,
+      destIcao: destUp,
+      licence: f.licence,
+    };
+  });
+  const visitorFlights: IncomeLedgerVisitorFlight[] = uniqueVisitorFlights.map((v) => ({
+    flightId: v.id,
+    ts: v.ts,
+    pilot: v.visitor,
+    paxAirport: v.paxAirport || 0,
+    paxAircraft: v.paxAircraft || 0,
+    aircraftId: v.aircraftId,
+    aircraftLabel: v.aircraftId ? ownedAircraftLabelById.get(v.aircraftId) ?? v.aircraft : v.aircraft,
+    airportIcao: v.airportIcao,
+    originIcao: v._origin,
+    destIcao: v._destination,
+  }));
+  const allTs = [
+    ...myFlights.map((m) => m.ts),
+    ...visitorFlights.map((v) => v.ts),
+  ]
+    .filter(Boolean)
+    .sort();
+  const earliestIso = allTs[0] ?? null;
+  const latestIso = allTs[allTs.length - 1] ?? null;
+  return {
+    myFlights,
+    visitorFlights,
+    ownedAircraft: airplanes
+      .filter((p) => p.aircraftId)
+      .map((p) => ({
+        aircraftId: p.aircraftId,
+        label: p.name || p.tailNumber || p.icao || p.aircraftId,
+        registration: p.tailNumber,
+      })),
+    ownedAirports: airports.map((a) => ({ icao: a.icao, name: a.name })),
+    window: { earliestIso, latestIso },
+  };
+}
+ 
 // ----- Server functions -----
+
 
 export const getSimflyPayload = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
@@ -1079,6 +1218,10 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
               ts: string;
               paxAirport: number;
             }[] = [];
+             // Additive: own-flight airport-owner slots (isOwner rows) — used
+            // only by buildIncomeLedger. Stats output ignores this field and
+            // remains byte-identical.
+            const myAirportSlots: { flightId: string; airportIcao: string; paxAirport: number; ts: string }[] = [];
             for (const r of pages) {
               if (!r) continue;
               for (const f of r.flights ?? []) {
@@ -1097,10 +1240,18 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
                     paxAirport: n.paxAirport,
                   });
                 }
+                if (n.isOwner) {
+                  myAirportSlots.push({
+                    flightId: n.id,
+                    airportIcao: ap.icao,
+                    paxAirport: n.paxAirport,
+                    ts: n.ts,
+                  });
+                }
                 if (!n.isOwner) items.push({ ...n, airportIcao: ap.icao });
               }
             }
-            return { items, support };
+             return { items, support, myAirportSlots };
           }),
         ),
       ),
@@ -1287,7 +1438,19 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
 
     // Visitors: from logbook only my flights are visible, so this is empty for v1.
     const visitors: VisitorAggregate[] = [];
-
+    // Pure ledger extraction — reads already-computed arrays. Stats consumers
+    // ignore this field, so every existing Stats value stays byte-identical.
+    const myAirportSlotsAll = visitorPerAirport.flatMap((r) => r.myAirportSlots);
+    const myAircraftSlotsAll = aircraftPerPlane.myOwnSlots;
+    const incomeLedger = buildIncomeLedger({
+      username,
+      flights,
+      uniqueVisitorFlights,
+      airplanes,
+      airports,
+      myAirportSlots: myAirportSlotsAll,
+      myAircraftSlots: myAircraftSlotsAll,
+    });
     return {
       me,
       paxTokens: Math.round(availablePax),
@@ -1311,6 +1474,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       flights: flightLog,
       visitors,
       community: MOCK_PAYLOAD.community,
+       incomeLedger,
       _source: "live",
       _fetchedAt: new Date().toISOString(),
     };
@@ -1887,6 +2051,7 @@ function normaliseHistFlight(
     paxAirport,
     paxAircraft,
     aircraft: raw.airplane?.name ?? "",
+    aircraftId: raw.airplane?.aircraftId,
   };
 }
 
