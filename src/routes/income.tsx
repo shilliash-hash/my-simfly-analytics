@@ -55,8 +55,8 @@ const RANGES: { id: IncomeRange; label: string }[] = [
   { id: "7d", label: "7d" },
   { id: "30d", label: "30d" },
   { id: "90d", label: "90d" },
-  { id: "365d", label: "1y" },
   { id: "180d", label: "180d" },
+  { id: "365d", label: "1y" },
   { id: "all", label: "All" },
 ];
 
@@ -156,21 +156,21 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         <HeadlineTile
           label="Active Income"
           value={formatNumber(Math.round(totals.active))}
-          hint={`${formatNumber(totals.activeFlights)} flights,licenses income and landings`}
+          hint={`${formatNumber(totals.activeFlights)} flights, license income and used airplanes income with its respective pilot share`}
           accent="runway"
           icon={Activity}
         />
         <HeadlineTile
           label="Passive Income"
           value={formatNumber(Math.round(totals.passive))}
-          hint={`${formatNumber(totals.passiveFlights)} visitor arrivals and planes rental`}
+          hint={`${formatNumber(totals.passiveFlights)} visitor arrivals or departures from your airpots, planes rentals - both with its respective owner share`}
           accent="instrument"
           icon={Building2}
         />
         <HeadlineTile
           label="Total Income"
           value={formatNumber(Math.round(totals.total))}
-          hint={`Across ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"} - summary of passive and active income from all flights and assets`}
+          hint={`Summary of passive and active income from all flights and assets. All ${totals.ownedAirports} owned airport${totals.ownedAirports === 1 ? "" : "s"} inclusive`}
           accent="gold"
           icon={Coins}
         />
