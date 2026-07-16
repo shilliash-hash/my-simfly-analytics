@@ -6,7 +6,7 @@
 
 import type { IncomeLedger, IncomeLedgerMyFlight, IncomeLedgerVisitorFlight } from "./types";
 
-export type IncomeRange = "7d" | "30d" | "90d" | "365d" | "all";
+export type IncomeRange = "7d" | "30d" | "90d" | "180d" | "365d" | "all";
 
 export type IncomeTimeseriesPoint = { date: string; active: number; passive: number; total: number };
 
@@ -84,6 +84,8 @@ function rangeStartIso(range: IncomeRange): string | null {
       return new Date(now - 30 * DAY).toISOString();
     case "90d":
       return new Date(now - 90 * DAY).toISOString();
+    case "180d":
+      return new Date(now - 180 * DAY).toISOString();
     case "365d":
       return new Date(now - 365 * DAY).toISOString();
     case "all":
