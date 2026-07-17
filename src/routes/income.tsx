@@ -36,6 +36,7 @@ import {
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { cn } from "@/lib/utils";
+import { IncomeLoadingSequence } from "@/components/income-loading-sequence";
 
 export const Route = createFileRoute("/income")({
   component: IncomeRoute,
@@ -72,7 +73,7 @@ function IncomeRoute() {
   if (isLoading) {
     return (
       <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Loading…</div>
+         <IncomeLoadingSequence variant="page" />
       </AppShell>
     );
   }
@@ -133,8 +134,12 @@ function IncomeIntelligence() {
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
           {isFetching ? "Computing income breakdown…" : "No data yet."}
         </div>
+         <IncomeLoadingSequence variant="page" />
       ) : (
-        <IncomeContent data={data} />
+        <div className="relative">
+          <IncomeContent data={data} />
+          {isFetching && <IncomeLoadingSequence variant="overlay" />}
+        </div>
       )}
     </AppShell>
   );
@@ -328,6 +333,12 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
             {data.coverage.note} Range: {data.coverage.earliestFlight ?? "—"} →{" "}
             {data.coverage.latestFlight ?? "—"} · {formatNumber(kpis.coverageFlights)} flights
             analysed.
+            {data.rangeStart && data.coverage.visitorEarliestFlight &&
+              data.rangeStart < data.coverage.visitorEarliestFlight && (
+                <div className="mt-1.5 text-[11px] text-instrument/90">
+                  Passive history available from {data.coverage.visitorEarliestFlight.slice(0, 10)} — earlier visitor arrivals were not fetched by the accounting engine, so longer ranges may report the same passive totals.
+                </div>
+              )}
           </div>
         </div>
       </section>
