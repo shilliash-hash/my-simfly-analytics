@@ -319,26 +319,54 @@ function IncomeContent({ data }: { data: IncomeSummaryPayload }) {
         </section>
       )}
 
-      {/* Coverage note */}
-      <section className="panel rounded-xl border border-instrument/30 bg-instrument/5 p-4">
-        <div className="flex items-start gap-3">
-          <Info className="mt-0.5 h-4 w-4 shrink-0 text-instrument" />
-          <div className="text-xs leading-relaxed text-muted-foreground">
-            <div className="mono mb-1 text-[10px] uppercase tracking-widest text-instrument">
-              Coverage
-            </div>
-            {data.coverage.note} Range: {data.coverage.earliestFlight ?? "—"} →{" "}
-            {data.coverage.latestFlight ?? "—"} · {formatNumber(kpis.coverageFlights)} flights
-            analysed.
-            {data.rangeStart && data.coverage.visitorEarliestFlight &&
-              data.rangeStart < data.coverage.visitorEarliestFlight && (
-                <div className="mt-1.5 text-[11px] text-instrument/90">
-                  Passive history available from {data.coverage.visitorEarliestFlight.slice(0, 10)} — earlier visitor arrivals were not fetched by the accounting engine, so longer ranges may report the same passive totals.
-                </div>
-              )}
-          </div>
+       {/* Coverage note */}
+  <section className="panel rounded-xl border border-instrument/30 bg-instrument/5 p-4">
+    <div className="flex items-start gap-3">
+      <Info className="mt-0.5 h-4 w-4 shrink-0 text-instrument" />
+      <div className="text-xs leading-relaxed text-muted-foreground w-full space-y-3">
+        
+        {/* Nagłówek sekcji */}
+        <div className="mono mb-1 text-[10px] uppercase tracking-widest text-instrument">
+          Coverage & Historical data consistency
         </div>
-      </section>
+
+        {/* Część 1: Oryginalny długi tekst techniczny o silniku Stats */}
+        <p className="leading-relaxed">
+          All totals derive from the shared Stats accounting ledger. Active + Passive equals Stats total for the same window. Per-aircraft numbers cover aircraft-owner income only — airport and licence earnings are not attributed to any aircraft.
+        </p>
+
+        {/* Część 2: Dodatkowy opis działania Backfillu z drugiego zrzutu ekranu */}
+        <div className="pt-2 border-t border-border/20">
+          <h4 className="font-semibold text-instrument uppercase tracking-wider text-[10px] mb-1">
+            Historical coverage
+          </h4>
+          <p className="leading-relaxed">
+            Active income is calculated from your complete indexed flight history.
+          </p>
+          <p className="leading-relaxed mt-1">
+            Passive income depends on visitor history already indexed by the Hub. As more pilots 
+            are indexed and historical backfills complete, long-range statistics (90d / 180d / 1Y / ALL) 
+            become increasingly accurate.
+          </p>
+        </div>
+
+        {/* Część 3: Dynamiczne daty zakresu oraz liczba przeanalizowanych lotów z bazy */}
+        <div className="pt-2 border-t border-border/20 text-[11px] text-muted-foreground/80">
+          Range: {data.coverage.earliestFlight ?? "-"} → {data.coverage.latestFlight ?? "-"} · {formatNumber(kpis.coverageFlights)} flights analysed.
+        </div>
+
+        {/* Część 4: Fabryczny warunek bota dla historii pasywnej (Nienaruszony!) */}
+        {data.rangeStart && data.coverage.visitorEarliestFlight && 
+         data.rangeStart < data.coverage.visitorEarliestFlight && (
+          <div className="mt-1.5 text-[11px] text-instrument/90">
+            Passive history available from {data.coverage.visitorEarliestFlight.slice(0, 10)} – earlier visitor arrivals were not processed.
+          </div>
+        )}
+        
+      </div>
+    </div>
+  </section>
+
     </>
   );
 }
