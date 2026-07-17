@@ -249,7 +249,7 @@ const { data: income30d } = useQuery({
         <div className="panel rounded-xl p-5 lg:col-span-2">
           <div className="mb-4 flex items-end justify-between">
             <div>
-              <h2 className="font-display text-lg font-semibold">PAX earnings · Macro-level data overview</h2>
+              <h2 className="font-display text-lg font-semibold">PAX earnings · Macro-Horizon</h2>
               <p className="text-xs text-muted-foreground">
                 Daily token income · <span className="text-runway">cyan</span> your flights ·{" "}
                 <span style={{ color: "var(--instrument)" }}>amber</span> visitor traffic to your hubs
