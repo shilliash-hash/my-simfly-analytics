@@ -124,11 +124,12 @@ function IncomeIntelligence() {
                 )}
               >
                 {r.label}
-              </button>
-            ))}
-          </div>
-        }
-      />
+          </button>
+        )))
+      }
+    </div>
+  }
+/>
 
       {!data ? (
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
