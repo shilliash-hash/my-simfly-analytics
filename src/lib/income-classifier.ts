@@ -69,6 +69,8 @@ export type IncomeReport = {
   coverage: {
     earliestFlight: string | null;
     latestFlight: string | null;
+    visitorEarliestFlight: string | null;
+    activeEarliestFlight: string | null;
     note: string;
   };
 };
@@ -277,6 +279,10 @@ export function classify(ledger: IncomeLedger, range: IncomeRange): IncomeReport
     .sort();
   const earliest = allTs[0] ?? null;
   const latest = allTs[allTs.length - 1] ?? null;
+  const visitorTs = ledger.visitorFlights.map((v) => v.ts).filter(Boolean).sort();
+  const activeTs = ledger.myFlights.map((f) => f.ts).filter(Boolean).sort();
+  const visitorEarliest = visitorTs[0] ?? null;
+  const activeEarliest = activeTs[0] ?? null;
 
   return {
     range,
@@ -315,6 +321,8 @@ export function classify(ledger: IncomeLedger, range: IncomeRange): IncomeReport
     coverage: {
       earliestFlight: earliest,
       latestFlight: latest,
+      visitorEarliestFlight: visitorEarliest,
+      activeEarliestFlight: activeEarliest,
       note:
         "All totals derive from the shared Stats accounting ledger. Active + Passive equals Stats total for the same window. Per-aircraft numbers cover aircraft-owner income only — airport and licence earnings are not attributed to any aircraft.",
     },
