@@ -139,6 +139,11 @@
   }
 }
 
+@keyframes scanline {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
 /* Leaflet tooltip — dark grey popup for SimFly map */
 .leaflet-tooltip.simfly-tip {
   background: #1F2937;
