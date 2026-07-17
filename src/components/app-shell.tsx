@@ -36,7 +36,7 @@ const NAV = [
   { to: "/historical-hub-analysis", label: "Historical Hub Analysis", icon: BarChart3 },
   { to: "/my-team-activity", label: "My Team Activity", icon: Users },
   { to: "/alliance", label: "Alliance", icon: Mountain },
-  // { to: "/income", label: "Income", icon: Coins },
+  { to: "/income", label: "Income", icon: Coins },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
