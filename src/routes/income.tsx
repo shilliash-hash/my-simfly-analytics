@@ -125,11 +125,10 @@ function IncomeIntelligence() {
               >
                 {r.label}
           </button>
-        )))
-      }
-    </div>
-  }
-/>
+        ))}
+      </div>
+    }
+  />
 
       {!data ? (
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
