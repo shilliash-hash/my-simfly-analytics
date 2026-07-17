@@ -139,7 +139,7 @@ function IncomeIntelligence() {
       <IncomeContent data={data} />
       {isFetching && <IncomeLoadingSequence variant="overlay" />}
     </div>
-  )}
+  )
       )}
     </AppShell>
   );
