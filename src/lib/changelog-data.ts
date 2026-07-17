@@ -10,6 +10,18 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
  {
   id: "1",
+  version: "v 0.910 STABLE 17.Jul.26",
+  type: ["FEATURE", "UPGRADE"],
+  text: `• New Income Intelligence analytics module.
+  • Active vs Passive income breakdown.
+  • Financial trends and historical analysis.
+  • Airport and aircraft income attribution.
+  • Dashboard Total Income now includes both Active and Passive income.
+  • Improved loading experience and accounting consistency.
+  • Resource-intensive analytics — now available for all HUB Supporters.`
+},    
+  {
+  id: "1",
   version: "v 0.909 STABLE 13.Jul.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
   text: `• Added the new Alliance Intelligence module.
