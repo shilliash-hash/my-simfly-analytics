@@ -73,7 +73,7 @@ function IncomeRoute() {
   if (isLoading) {
     return (
       <AppShell>
-         <IncomeLoadingSequence variant="page" />
+        <IncomeLoadingSequence variant="page" />
       </AppShell>
     );
   }
@@ -122,25 +122,22 @@ function IncomeIntelligence() {
                     ? "bg-runway/15 text-runway ring-1 ring-runway/40"
                     : "text-muted-foreground hover:text-foreground",
                 )}
-                   >
-            {r.label}
-          </button>
-        ))}
-      </div>
-    }
-  />
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        }
+      />
 
-  {!data ? (
-    <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-      {isFetching ? "Computing income breakdown…" : "No data yet."}
-    </div>
-  ) : (
-    <div className="relative">
-      <IncomeContent data={data} />
-      {isFetching && <IncomeLoadingSequence variant="overlay" />}
-    </div>
-  )
-    }
+      {!data ? (
+        <IncomeLoadingSequence variant="page" />
+      ) : (
+        <div className="relative">
+          <IncomeContent data={data} />
+          {isFetching && <IncomeLoadingSequence variant="overlay" />}
+        </div>
+      )}
     </AppShell>
   );
 }
@@ -625,3 +622,4 @@ function ComponentRow({
     </div>
   );
 }
+
