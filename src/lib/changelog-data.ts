@@ -8,7 +8,14 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
- {
+  {
+  id: "1",
+  version: "v 0.911 STABLE 18.Jul.26",
+  type: ["FEATURE", "UPGRADE"],
+  text: `• SimBrief Quick Dispatch is live. Click any ICAO in an Alliance pilot card to instantly open SimBrief with the destination pre-filled.
+  • Updated table for airports upgrade cost to reflect real values with better accuracy.`
+},      
+  {
   id: "1",
   version: "v 0.910 STABLE 17.Jul.26",
   type: ["FEATURE", "UPGRADE"],
