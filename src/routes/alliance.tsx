@@ -20,6 +20,7 @@ import {
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
 import { cn } from "@/lib/utils";
+import { SimbriefLink } from "@/components/simbrief-link";
 import { Mountain, Sparkles, Users, Radar, ArrowUpRight, Loader2 } from "lucide-react";
 
 
@@ -541,6 +542,10 @@ function Legend() {
           </dt>
           <dd>Weekly apron stands</dd>
         </div>
+        <div className="flex gap-1.5">
+          <dt className="text-runway">✈ ICAO</dt>
+          <dd>Click to open SimBrief with destination pre-filled</dd>
+        </div>
         <div className="flex gap-1.5 text-muted-foreground/70">
           <dt>Source</dt>
           <dd>SimFly flights on your airports · cached 6h</dd>
@@ -555,9 +560,13 @@ function AirportCard({ airport }: { airport: AllianceAirport }) {
     <li className="rounded-lg border border-border/40 bg-secondary/30 p-3">
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-display text-sm font-semibold tracking-tight">
+          <SimbriefLink
+            icao={airport.icao}
+            showIcon
+            className="font-display text-sm font-semibold tracking-tight"
+          >
             {airport.icao}
-          </span>
+          </SimbriefLink>
           <span className="mono rounded bg-runway/10 px-1.5 py-0.5 text-[9px] uppercase tracking-widest text-runway ring-1 ring-runway/30">
             {airport.tier}
           </span>
