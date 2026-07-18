@@ -6,7 +6,7 @@
  * Values are a mix of community-confirmed numbers and mathematical
  * estimates and will be refined over time — keep them in one place.
  */
-** cost[tier][nextLevel] = PAX tokens required for that upgrade. */
+// ** cost[tier][nextLevel] = PAX tokens required for that upgrade. */
 // const UPGRADE_COST_TABLE: Record<number, Record<number, number>> = {
  // 1: { 2: 1.80,   3: 7.40,   4: 13.10, 5: 43.50,  6: 86,    7: 155,   8: 255,   9: 390,    10: 570 },
  // 2: { 2: 5.38,   3: 12.1,  4: 22.38, 5: 39.19,  6: 67.56,   7: 460,   8: 760,   9: 1_160,  10: 1_700 },
