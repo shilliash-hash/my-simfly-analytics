@@ -352,9 +352,7 @@ function PlannerResult({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-4">
-          <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) 
- : "—"} icon={<Gauge className="h-4 w-4" />} />
- <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
+          <Tile label="Total PAX" value={formatNumber(Math.round(p.totalPax))} />
           <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) : "—"} icon={<Gauge className="h-4 w-4" />} />
           <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
           <Tile label="Distance" value={p.distanceNm ? `${p.distanceNm.toFixed(0)} NM` : "—"} />
@@ -380,7 +378,7 @@ function PlannerResult({
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-xs text-muted-foreground">{c.note}</span>
-                <span className="mono text-runway">{formatNumber(Number(p.totalPax.toFixed(2)))} PAX</span>
+                <span className="mono text-runway">{formatNumber(Math.round(c.value))} PAX</span>
               </div>
             </div>
           ))}
@@ -462,7 +460,7 @@ function RankerResult({
               </td>
               <td className="px-4 py-2 mono">{r.distanceNm ? `${r.distanceNm.toFixed(0)} NM` : "—"}</td>
               <td className="px-4 py-2 mono">{fmtDuration(r.flightTimeMs)}</td>
-              <td className="px-4 py-2 mono">{formatNumber(Number(p.totalPax.toFixed(2)))}</td>
+              <td className="px-4 py-2 mono">{formatNumber(Math.round(r.totalPax))}</td>
               <td className="px-4 py-2 mono">{r.paxPerHour ? r.paxPerHour.toFixed(1) : "—"}</td>
               <td className="px-4 py-2">
                 <ConfidenceBadge score={r.confidence} />
