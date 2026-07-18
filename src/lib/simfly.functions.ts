@@ -1464,7 +1464,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       activity: [...flightActivity, ...visitorActivity]
         .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime()),
 
-      earningsTimeseries,
+      earningsTimeseries: earningsTimeseries.slice(-60),
       xpByAsset,
       paxByAsset,
       airports,
