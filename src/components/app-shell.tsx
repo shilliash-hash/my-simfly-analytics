@@ -17,6 +17,7 @@ import {
   TrendingUp,
   Mountain,
   Coins,
+  Rocket,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -37,6 +38,7 @@ const NAV = [
   { to: "/my-team-activity", label: "My Team Activity", icon: Users },
   { to: "/alliance", label: "Alliance", icon: Mountain },
   { to: "/income", label: "Income", icon: Coins },
+  //{ to: "/mission", label: "Mission Prediction", icon: Rocket },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
