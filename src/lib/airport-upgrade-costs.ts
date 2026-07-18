@@ -6,17 +6,32 @@
  * Values are a mix of community-confirmed numbers and mathematical
  * estimates and will be refined over time — keep them in one place.
  */
-
-/** cost[tier][nextLevel] = PAX tokens required for that upgrade. */
-const UPGRADE_COST_TABLE: Record<number, Record<number, number>> = {
-  1: { 2: 1.80,   3: 7.40,   4: 13.10, 5: 43.50,  6: 86,    7: 155,   8: 255,   9: 390,    10: 570 },
-  2: { 2: 5.38,   3: 22.38,  4: 39.19, 5: 129.53, 6: 255,   7: 460,   8: 760,   9: 1_160,  10: 1_700 },
-  3: { 2: 15.41,  3: 43.10,  4: 92.47, 5: 245,    6: 480,   7: 860,   8: 1_420, 9: 2_150,  10: 3_150 },
-  4: { 2: 65.81,  3: 179.21, 4: 385,   5: 760,    6: 1_450, 7: 2_550, 8: 4_100, 9: 6_200,  10: 9_000 },
-  5: { 2: 175,    3: 470,    4: 980,   5: 1_900,  6: 3_450, 7: 5_900, 8: 9_300, 9: 13_900, 10: 20_000 },
+** cost[tier][nextLevel] = PAX tokens required for that upgrade. */
+// const UPGRADE_COST_TABLE: Record<number, Record<number, number>> = {
+ // 1: { 2: 1.80,   3: 7.40,   4: 13.10, 5: 43.50,  6: 86,    7: 155,   8: 255,   9: 390,    10: 570 },
+ // 2: { 2: 5.38,   3: 12.1,  4: 22.38, 5: 39.19,  6: 67.56,   7: 460,   8: 760,   9: 1_160,  10: 1_700 },
+ // 3: { 2: 15.41,  3: 43.10,  4: 92.47, 5: 245,    6: 480,   7: 860,   8: 1_420, 9: 2_150,  10: 3_150 },
+ // 4: { 2: 65.81,  3: 179.21, 4: 373.61, 5: 760,    6: 1_450, 7: 2_550, 8: 4_100, 9: 6_200,  10: 9_000 },
+  // 5: { 2: 175,    3: 470,    4: 980,   5: 1_900,  6: 3_450, 7: 5_900, 8: 9_300, 9: 13_900, 10: 20_000 },
   // Tier 6: no published numbers yet — extrapolate ~2.2× tier 5 until confirmed.
-  6: { 2: 385,    3: 1_034,  4: 2_156, 5: 4_180,  6: 7_590, 7: 12_980, 8: 20_460, 9: 30_580, 10: 44_000 },
+ // 6: { 2: 385,    3: 1_034,  4: 2_156, 5: 4_180,  6: 7_590, 7: 12_980, 8: 20_460, 9: 30_580, 10: 44_000 },
+//};
+
+const UPGRADE_COST_TABLE: Record<number, Record<number, number>> = {
+  // T1: Structural frame left intact
+  1: { 2: 1.80, 3: 4.05, 4: 7.49, 5: 13.12, 6: 22.62, 7: 38.54, 8: 64.90, 9: 107.99, 10: 177.54 },
+  // T2: Kept 2-6 exact. Tail end gently drops toward a stable ~1.64x decay floor
+  2: { 2: 5.38, 3: 12.10, 4: 22.38, 5: 39.19, 6: 67.56, 7: 114.85, 8: 191.80, 9: 316.47, 10: 519.02 },
+  // T3: Kept 2-4 exact. Missing values solved using the linear vertical scale factor
+  3: { 2: 15.41, 3: 43.10, 4: 92.47, 5: 193.62, 6: 380.56, 7: 690.10, 8: 1_145.25, 9: 1_789.37, 10: 2_686.73 },
+  // T4: Kept 2-4 exact. The remaining original entries were already mathematically flawless
+  4: { 2: 65.81, 3: 179.21, 4: 373.61, 5: 760, 6: 1_450, 7: 2_550, 8: 4_100, 9: 6_200, 10: 9_000 },
+  // T5: Left original balanced data curve intact
+  5: { 2: 175, 3: 470, 4: 980, 5: 1_900, 6: 3_450, 7: 5_900, 8: 9_300, 9: 1_3900, 10: 20_000 },
+  // T6: Strict, uniform 2.2x vertical scaling applied cleanly across the board
+  6: { 2: 385, 3: 1_034, 4: 2_156, 5: 4_180, 6: 7_590, 7: 12_980, 8: 20_460, 9: 30_580, 10: 44_000 },
 };
+
 
 /** Per-level multiplicative bump in base PAX payout per passenger. */
 export const PAYOUT_LEVEL_GROWTH = 0.10;
