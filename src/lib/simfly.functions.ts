@@ -711,8 +711,7 @@ function flightsToTimeseries(flights: RawFlightLite[]): EarningsPoint[] {
   // Always emit at least the trailing 30 days; extend back to the earliest
   // recorded flight so the UI can paginate through full history.
   const todayMs = Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate());
-  const minStart = todayMs - 29 * 86_400_000;
-  const startMs = earliest !== null ? Math.min(earliest, minStart) : minStart;
+  const startMs = todayMs - 59 * 86_400_000;
   const out: EarningsPoint[] = [];
   for (let t = startMs; t <= todayMs; t += 86_400_000) {
     const key = new Date(t).toISOString().slice(0, 10);
