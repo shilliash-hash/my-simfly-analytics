@@ -1,0 +1,495 @@
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { useServerFn } from "@tanstack/react-start";
+import { useMemo, useState } from "react";
+import { Rocket, Gauge, ArrowRight, Sparkles } from "lucide-react";
+import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
+import { useSimflyArgs } from "@/lib/viewed-user";
+import { HubSupportGate } from "@/components/hub-support";
+import { getHubSupportStatus } from "@/lib/hub-support.functions";
+import {
+  getMissionCatalog,
+  predictMissionFn,
+  rankMissionsFn,
+  type MissionCatalog,
+} from "@/lib/mission.functions";
+import { SimbriefLink } from "@/components/simbrief-link";
+import { cn } from "@/lib/utils";
+
+export const Route = createFileRoute("/mission")({
+  component: MissionRoute,
+  head: () => ({
+    meta: [
+      { title: "Mission Intelligence — SimFly Hub" },
+      {
+        name: "description",
+        content:
+          "Predict PAX, income, and PAX/hour for a planned SimFly mission using your own historical flight data.",
+      },
+    ],
+  }),
+});
+
+function MissionRoute() {
+  const statusFn = useServerFn(getHubSupportStatus);
+  const { keyTag, payload } = useSimflyArgs();
+  const { data: status, isLoading } = useQuery({
+    queryKey: ["hub-support", keyTag],
+    queryFn: () => statusFn(payload ? { data: payload } : undefined),
+    staleTime: 5 * 60_000,
+  });
+  if (isLoading) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Premium" title="Mission Intelligence" description="Loading…" />
+      </AppShell>
+    );
+  }
+  if (!status?.active) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Premium"
+          title="Mission Intelligence"
+          description="Predict PAX, income, and PAX/hour for planned missions."
+        />
+        <HubSupportGate featureName="Mission Intelligence" />
+      </AppShell>
+    );
+  }
+  return <MissionPlanner />;
+}
+
+function MissionPlanner() {
+  const { keyTag, username } = useSimflyArgs();
+  const catalogFn = useServerFn(getMissionCatalog);
+  const predictFn = useServerFn(predictMissionFn);
+  const rankFn = useServerFn(rankMissionsFn);
+
+  const { data: catalog } = useQuery({
+    queryKey: ["mission-catalog", keyTag],
+    queryFn: () => catalogFn(username ? { data: { username } } : undefined),
+    staleTime: 5 * 60_000,
+  });
+
+  const [departure, setDeparture] = useState("");
+  const [arrival, setArrival] = useState("");
+  const [aircraftId, setAircraftId] = useState<string>("");
+  const [licence, setLicence] = useState<string>("");
+  const [mode, setMode] = useState<"planner" | "ranker">("planner");
+
+  // Auto-select first aircraft/licence when catalog loads.
+  useMemo(() => {
+    if (catalog) {
+      if (!aircraftId && catalog.aircraft[0]) setAircraftId(catalog.aircraft[0].aircraftId);
+      if (!licence && catalog.licences[0]) setLicence(catalog.licences[0].code);
+      if (!departure && catalog.owned[0]) setDeparture(catalog.owned[0].icao);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catalog]);
+
+  const canPredict = departure.length >= 3 && arrival.length >= 3 && !!aircraftId;
+  const canRank = departure.length >= 3 && !!aircraftId;
+
+  const prediction = useQuery({
+    enabled: mode === "planner" && !!canPredict,
+    queryKey: ["mission-predict", keyTag, departure, arrival, aircraftId, licence],
+    queryFn: () =>
+      predictFn({
+        data: {
+          departure,
+          arrival,
+          aircraftId,
+          licence: licence || undefined,
+          ...(username ? { username } : {}),
+        },
+      }),
+    staleTime: 60_000,
+  });
+
+  const ranker = useQuery({
+    enabled: mode === "ranker" && !!canRank,
+    queryKey: ["mission-rank", keyTag, departure, aircraftId, licence],
+    queryFn: () =>
+      rankFn({
+        data: {
+          departure,
+          aircraftId,
+          licence: licence || undefined,
+          ...(username ? { username } : {}),
+        },
+      }),
+    staleTime: 60_000,
+  });
+
+  return (
+    <AppShell>
+      <PageHeader
+        eyebrow="Decision support"
+        title="Mission Intelligence"
+        description="Predicts PAX, income and PAX/hour for a planned flight using your own historical ledger — never a second accounting engine."
+        actions={
+          <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-secondary/40 p-1">
+            {(["planner", "ranker"] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                className={cn(
+                  "mono rounded-md px-2.5 py-1 text-[11px] uppercase tracking-widest transition-colors",
+                  mode === m
+                    ? "bg-runway/15 text-runway ring-1 ring-runway/40"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {m === "planner" ? "Planner" : "Ranker"}
+              </button>
+            ))}
+          </div>
+        }
+      />
+
+      <MissionForm
+        catalog={catalog}
+        departure={departure}
+        arrival={arrival}
+        aircraftId={aircraftId}
+        licence={licence}
+        onDeparture={setDeparture}
+        onArrival={setArrival}
+        onAircraftId={setAircraftId}
+        onLicence={setLicence}
+        showArrival={mode === "planner"}
+      />
+
+      {mode === "planner" ? (
+        <PlannerResult query={prediction} canPredict={canPredict} />
+      ) : (
+        <RankerResult query={ranker} canRank={canRank} />
+      )}
+    </AppShell>
+  );
+}
+
+function MissionForm(props: {
+  catalog: MissionCatalog | undefined;
+  departure: string;
+  arrival: string;
+  aircraftId: string;
+  licence: string;
+  onDeparture: (v: string) => void;
+  onArrival: (v: string) => void;
+  onAircraftId: (v: string) => void;
+  onLicence: (v: string) => void;
+  showArrival: boolean;
+}) {
+  const { catalog } = props;
+  return (
+    <section className="panel mb-6 grid gap-4 rounded-xl p-5 sm:grid-cols-2 lg:grid-cols-4">
+      <FieldIcao
+        label="Departure"
+        value={props.departure}
+        onChange={props.onDeparture}
+        options={catalog?.owned.map((o) => o.icao) ?? []}
+      />
+      {props.showArrival && (
+        <FieldIcao
+          label="Arrival"
+          value={props.arrival}
+          onChange={props.onArrival}
+          options={catalog?.owned.map((o) => o.icao) ?? []}
+        />
+      )}
+      <FieldSelect
+        label="Aircraft"
+        value={props.aircraftId}
+        onChange={props.onAircraftId}
+        options={
+          catalog?.aircraft.map((a) => ({
+            value: a.aircraftId,
+            label: `${a.label}${a.tailNumber ? ` — ${a.tailNumber}` : ""} (${a.icao})`,
+          })) ?? []
+        }
+      />
+      <FieldSelect
+        label="Licence"
+        value={props.licence}
+        onChange={props.onLicence}
+        options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
+      />
+    </section>
+  );
+}
+
+function FieldIcao({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[];
+}) {
+  const listId = `icao-${label.toLowerCase()}`;
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
+        placeholder="ICAO"
+        list={listId}
+        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </label>
+  );
+}
+
+function FieldSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: { value: string; label: string }[];
+}) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-runway/40"
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function fmtDuration(ms: number | null): string {
+  if (!ms) return "—";
+  const h = Math.floor(ms / 3_600_000);
+  const m = Math.floor((ms % 3_600_000) / 60_000);
+  return `${h}h ${m}m`;
+}
+
+function ConfidenceBadge({ score }: { score: number }) {
+  const tone =
+    score >= 80
+      ? "bg-runway/15 text-runway ring-runway/30"
+      : score >= 55
+        ? "bg-instrument/15 text-instrument ring-instrument/30"
+        : "bg-destructive/10 text-destructive ring-destructive/30";
+  return (
+    <span
+      className={cn(
+        "mono inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest ring-1",
+        tone,
+      )}
+    >
+      {score}%
+    </span>
+  );
+}
+
+function PlannerResult({
+  query,
+  canPredict,
+}: {
+  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof predictMissionFn>>>>;
+  canPredict: boolean;
+}) {
+  if (!canPredict) {
+    return (
+      <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
+        Pick departure, arrival, and aircraft to predict this mission.
+      </div>
+    );
+  }
+  if (query.isFetching && !query.data) {
+    return <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Predicting…</div>;
+  }
+  if (!query.data) return null;
+  const p = query.data;
+
+  return (
+    <div className="space-y-6">
+      <section className="panel rounded-xl p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-runway">
+              <Rocket className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                Prediction
+              </div>
+              <div className="font-display text-xl font-semibold tracking-tight">
+                <SimbriefLink icao={p.inputs.departure.icao} />{" "}
+                <ArrowRight className="inline h-4 w-4 text-runway" />{" "}
+                <SimbriefLink icao={p.inputs.arrival.icao} />
+              </div>
+            </div>
+          </div>
+          <ConfidenceBadge score={p.overallConfidence} />
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-4">
+          <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) 
+ : "—"} icon={<Gauge className="h-4 w-4" />} />
+ <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
+          <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) : "—"} icon={<Gauge className="h-4 w-4" />} />
+          <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
+          <Tile label="Distance" value={p.distanceNm ? `${p.distanceNm.toFixed(0)} NM` : "—"} />
+        </div>
+      </section>
+
+      <section className="panel rounded-xl p-5">
+        <div className="mono mb-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+          Component breakdown
+        </div>
+        <div className="space-y-2">
+          {p.components.map((c) => (
+            <div
+              key={c.key}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/30 bg-secondary/30 px-3 py-2 text-sm"
+            >
+              <div className="flex items-center gap-2">
+                <span className="font-medium">{c.label}</span>
+                <ConfidenceBadge score={c.confidence} />
+                <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {c.tier}
+                </span>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-muted-foreground">{c.note}</span>
+                <span className="mono text-runway">{formatNumber(Number(p.totalPax.toFixed(2)))} PAX</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {p.signals.length > 0 && (
+        <section className="panel rounded-xl p-5">
+          <div className="mono mb-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+            <Sparkles className="h-3 w-3" /> Signals
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {p.signals.map((s) => (
+              <span
+                key={s.key}
+                title={s.hint}
+                className={cn(
+                  "mono inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] ring-1",
+                  s.tone === "positive" && "bg-runway/10 text-runway ring-runway/30",
+                  s.tone === "warn" && "bg-destructive/10 text-destructive ring-destructive/30",
+                  s.tone === "neutral" && "bg-secondary text-muted-foreground ring-border",
+                )}
+              >
+                <span className="uppercase tracking-widest">{s.label}:</span>
+                <span>{s.value}</span>
+              </span>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <p className="text-xs text-muted-foreground">
+        Prediction sourced from your Stats/Income accounting ledger — {formatNumber(p.coverage.myFlights)} own flights
+        and {formatNumber(p.coverage.visitorFlights)} visitor flights. Historical evidence is preferred over formulas;
+        confidence badges reflect sample depth.
+      </p>
+    </div>
+  );
+}
+
+function RankerResult({
+  query,
+  canRank,
+}: {
+  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof rankMissionsFn>>>>;
+  canRank: boolean;
+}) {
+  if (!canRank) {
+    return (
+      <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
+        Pick departure and aircraft to rank owned destinations.
+      </div>
+    );
+  }
+  if (query.isFetching && !query.data) {
+    return <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Ranking candidates…</div>;
+  }
+  if (!query.data) return null;
+  const rows = query.data.results;
+  return (
+    <div className="panel overflow-x-auto rounded-xl">
+      <table className="w-full text-sm">
+        <thead className="border-b border-border/40 text-left">
+          <tr className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            <th className="px-4 py-3">Airport</th>
+            <th className="px-4 py-3">Distance</th>
+            <th className="px-4 py-3">Flight time</th>
+            <th className="px-4 py-3">Total PAX</th>
+            <th className="px-4 py-3">PAX / hr</th>
+            <th className="px-4 py-3">Confidence</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.arrival} className="border-b border-border/20 last:border-0">
+              <td className="px-4 py-2">
+                <SimbriefLink icao={r.arrival} />
+                <span className="ml-2 text-xs text-muted-foreground">{r.arrivalName}</span>
+              </td>
+              <td className="px-4 py-2 mono">{r.distanceNm ? `${r.distanceNm.toFixed(0)} NM` : "—"}</td>
+              <td className="px-4 py-2 mono">{fmtDuration(r.flightTimeMs)}</td>
+              <td className="px-4 py-2 mono">{formatNumber(Number(p.totalPax.toFixed(2)))}</td>
+              <td className="px-4 py-2 mono">{r.paxPerHour ? r.paxPerHour.toFixed(1) : "—"}</td>
+              <td className="px-4 py-2">
+                <ConfidenceBadge score={r.confidence} />
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">
+                No candidate arrivals — you need at least one other owned airport.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Tile({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
+  return (
+    <div className="rounded-lg border border-border/40 bg-secondary/40 p-3">
+      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="mt-1 flex items-center gap-2 font-display text-2xl font-semibold tracking-tight">
+        {icon}
+        {value}
+      </div>
+    </div>
+  );
+}
