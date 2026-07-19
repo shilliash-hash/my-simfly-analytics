@@ -179,7 +179,7 @@ function estimateAircraftComponent(
   if (near.length >= MIN_NEAR) {
        const calculatedValue = median(near.map((r) => r.paxAircraftOwn));
       // Jeśli z jakiegoś powodu w ledgerze zysk właściciela to 0, ratujemy się średnią z lotów typu ICAO
-      const v = calculatedValue > 0 ? calculatedValue : (anyOwn.length > 0 ? mean(anyOwn.map((r) => r.paxAircraftOwn)) : 0.5);
+      const v = calculatedValue > 0 ? calculatedValue : 0.5;
 
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
