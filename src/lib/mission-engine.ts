@@ -312,25 +312,26 @@ function estimateAirportEndpoint(
 /** Licence component — half of the licence baseline (the other half is allocated
  *  across the two airport-pilot-share rows to avoid double-counting paxOther). */
 function estimateLicenceComponent(
-  inputs: MissionInputs,
-  baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
+ inputs: MissionInputs,
+ baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
 ): ComponentEstimate {
-  const code = (inputs.licence || "").trim().toUpperCase();
-  if (!code) {
-    return { key: "licence", label: "Licence income",
-      value: 0, ownerShare: 0, pilotShare: 0,
-      sampleSize: 0, tier: "none", confidence: 20,
-      note: "No licence selected." };
-  }
-  const value = baseline.value / 2;
-  return { key: "licence", label: "Licence income",
-    value, ownerShare: 0, pilotShare: value,
-    sampleSize: baseline.sampleSize,
-    tier: baseline.tier,
-    confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
-    note: baseline.sampleSize > 0
-      ? `Half of licence baseline (${baseline.value.toFixed(1)} PAX median across ${baseline.sampleSize} flights on ${code}). The other half is credited across airport pilot shares.`
-      : `No history on ${code} yet.` };
+ const code = (inputs.licence || "").trim().toUpperCase();
+ if (!code) {
+ return { key: "licence", label: "Licence income",
+ value: 0, ownerShare: 0, pilotShare: 0,
+ sampleSize: 0, tier: "none", confidence: 20,
+ note: "No licence selected." };
+ }
+ // Zmieniamy przypisanie na pełną wartość baseline, bez dzielenia przez 2
+ const value = baseline.value;
+ return { key: "licence", label: "Licence income",
+ value, ownerShare: 0, pilotShare: value,
+ sampleSize: baseline.sampleSize,
+ tier: baseline.tier,
+ confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
+ note: baseline.sampleSize > 0
+ ? `Full licence baseline (${baseline.value.toFixed(2)} PAX median across ${baseline.sampleSize} flights on ${code}).`
+ : `No history on ${code} yet.` };
 }
 
 /** Weekly first-arrival ×3 detection. */
