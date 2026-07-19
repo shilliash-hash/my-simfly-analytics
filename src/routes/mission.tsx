@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { Rocket, Gauge, ArrowRight, Sparkles } from "lucide-react";
+import { Rocket, Gauge, ArrowRight, Sparkles, Zap } from "lucide-react";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { HubSupportGate } from "@/components/hub-support";
@@ -14,6 +14,7 @@ import {
   type MissionCatalog,
 } from "@/lib/mission.functions";
 import { SimbriefLink } from "@/components/simbrief-link";
+import { MissionLoadingSequence } from "@/components/mission-loading-sequence";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/mission")({
@@ -42,6 +43,7 @@ function MissionRoute() {
     return (
       <AppShell>
         <PageHeader eyebrow="Premium" title="Mission Intelligence" description="Loading…" />
+        <MissionLoadingSequence />
       </AppShell>
     );
   }
@@ -324,13 +326,18 @@ function PlannerResult({
     );
   }
   if (query.isFetching && !query.data) {
-    return <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Predicting…</div>;
+    return <MissionLoadingSequence />;
   }
   if (!query.data) return null;
   const p = query.data;
+  const componentSum = p.components.reduce((s, c) => s + c.value, 0);
+  const bonusExtra = p.weeklyBonus.available ? p.weeklyBonus.extraPax : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      {query.isFetching && <MissionLoadingSequence variant="overlay" />}
+
+      {/* Prediction header + KPIs */}
       <section className="panel rounded-xl p-5">
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -352,36 +359,86 @@ function PlannerResult({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-4">
-          <Tile label="Total PAX" value={formatNumber(Math.round(p.totalPax))} />
+          <Tile label="Historical base" value={formatNumber(Math.round(p.totalPax))} />
+          <Tile
+            label="Projected today"
+            value={formatNumber(Math.round(p.projectedPax))}
+            icon={<Sparkles className="h-4 w-4 text-instrument" />}
+          />
           <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) : "—"} icon={<Gauge className="h-4 w-4" />} />
           <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
-          <Tile label="Distance" value={p.distanceNm ? `${p.distanceNm.toFixed(0)} NM` : "—"} />
         </div>
       </section>
 
+      {/* Component breakdown */}
       <section className="panel rounded-xl p-5">
         <div className="mono mb-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-          Component breakdown
+          Base prediction · component breakdown
         </div>
         <div className="space-y-2">
           {p.components.map((c) => (
             <div
               key={c.key}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border/30 bg-secondary/30 px-3 py-2 text-sm"
+              className="rounded-md border border-border/30 bg-secondary/30 px-3 py-2.5 text-sm"
             >
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{c.label}</span>
-                <ConfidenceBadge score={c.confidence} />
-                <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {c.tier}
-                </span>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="text-xs text-muted-foreground">{c.note}</span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium">{c.label}</span>
+                  <ConfidenceBadge score={c.confidence} />
+                  <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                    {c.tier}
+                  </span>
+                </div>
                 <span className="mono text-runway">{formatNumber(Math.round(c.value))} PAX</span>
               </div>
+              {(c.ownerShare > 0 || c.pilotShare > 0) && (
+                <div className="mono mt-1 flex gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {c.ownerShare > 0 && <span>Owner: {c.ownerShare.toFixed(1)}</span>}
+                  {c.pilotShare > 0 && <span>Pilot: {c.pilotShare.toFixed(1)}</span>}
+                </div>
+              )}
+              <div className="mt-1 text-xs text-muted-foreground">{c.note}</div>
             </div>
           ))}
+        </div>
+        <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
+          <span className="text-muted-foreground">Base prediction (sum of components)</span>
+          <span className="text-runway">= {formatNumber(Math.round(componentSum))} PAX</span>
+        </div>
+      </section>
+
+      {/* Weekly bonus modifier */}
+      <section
+        className={cn(
+          "panel rounded-xl p-5",
+          p.weeklyBonus.available && "runway-glow ring-1 ring-instrument/30",
+        )}
+      >
+        <div className="mono mb-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
+          <Zap className="h-3 w-3 text-instrument" /> Temporary modifiers
+        </div>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/30 bg-secondary/30 px-3 py-2.5 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Weekly First Arrival Bonus</span>
+            <span
+              className={cn(
+                "mono rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest ring-1",
+                p.weeklyBonus.available
+                  ? "bg-instrument/15 text-instrument ring-instrument/30"
+                  : "bg-secondary text-muted-foreground ring-border",
+              )}
+            >
+              {p.weeklyBonus.available ? `×${p.weeklyBonus.multiplier} available` : "not available"}
+            </span>
+          </div>
+          <span className="mono text-instrument">
+            {p.weeklyBonus.available ? `+ ${formatNumber(Math.round(bonusExtra))} PAX` : "—"}
+          </span>
+        </div>
+        <div className="mt-2 text-xs text-muted-foreground">{p.weeklyBonus.reason}</div>
+        <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
+          <span className="text-muted-foreground">Projected today (base + modifiers)</span>
+          <span className="text-instrument">= {formatNumber(Math.round(p.projectedPax))} PAX</span>
         </div>
       </section>
 
@@ -412,8 +469,8 @@ function PlannerResult({
 
       <p className="text-xs text-muted-foreground">
         Prediction sourced from your Stats/Income accounting ledger — {formatNumber(p.coverage.myFlights)} own flights
-        and {formatNumber(p.coverage.visitorFlights)} visitor flights. Historical evidence is preferred over formulas;
-        confidence badges reflect sample depth.
+        and {formatNumber(p.coverage.visitorFlights)} visitor flights. Each component is independently derived; the
+        weekly ×3 bonus is surfaced separately and never folded into the historical base.
       </p>
     </div>
   );
@@ -434,7 +491,7 @@ function RankerResult({
     );
   }
   if (query.isFetching && !query.data) {
-    return <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Ranking candidates…</div>;
+    return <MissionLoadingSequence />;
   }
   if (!query.data) return null;
   const rows = query.data.results;
