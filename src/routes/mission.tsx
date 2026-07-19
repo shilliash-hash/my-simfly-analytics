@@ -359,10 +359,10 @@ function PlannerResult({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-4">
-          <Tile label="Historical base" value={formatNumber(Math.round(p.totalPax))} />
+          <Tile label="Historical base" value={formatNumber(Number(p.totalPax.toFixed(2)))} />
           <Tile
             label="Projected today"
-            value={formatNumber(Math.round(p.projectedPax))}
+            value={formatNumber(Number(p.projectedPax.toFixed(2)))}
             icon={<Sparkles className="h-4 w-4 text-instrument" />}
           />
           <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(1) : "—"} icon={<Gauge className="h-4 w-4" />} />
@@ -389,7 +389,7 @@ function PlannerResult({
                     {c.tier}
                   </span>
                 </div>
-                <span className="mono text-runway">{formatNumber(Math.round(c.value))} PAX</span>
+                <span className="mono text-runway">{formatNumber(Number(c.value.toFixed(2)))} PAX</span>
               </div>
               {(c.ownerShare > 0 || c.pilotShare > 0) && (
                 <div className="mono mt-1 flex gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -402,8 +402,8 @@ function PlannerResult({
           ))}
         </div>
         <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
-          <span className="text-muted-foreground">Base prediction (sum of components)</span>
-          <span className="text-runway">= {formatNumber(Math.round(componentSum))} PAX</span>
+           <span className="text-muted-foreground">Base prediction (sum of components)</span>
+           <span className="text-runway">= {formatNumber(Number(componentSum.toFixed(2)))} PAX</span>
         </div>
       </section>
 
@@ -431,14 +431,14 @@ function PlannerResult({
               {p.weeklyBonus.available ? `×${p.weeklyBonus.multiplier} available` : "not available"}
             </span>
           </div>
-          <span className="mono text-instrument">
-            {p.weeklyBonus.available ? `+ ${formatNumber(Math.round(bonusExtra))} PAX` : "—"}
-          </span>
+           <span className="mono text-instrument">
+ {p.weeklyBonus.available ? `+ ${formatNumber(Number(bonusExtra.toFixed(2)))} PAX` : "—"}
+ </span>
         </div>
         <div className="mt-2 text-xs text-muted-foreground">{p.weeklyBonus.reason}</div>
         <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
           <span className="text-muted-foreground">Projected today (base + modifiers)</span>
-          <span className="text-instrument">= {formatNumber(Math.round(p.projectedPax))} PAX</span>
+ <span className="text-instrument">= {formatNumber(Number(p.projectedPax.toFixed(2)))} PAX</span>
         </div>
       </section>
 
