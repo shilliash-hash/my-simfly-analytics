@@ -98,7 +98,7 @@ export type MissionEvidence = {
 const MIN_DIRECT = 4;
 const MIN_NEAR = 3;
 const MIN_CLASS = 5;
-const WEEKLY_BONUS_MULTIPLIER = 3; // SimFly Weekly Cycle First Movement ×3
+const WEEKLY_BONUS_MULTIPLIER = 1.5; // SimFly Weekly Cycle First Movement ×3
 const ASSUMED_HIST_PILOT_PCT = 60; // conservative anchor: assume historical rows sat at max pilot share
 
 function mean(xs: number[]): number {
