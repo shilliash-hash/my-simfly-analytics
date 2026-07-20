@@ -126,8 +126,9 @@ export const predictMissionFn = createServerFn({ method: "GET" })
       departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
       arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
       aircraftId: data.aircraftId,
-      aircraftIcao: ac?.icao,
-      aircraftLabel: ac?.name,
+    aircraftIcao: ac?.icao || (data as any).aircraftIcao,
+    aircraftLabel: ac?.name || (data as any).aircraftLabel || (data as any).aircraftName,
+
       licence: data.licence,
     };
     return predictMission(inputs, evidenceFromPayload(payload));
