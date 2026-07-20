@@ -98,7 +98,7 @@ export type MissionEvidence = {
 const MIN_DIRECT = 4;
 const MIN_NEAR = 3;
 const MIN_CLASS = 5;
-const WEEKLY_BONUS_MULTIPLIER = 1.5; // SimFly Weekly Cycle First Movement ×3
+const WEEKLY_BONUS_MULTIPLIER = 3; // SimFly Weekly Cycle First Movement ×3
 const ASSUMED_HIST_PILOT_PCT = 60; // conservative anchor: assume historical rows sat at max pilot share
 
 function mean(xs: number[]): number {
@@ -357,34 +357,37 @@ function estimateLicenceComponent(
 }
 
 /** Weekly first-arrival ×3 detection.
- *  Depends only on: selected licence, arrival ICAO, current weekly window,
- *  and whether the licence has already landed at the arrival this week.
- *  Airport ownership is deliberately not considered. */
+ * Zmienione: bonus liczony od sumy pilot share z lotniska odlotu i przylotu. */
 function estimateWeeklyBonus(
-  inputs: MissionInputs,
-  ev: MissionEvidence,
-  licenceComponent: number,
+ inputs: MissionInputs,
+ ev: MissionEvidence,
+ depPilotShare: number,  // Nowy parametr
+ arrPilotShare: number,  // Nowy parametr
 ): WeeklyBonus {
-  const code = (inputs.licence || "").trim().toUpperCase();
-  const arr = inputs.arrival.icao.toUpperCase();
-  if (!code) {
-    return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
-      reason: "No licence selected — bonus not applicable." };
-  }
-  const { startMs, endMs } = ev.weeklyWindow;
-  const usedThisWeek = ev.ledger.myFlights.some((f) => {
-    if ((f.licence || "").toUpperCase() !== code) return false;
-    if (f.destIcao !== arr) return false;
-    const t = Date.parse(f.ts);
-    return Number.isFinite(t) && t >= startMs && t <= endMs;
-  });
-  if (usedThisWeek) {
-    return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
-      reason: `Licence ${code} already landed at ${arr} this weekly cycle.` };
-  }
- const extraPax = Math.max(0, licenceComponent * (WEEKLY_BONUS_MULTIPLIER - 1));
-  return { available: true, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax,
-    reason: `First landing this week for ${code} at ${arr} — ×${WEEKLY_BONUS_MULTIPLIER} on licence share.` };
+ const code = (inputs.licence || "").trim().toUpperCase();
+ const arr = inputs.arrival.icao.toUpperCase();
+ if (!code) {
+ return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
+ reason: "No licence selected — bonus not applicable." };
+ }
+ const { startMs, endMs } = ev.weeklyWindow;
+ const usedThisWeek = ev.ledger.myFlights.some((f) => {
+ if ((f.licence || "").toUpperCase() !== code) return false;
+ if (f.destIcao !== arr) return false;
+ const t = Date.parse(f.ts);
+ return Number.isFinite(t) && t >= startMs && t <= endMs;
+ });
+ if (usedThisWeek) {
+ return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
+ reason: `Licence ${code} already landed at ${arr} this weekly cycle.` };
+ }
+ 
+ // NOWA LOGIKA: Sumujemy pilot share z obu lotnisk i mnożymy przez 0.5 (bo bonus to 1.5x, czyli +50%)
+ const baseForBonus = depPilotShare + arrPilotShare;
+ const extraPax = Math.max(0, baseForBonus * (WEEKLY_BONUS_MULTIPLIER - 1));
+ 
+ return { available: true, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax,
+ reason: `First landing this week for ${code} at ${arr} — ×${WEEKLY_BONUS_MULTIPLIER} on airport pilot shares.` };
 }
 
 // ---------- Assembler ----------
@@ -422,8 +425,9 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
   const components = [aircraft, dep, arr, licence];
 
   const totalPax = components.reduce((s, c) => s + c.value, 0);
-  const weeklyBonus = estimateWeeklyBonus(inputs, ev, licence.value);
-  const projectedPax = totalPax + (weeklyBonus.available ? weeklyBonus.extraPax : 0);
+ // Przekazujemy dep.pilotShare oraz arr.pilotShare zamiast licence.value
+ const weeklyBonus = estimateWeeklyBonus(inputs, ev, dep.pilotShare, arr.pilotShare);
+ const projectedPax = totalPax + (weeklyBonus.available ? weeklyBonus.extraPax : 0);
   const flightTimeHours = flightTimeMs ? flightTimeMs / 3_600_000 : 0;
   const paxPerHour = flightTimeHours > 0 ? projectedPax / flightTimeHours : null;
 
