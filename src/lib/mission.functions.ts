@@ -157,10 +157,26 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
     aircraftId: data.aircraftId,
     
-    // ZABEZPIECZENIE ARCHITEKTONICZNE:
-    // Próbujemy wyciągnąć ICAO ze wszystkich możliwych, głęboko przeskanowanych źródeł API SimFly
-    aircraftIcao: ac?.icao || marketAircraftIcao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
-    aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
+        aircraftIcao: (() => {
+      if (ac?.icao) return ac.icao;
+      
+      const label = (data as any).aircraftLabel || (data as any).aircraftName || "";
+      if (label) {
+        const cleanLabel = label.toUpperCase();
+        if (cleanLabel.includes("A350") || cleanLabel.includes("A359")) return "A359";
+        if (cleanLabel.includes("737") || cleanLabel.includes("B38M")) return "B38M";
+        if (cleanLabel.includes("777") || cleanLabel.includes("B77W")) return "B77W";
+        if (cleanLabel.includes("CITATION") || cleanLabel.includes("C750")) return "C750";
+        if (cleanLabel.includes("CESSNA 172") || cleanLabel.includes("C172")) return "C172";
+        if (cleanLabel.includes("CESSNA 152") || cleanLabel.includes("C152")) return "C152";
+        if (cleanLabel.includes("TBM") || cleanLabel.includes("TBM9")) return "TBM9";
+        if (cleanLabel.includes("ATR") || cleanLabel.includes("AT76")) return "AT76";
+      }
+      
+      return (data as any).aircraftIcao;
+    })(),
+    aircraftLabel: ac?.name || (data as any).aircraftLabel || (data as any).aircraftName || "Rental Aircraft",
+
     
     licence: data.licence,
     destAirportTier: arrAirport?.category || 1,
