@@ -230,7 +230,7 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
  const predictedAircraftPax = basePaxRate * timeFactor * airportScaleFactor;
 
  // Sprawdzamy czy samolot jest naszą własnością
-  const ownAircraft = !!inputs.aircraftId && ev.ownedAircraftIds.has(inputs.aircraftId);
+  //const ownAircraft = !!inputs.aircraftId && ev.ownedAircraftIds.has(inputs.aircraftId);
 
   // Jeśli samolot jest własny: dostajesz 100% (owner-share + pilot-share zunifikowane)
   // Jeśli to rental/generic: dostajesz sprawiedliwe 50% stawki bazowej jako czysty pilot-share
