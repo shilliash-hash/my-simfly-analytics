@@ -157,27 +157,22 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
     aircraftId: data.aircraftId,
     
-        aircraftIcao: (() => {
+          aircraftIcao: (() => {
+      // 1. Jeśli to nasz samolot, bierzemy jego kod z lokalnej floty
       if (ac?.icao) return ac.icao;
       
-      const label = (data as any).aircraftLabel || (data as any).aircraftName || "";
-      if (label) {
-        const cleanLabel = label.toUpperCase();
-        if (cleanLabel.includes("A350") || cleanLabel.includes("A359")) return "A359";
-        if (cleanLabel.includes("737") || cleanLabel.includes("B38M")) return "B38M";
-        if (cleanLabel.includes("777") || cleanLabel.includes("B77W")) return "B77W";
-        if (cleanLabel.includes("CITATION") || cleanLabel.includes("C750")) return "C750";
-        if (cleanLabel.includes("CESSNA 172") || cleanLabel.includes("C172")) return "C172";
-        if (cleanLabel.includes("CESSNA 152") || cleanLabel.includes("C152")) return "C152";
-        if (cleanLabel.includes("TBM") || cleanLabel.includes("TBM9")) return "TBM9";
-        if (cleanLabel.includes("ATR") || cleanLabel.includes("AT76")) return "AT76";
-      }
+      // 2. Jeśli to rental, bierzemy przeskanowany wyżej z API kod ICAO maszyny
+      if (marketAircraftIcao) return marketAircraftIcao;
       
+      // 3. Fallback do kodów z głębokiego skanu kontraktu misji rynkowej
+      if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
+      if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
+      if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
+      
+      // 4. Ostateczny rynkowy bezpiecznik
       return (data as any).aircraftIcao;
     })(),
-    aircraftLabel: ac?.name || (data as any).aircraftLabel || (data as any).aircraftName || "Rental Aircraft",
-
-    
+    aircraftLabel: ac?.name || (marketMission?.aircraft_name || "Rental Aircraft"),
     licence: data.licence,
     destAirportTier: arrAirport?.category || 1,
     destAirportLevel: arrAirport?.level || 1,
