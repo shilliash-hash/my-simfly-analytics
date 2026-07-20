@@ -3393,23 +3393,22 @@ export const runFleetActivityBackfill = createServerFn({ method: "POST" })
     return { processed: externalFlights.length, inserted: insertedCount };
   });
 
-// Nowa funkcja wyciągająca unikalne samoloty z historii lotów w bazie Supabase
+// Całkowicie globalne zapytanie – pobiera unikalne statki ze wszystkich logbooków w bazie
 export async function getAllGlobalAirplanes(): Promise<{ aircraftId: string; name: string; icao: string; tailNumber?: string; ownerName?: string }[]> {
   try {
     const { data: rows } = await supabaseAdmin
       .from("simfly_flights")
-      .select("aircraft_id, aircraft, aircraft_icao, aircraft_tailNumber, username")
-      .not("aircraft_id", "is", null);
+      .select("aircraft_id, aircraft, aircraft_icao, aircraft_tailNumber, username");
 
     if (!rows || rows.length === 0) return [];
 
-    // De-duplikacja po aircraft_id za pomocą Mapy
+    // De-duplikacja po globalnym aircraft_id
     const uniquePlanes = new Map<string, any>();
     for (const r of rows) {
-      if (!uniquePlanes.has(r.aircraft_id)) {
+      if (r.aircraft_id && !uniquePlanes.has(r.aircraft_id)) {
         uniquePlanes.set(r.aircraft_id, {
           aircraftId: r.aircraft_id,
-          name: r.aircraft || "Unknown",
+          name: r.aircraft || "Unknown Airframe",
           icao: r.aircraft_icao || "ICAO",
           tailNumber: r.aircraft_tailNumber || "",
           ownerName: r.username || "Other Pilot"
@@ -3419,10 +3418,11 @@ export async function getAllGlobalAirplanes(): Promise<{ aircraftId: string; nam
 
     return Array.from(uniquePlanes.values());
   } catch (err) {
-    console.error("[GLOBAL FLEET FETCH ERROR]", err);
+    console.error("[GLOBAL FLEET FETCH CRASH]", err);
     return [];
   }
 }
+
 
 
 // {Login-change-deployment} 14.07.2026
