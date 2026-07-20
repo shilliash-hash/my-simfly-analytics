@@ -78,7 +78,7 @@ function MissionPlanner() {
   const [arrival, setArrival] = useState("");
   const [aircraftId, setAircraftId] = useState<string>("");
   const [licence, setLicence] = useState<string>("");
-  const [mode, setMode] = useState<"planner" | "ranker">("planner");
+  const mode = "planner";
 
   // Auto-select first aircraft/licence when catalog loads.
   useMemo(() => {
@@ -127,29 +127,10 @@ function MissionPlanner() {
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Decision support"
-        title="Mission Intelligence"
-        description="Predicts PAX, income and PAX/hour for a planned flight using your own historical ledger — never a second accounting engine."
-        actions={
-          <div className="flex items-center gap-1 rounded-lg border border-border/40 bg-secondary/40 p-1">
-            {(["planner", "ranker"] as const).map((m) => (
-              <button
-                key={m}
-                type="button"
-                onClick={() => setMode(m)}
-                className={cn(
-                  "mono rounded-md px-2.5 py-1 text-[11px] uppercase tracking-widest transition-colors",
-                  mode === m
-                    ? "bg-runway/15 text-runway ring-1 ring-runway/40"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {m === "planner" ? "Planner" : "Ranker"}
-              </button>
-            ))}
-          </div>
-        }
-      />
+       eyebrow="Decision support"
+       title="Mission Intelligence"
+       description="Predicts PAX, income and PAX/hour for a planned flight using your own historical ledger — never a second accounting engine."
+     />
 
       <MissionForm
         catalog={catalog}
