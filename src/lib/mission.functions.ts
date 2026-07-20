@@ -157,22 +157,39 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
     aircraftId: data.aircraftId,
     
-          aircraftIcao: (() => {
-      // 1. Jeśli to nasz samolot, bierzemy jego kod z lokalnej floty
+             aircraftIcao: (() => {
       if (ac?.icao) return ac.icao;
       
-      // 2. Jeśli to rental, bierzemy przeskanowany wyżej z API kod ICAO maszyny
-      if (marketAircraftIcao) return marketAircraftIcao;
-      
-      // 3. Fallback do kodów z głębokiego skanu kontraktu misji rynkowej
-      if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
-      if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
-      if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
-      
-      // 4. Ostateczny rynkowy bezpiecznik
+      const upId = data.aircraftId;
+      if (!upId) return (data as any).aircraftIcao;
+
+      // Szukamy w moich lotach zapisanego ICAO dla tego UUID
+      if (payload.ledger?.myFlights) {
+        const found = payload.ledger.myFlights.find((f) => f.aircraftId === upId);
+        if (found?.aircraftIcao) return found.aircraftIcao.toUpperCase();
+      }
+
+      // Jeśli nie ma, szukamy w lotach innych pilotów (gości) odwiedzających nasze bazy
+      if (payload.ledger?.visitorFlights) {
+        const found = payload.ledger.visitorFlights.find((v) => v.aircraftId === upId);
+        if (found?.aircraftIcao) return found.aircraftIcao.toUpperCase();
+      }
+
       return (data as any).aircraftIcao;
     })(),
-    aircraftLabel: ac?.name || (marketMission?.aircraft_name || "Rental Aircraft"),
+    aircraftLabel: (() => {
+      if (ac?.name) return ac.name;
+      
+      const upId = data.aircraftId;
+      if (!upId) return "Rental Aircraft";
+
+      if (payload.ledger?.myFlights) {
+        const found = payload.ledger.myFlights.find((f) => f.aircraftId === upId);
+        if (found?.aircraft) return found.aircraft;
+      }
+
+      return "Rental Aircraft";
+    })(),
     licence: data.licence,
     destAirportTier: arrAirport?.category || 1,
     destAirportLevel: arrAirport?.level || 1,
