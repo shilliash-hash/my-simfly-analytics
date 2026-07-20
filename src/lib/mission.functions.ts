@@ -157,16 +157,25 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
     aircraftId: data.aircraftId,
     
-           aircraftIcao: (() => {
+    aircraftIcao: (() => {
       if (ac?.icao) return ac.icao;
       
-      const label = (data as any).aircraftLabel || (data as any).aircraftName || "";
-      if (label && label.includes(" - ")) {
-        return label.split(" - ")[0].trim();
-      }
+      // Szukamy kontraktu misji w globalnym katalogu na podstawie przesyłanego ID samolotu
+      const marketMission = payload.missions?.find((m: any) => 
+        m.aircraftId === data.aircraftId || 
+        m.id === data.aircraftId || 
+        m.aircraft_id === data.aircraftId
+      );
+
+      // Wyciągamy czysty kod ICAO przypisany do tej misji przez API simfly.io
+      if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
+      if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
+      if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
+      
       return (data as any).aircraftIcao;
     })(),
-    aircraftLabel: ac?.name || (data as any).aircraftLabel || (data as any).aircraftName || "Rental Aircraft",
+    aircraftLabel: ac?.name || payload.missions?.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId)?.aircraft_name || "Rental Aircraft",
+
     licence: data.licence,
     destAirportTier: arrAirport?.category || 1,
     destAirportLevel: arrAirport?.level || 1,
