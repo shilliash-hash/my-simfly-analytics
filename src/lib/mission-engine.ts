@@ -279,7 +279,7 @@ function estimateAirportEndpoint(
         : (v.destIcao || "").toUpperCase() === up,
     );
     const values = [
-      ...myAtEndpoint.map((r) => r.paxAirportOwn),
+      ...myAtEndpoint.map((r) => r.paxAirport),
       ...visAtEndpoint.map((v) => v.paxAirport),
     ].filter((x) => x > 0);
     ownerN = values.length;
