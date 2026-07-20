@@ -296,7 +296,7 @@ function estimateAirportEndpoint(
 
   // 2. Próba precyzyjna: filtrujemy te loty po dokładnie tym samym ICAO samolotu
   const exactAircraftFlights = allFlightsAtAirport.filter((f) =>
-    acIcao ? (f.aircraftIcao || "").toUpperCase() === acIcao : false
+    acIcao ? f.aircraftIcao?.toUpperCase() === acIcao : false
   );
 
   // 3. Kaskada: Jeśli leciałeś już tym typem maszyny tutaj - używamy jej.
