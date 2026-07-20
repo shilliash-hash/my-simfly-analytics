@@ -69,7 +69,6 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
    }
 } catch (dbErr) {
   console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
-}
 
 // DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi.
 // Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
