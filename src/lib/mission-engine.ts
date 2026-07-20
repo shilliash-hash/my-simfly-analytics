@@ -255,88 +255,51 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
 
 /** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized. */
 function estimateAirportEndpoint(
-  role: "dep" | "arr",
-  icao: string,
-  ev: MissionEvidence,
-  licenceMedianByCode: Map<string, number>,
+ role: "dep" | "arr",
+ icao: string,
+ ev: MissionEvidence,
+ flightTimeMs: number | null
 ): ComponentEstimate {
-  const key = role === "dep" ? "airport_dep" : "airport_arr";
-  const label = role === "dep" ? "Departure airport" : "Arrival airport";
-  const up = icao.toUpperCase();
-  const own = ev.ownedIcaos.has(up);
+ const key = role === "dep" ? "airport_dep" : "airport_arr";
+ const label = role === "dep" ? "Departure airport" : "Arrival airport";
+ const up = icao.toUpperCase();
 
-  // Owner share: only my own flights matter — paxAirportOwn is the airport-owner slice.
-  let ownerShare = 0;
-  let ownerN = 0;
-  if (own) {
-    const myAtEndpoint = ev.ledger.myFlights.filter((f) =>
-      role === "dep" ? f.originIcao === up : f.destIcao === up,
-    );
-   
-    const visAtEndpoint = ev.ledger.visitorFlights.filter((v) =>
-      role === "dep"
-        ? (v.originIcao || "").toUpperCase() === up
-        : (v.destIcao || "").toUpperCase() === up,
-    );
-    const values = [
-      ...myAtEndpoint.map((r) => r.paxAirportOwn),
-      ...visAtEndpoint.map((v) => v.paxAirport),
-    ].filter((x) => x > 0);
-    ownerN = values.length;
-    ownerShare = values.length > 0 ? median(values) : 0;
-  }
+ // 1. Mnożnik czasu lotu (zabezpieczenie 3h cut-off przed anomaliami czasowymi)
+ const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
+ const CUT_OFF_HOURS = 3.0;
+ let timeFactor = hours > 0 ? hours : 1.0;
 
-  // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
-  // paxOther, halve to attribute to this endpoint side, then take the median
-  // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
-  const roleRows = ev.ledger.myFlights.filter((f) =>
-    role === "dep" ? f.originIcao === up : f.destIcao === up,
-  );
-  const perFlightPilot: number[] = [];
-  for (const f of roleRows) {
-    const code = (f.licence || "").toUpperCase();
-    const licenceRow = code ? (licenceMedianByCode.get(code) ?? 0) : 0;
-    const airportPortion = Math.max(0, f.paxOther - licenceRow);
-    perFlightPilot.push(airportPortion / 2);
-  }
-  const rawPilot = perFlightPilot.length > 0 ? median(perFlightPilot) : 0;
-  // Normalize to current airport pilot payout % (confidence-weighted shrinkage).
-  const cur = ev.currentAirportPilotPct.get(up);
-  let pilotShare = rawPilot;
-  let normalizedNote = "";
-  if (cur !== undefined && rawPilot > 0) {
-    const w = Math.min(1, perFlightPilot.length / 12);
-    const scaled = rawPilot * (cur / ASSUMED_HIST_PILOT_PCT);
-    pilotShare = rawPilot * w + scaled * (1 - w);
-    if (Math.abs(pilotShare - rawPilot) > 0.01) {
-      normalizedNote = ` Normalized ${rawPilot.toFixed(2)} → ${pilotShare.toFixed(2)} PAX (current pilot payout ${cur.toFixed(0)}%, ${perFlightPilot.length} sample${perFlightPilot.length === 1 ? "" : "s"}).`;
-    }
-  }
+ if (hours > CUT_OFF_HOURS) {
+   const overtime = hours - CUT_OFF_HOURS;
+   const halfHourBlocks = Math.ceil(overtime / 0.5);
+   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
+ }
 
-  const total = ownerShare + pilotShare;
-  const sample = ownerN + perFlightPilot.length;
-  let tier: ConfidenceTier;
-  if (sample >= MIN_DIRECT * 2) tier = "direct";
-  else if (sample >= MIN_NEAR * 2) tier = "near";
-  else if (sample >= MIN_CLASS) tier = "class";
-  else if (sample > 0) tier = "formula";
-  else tier = "none";
+ // 2. Pobieramy Tiery i Levele lotniska bezpośrednio z załadowanego już do pamięci ledger.ownedAirports
+ const destAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
+ const tier = destAirport?.category ?? 1; // Jeśli to obce lotnisko, baza to Tier 1
+ const level = destAirport?.level ?? 1;   // Jeśli obce, baza to Level 1
 
-    const baseNote = own
-    ? `Owner share from ${ownerN} historical flights at ${up} + pilot share (${perFlightPilot.length} of my flights).`
-    : `Pilot share from ${perFlightPilot.length} of my flights through ${up} (airport pilot cut only).`;
+ // 3. Wyliczamy stabilną stawkę PAX (Baza dla T1 L1 to 0.11 PAX na godzinę lotu)
+ const airportTierFactor = 1 + (tier - 1) * 0.25;
+ const airportLevelFactor = 1 + (level - 1) * 0.096;
+ const predictedAirportPax = 0.11 * timeFactor * airportTierFactor * airportLevelFactor;
 
-  return {
-    key, label,
-    value: total, ownerShare, pilotShare,
-    sampleSize: sample, tier,
-    confidence: confidenceFromTier(tier, sample),
-    note: baseNote + normalizedNote,
-  };
+ return {
+   key,
+   label,
+   value: parseFloat(predictedAirportPax.toFixed(2)),
+   ownerShare: 0,
+   pilotShare: parseFloat(predictedAirportPax.toFixed(2)),
+   sampleSize: 1,
+   tier: "formula",
+   confidence: 95,
+   note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Tier ${tier} and Level ${level}.`
+ };
 }
 
 /** Licence component — full historical baseline (real historical averages already
- *  encode landing quality). */
+ * encode landing quality). */
 function estimateLicenceComponent(
  inputs: MissionInputs,
  baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
@@ -439,8 +402,8 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
   const baseline = licenceBaseline(inputs, ev);
   const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
   const aircraft = estimateAircraftComponent(inputs, ev, flightTimeMs);
-  const dep = estimateAirportEndpoint("dep", depUp, ev, licenceMedianByCode);
-  const arr = estimateAirportEndpoint("arr", arrUp, ev, licenceMedianByCode);
+  const dep = estimateAirportEndpoint("dep", depUp, ev, flightTimeMs);
+  const arr = estimateAirportEndpoint("arr", arrUp, ev, flightTimeMs);
   const licence = estimateLicenceComponent(inputs, baseline);
   const components = [aircraft, dep, arr, licence];
 
