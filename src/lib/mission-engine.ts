@@ -357,19 +357,35 @@ function estimateLicenceComponent(
 }
 
 /** Weekly first-arrival ×3 detection.
- * Zmienione: bonus liczony od sumy pilot share z lotniska odlotu i przylotu. */
+ * Zmienione: bonus liczony od sumy pilot share z lotniska odlotu i przylotu. 
+ * DODANO: Bonus jest pomijany, jeśli gracz posiada lotnisko odlotu lub przylotu. */
 function estimateWeeklyBonus(
  inputs: MissionInputs,
  ev: MissionEvidence,
- depPilotShare: number,  // Nowy parametr
- arrPilotShare: number,  // Nowy parametr
+ depPilotShare: number,
+ arrPilotShare: number,
 ): WeeklyBonus {
  const code = (inputs.licence || "").trim().toUpperCase();
+ const dep = inputs.departure.icao.toUpperCase(); // Pobieramy ICAO odlotu
  const arr = inputs.arrival.icao.toUpperCase();
+ 
  if (!code) {
  return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
  reason: "No licence selected — bonus not applicable." };
  }
+
+ // WARUNEK WŁASNOŚCI: Pomijamy bonus, jeśli jesteś właścicielem dep LUB arr
+ const ownsDeparture = ev.ownedIcaos.has(dep);
+ const ownsArrival = ev.ownedIcaos.has(arr);
+ if (ownsDeparture || ownsArrival) {
+ return { 
+ available: false, 
+ multiplier: WEEKLY_BONUS_MULTIPLIER, 
+ extraPax: 0,
+ reason: `Bonus skipped: You own ${ownsDeparture && ownsArrival ? "both hubs" : ownsDeparture ? `departure hub (${dep})` : `arrival hub (${arr})`}.` 
+ };
+ }
+
  const { startMs, endMs } = ev.weeklyWindow;
  const usedThisWeek = ev.ledger.myFlights.some((f) => {
  if ((f.licence || "").toUpperCase() !== code) return false;
@@ -382,7 +398,7 @@ function estimateWeeklyBonus(
  reason: `Licence ${code} already landed at ${arr} this weekly cycle.` };
  }
  
- // NOWA LOGIKA: Sumujemy pilot share z obu lotnisk i mnożymy przez 0.5 (bo bonus to 1.5x, czyli +50%)
+ // Obliczanie bonusu (mnożnik WEEKLY_BONUS_MULTIPLIER wynosi 3.0, czyli dorzuca +200%)
  const baseForBonus = depPilotShare + arrPilotShare;
  const extraPax = Math.max(0, baseForBonus * (WEEKLY_BONUS_MULTIPLIER - 1));
  
