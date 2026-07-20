@@ -155,87 +155,87 @@ function buildLicenceMedianMap(ledger: IncomeLedger): Map<string, number> {
 
 // ---------- Component estimators ----------
 
+const PLANE_PROGRESSION_BOUNDARIES: Record<number, { min: number; max: number }> = {
+  1: { min: 0.18, max: 0.28 }, // Kat 1: Małe single (C152, C172)
+  2: { min: 0.22, max: 0.50 }, // Kat 2: Lekkie turbośmigłowe (TBM9, AT76)
+  3: { min: 0.25, max: 0.65 }, // Kat 3: Bizjety (C750, HDJT)
+  4: { min: 0.32, max: 0.72 }, // Kat 4: Regionalne (CRJ7)
+  5: { min: 0.42, max: 0.85 }, // Kat 5: Wąskokadłubowe (A320, B738)
+  6: { min: 0.50, max: 1.10 }, // Kat 6: Szerokokadłubowe (A359)
+  7: { min: 0.55, max: 1.30 }  // Kat 7: Ciężkie Cargo (B77W)
+};
+
 /** Aircraft-owner slice — full amount when I own the plane, else 0. */
 function estimateAircraftComponent(
-  inputs: MissionInputs,
-  ev: MissionEvidence,
+ inputs: MissionInputs,
+ ev: MissionEvidence,
+ flightTimeMs: number | null
 ): ComponentEstimate {
-  const acId = inputs.aircraftId;
-  const acIcao = (inputs.aircraftIcao || "").toUpperCase();
+ const acId = inputs.aircraftId;
+ const acIcao = (inputs.aircraftIcao || "").toUpperCase();
 
-  // NOWY WARUNEK: Jeśli wybrano maszynę systemową (Generic), odcinamy zarobki PAX i zwracamy czyste 0
-  if (acId && acId.startsWith("generic-")) {
-    return {
-      key: "aircraft",
-      label: "Aircraft owner income (Generic Tool)",
-      value: 0,
-      ownerShare: 0,
-      pilotShare: 0,
-      sampleSize: 0,
-      tier: "none",
-      confidence: 100,
-      note: "System aircraft used for this flight. Zero PAX generated for pilot and owner.",
-    };
-  }
+ if (acId && acId.startsWith("generic-")) {
+ return {
+ key: "aircraft",
+ label: "Aircraft owner income (Generic Tool)",
+ value: 0, ownerShare: 0, pilotShare: 0,
+ sampleSize: 0, tier: "none", confidence: 100,
+ note: "System aircraft used for this flight. Zero PAX generated for pilot and owner.",
+ };
+ }
 
-  const dep = inputs.departure.icao.toUpperCase();
-  const arr = inputs.arrival.icao.toUpperCase();
+ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
+ if (!ownAircraft) {
+ return {
+ key: "aircraft",
+ label: "Aircraft owner income",
+ value: 0, ownerShare: 0, pilotShare: 0,
+ sampleSize: 0, tier: "none", confidence: 100,
+ note: "You don't own this aircraft — aircraft-owner share is credited to its owner.",
+ };
+ }
 
-  // Direct: same aircraft × same corridor.
-  const direct = ev.ledger.myFlights.filter(
-    (f) => f.ownAircraft && f.aircraftId === acId && f.originIcao === dep && f.destIcao === arr,
-  );
-  if (direct.length >= MIN_DIRECT) {
-    const v = median(direct.map((r) => r.paxAircraftOwn));
-    return { key: "aircraft", label: "Aircraft owner income",
-      value: v, ownerShare: v, pilotShare: 0,
-      sampleSize: direct.length, tier: "direct",
-      confidence: confidenceFromTier("direct", direct.length),
-      note: `Median of ${direct.length} flights on this aircraft × this corridor.` };
-  }
+ const { spec } = lookupAircraftSpec(inputs.aircraftIcao);
+ const aircraftTier = inputs.aircraftTier ?? spec?.category ?? 1;
+ const planeLevel = inputs.aircraftLevel ?? 1;
+ const bounds = PLANE_PROGRESSION_BOUNDARIES[aircraftTier] || { min: 0.20, max: 0.50 };
+ 
+ const safeLevel = Math.max(1, Math.min(10, planeLevel));
+ const gradualStep = (bounds.max - bounds.min) / 9;
+ const basePaxRate = bounds.min + (safeLevel - 1) * gradualStep;
 
-  // Near: same aircraft, any corridor.
-  const near = ev.ledger.myFlights.filter(
-    (f) => f.ownAircraft && f.aircraftId === acId,
-  );
-  if (near.length >= MIN_NEAR) {
-       const calculatedValue = median(near.map((r) => r.paxAircraftOwn));
-      // Jeśli z jakiegoś powodu w ledgerze zysk właściciela to 0, ratujemy się średnią z lotów typu ICAO
-      const v = calculatedValue > 0 ? calculatedValue : 0.5;
+ const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
+ const CUT_OFF_HOURS = 3.0;
+ let timeFactor = hours > 0 ? hours : 1.0;
 
-    return { key: "aircraft", label: "Aircraft owner income",
-      value: v, ownerShare: v, pilotShare: 0,
-      sampleSize: near.length, tier: "near",
-      confidence: confidenceFromTier("near", near.length),
-      note: `Median across ${near.length} flights on this aircraft.` };
-  }
+ if (hours > CUT_OFF_HOURS) {
+   const overtime = hours - CUT_OFF_HOURS;
+   const halfHourBlocks = Math.ceil(overtime / 0.5);
+   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
+ }
 
-  // Class: any of my owned aircraft with same ICAO type.
-  const cls = ev.ledger.myFlights.filter((f) => {
-    if (!f.ownAircraft || !f.aircraftId) return false;
-    const t = ev.aircraftIcaoById.get(f.aircraftId);
-    return t && t.toUpperCase() === acIcao;
-  });
-  if (cls.length >= MIN_CLASS) {
-    const v = median(cls.map((r) => r.paxAircraftOwn));
-    return { key: "aircraft", label: "Aircraft owner income",
-      value: v, ownerShare: v, pilotShare: 0,
-      sampleSize: cls.length, tier: "class",
-      confidence: confidenceFromTier("class", cls.length),
-      note: `Median across ${cls.length} flights on aircraft type ${acIcao || "same type"}.` };
-  }
+ const destTier = (inputs as any).destAirportTier || 1;
+ const destLevel = (inputs as any).destAirportLevel || 1;
+ 
+ const airportTierFactor = 1 + (destTier - 1) * 0.25;
+ const airportLevelFactor = 1 + (destLevel - 1) * 0.096;
+ const airportScaleFactor = airportTierFactor * airportLevelFactor;
 
-  const anyOwn = ev.ledger.myFlights.filter((f) => f.ownAircraft && f.paxAircraftOwn > 0);
-  const v = anyOwn.length > 0 ? mean(anyOwn.map((r) => r.paxAircraftOwn)) : 0;
-  return { key: "aircraft", label: "Aircraft owner income",
-    value: v, ownerShare: v, pilotShare: 0,
-    sampleSize: anyOwn.length,
-    tier: anyOwn.length > 0 ? "formula" : "none",
-    confidence: confidenceFromTier(anyOwn.length > 0 ? "formula" : "none", anyOwn.length),
-    note: anyOwn.length > 0
-      ? `Fallback: mean aircraft-owner PAX across ${anyOwn.length} of my owner flights.`
-      : "No aircraft-owner income in ledger yet." };
+ const predictedAircraftPax = basePaxRate * timeFactor * airportScaleFactor;
+
+ return {
+   key: "aircraft",
+   label: "Aircraft owner income",
+   value: parseFloat(predictedAircraftPax.toFixed(2)),
+   ownerShare: parseFloat(predictedAircraftPax.toFixed(2)),
+   pilotShare: 0,
+   sampleSize: 1, 
+   tier: "formula", 
+   confidence: 95,  
+   note: `Gradual progression prediction (${bounds.min.toFixed(2)} to ${bounds.max.toFixed(2)}) scaled by ${timeFactor.toFixed(2)}h flight time and airport multiplier.`
+ };
 }
+
 
 /** Licence baseline — median paxOther across my flights on this licence. */
 function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
@@ -438,7 +438,7 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
 
   const baseline = licenceBaseline(inputs, ev);
   const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
-  const aircraft = estimateAircraftComponent(inputs, ev);
+  const aircraft = estimateAircraftComponent(inputs, ev, flightTimeMs);
   const dep = estimateAirportEndpoint("dep", depUp, ev, licenceMedianByCode);
   const arr = estimateAirportEndpoint("arr", arrUp, ev, licenceMedianByCode);
   const licence = estimateLicenceComponent(inputs, baseline);
