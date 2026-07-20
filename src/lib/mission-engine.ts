@@ -231,26 +231,14 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
 
  const predictedAircraftPax = basePaxRate * timeFactor * airportScaleFactor;
 
- // Sprawdzamy czy samolot jest naszą własnością
-  //const ownAircraft = !!inputs.aircraftId && ev.ownedAircraftIds.has(inputs.aircraftId);
-
-  // Jeśli samolot jest własny: dostajesz 100% (owner-share + pilot-share zunifikowane)
-  // Jeśli to rental/generic: dostajesz sprawiedliwe 50% stawki bazowej jako czysty pilot-share
-   // Dynamiczny podział zysków (Revenue Sharing):
-  // 1. Jeśli to Twój własny Airbus -> zgarniasz pełne 100% bazy PAX
-  // 2. Jeśli Luigiego leci Twoim samolotem jako RENTAL (rejestracja SP-EEK) -> suwak ma na 0% Pilot, więc dostaje dokładnie 0 PAX!
-  // 3. Jeśli Luigi wypożycza samolot od kogoś innego -> dostaje standardowe rynkowe 60% stawki dla pilota (+ bonus 10% za rental = 66%)
-  
-  const isMyRentalAlias = (inputs.aircraftLabel || "").toUpperCase().includes("SP-EEK");
-  
-  let rentalMultiplier = 0.00; // Domyślnie 0% dla Twojego SP-EEK (żeby tokeny zostały w domu)
-  if (!isMyRentalAlias) {
-    rentalMultiplier = 0.60 * 1.10; // Rynkowe 60% od innych graczy + 10% bonusu za typ misji rental
-  }
+   // OFICJALNY SYSTEM ROZLICZANIA RENTALU (GLOBALNY STANDARD RYNKOWY)
+  // Sztywny punkt odniesienia: 60% dla pilota (współczynnik najczęściej stosowany przez graczy).
+  // Informujemy użytkownika w notatce, że właściciel maszyny mógł ustawić niższy suwak.
+  const DEFAULT_RENTAL_PILOT_SHARE = 0.60;
 
   const finalValue = ownAircraft 
     ? predictedAircraftPax 
-    : parseFloat((predictedAircraftPax * rentalMultiplier).toFixed(2));
+    : parseFloat((predictedAircraftPax * DEFAULT_RENTAL_PILOT_SHARE).toFixed(2));
 
   return {
     key: "aircraft",
@@ -263,11 +251,10 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
     confidence: 95,
     note: ownAircraft
       ? `Gradual progression prediction (${bounds.min.toFixed(2)} to ${bounds.max.toFixed(2)}) scaled by ${timeFactor.toFixed(2)}h flight time.`
-      : isMyRentalAlias 
-        ? `Rental flight (SP-EEK): Pilot receives 0% share as configured by the owner in the management panel.`
-        : `Rental flight: Pilot receives standard 60% market share (+10% rental type bonus).`
+      : `Rental flight prediction based on 60% standard market share. Check aircraft pilot share while setting up missions — it may be lower than 60%.`
   };
 }
+
 
 
 /** Licence baseline — median paxOther across my flights on this licence. */
