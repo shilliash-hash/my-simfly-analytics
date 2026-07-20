@@ -3,6 +3,7 @@
 
 import { createServerFn } from "@tanstack/react-start";
 import { predictMission, type MissionInputs, type MissionPrediction } from "./mission-engine";
+import { supabaseAdmin } from "@/integrations/supabase/client.server";
 
 export type MissionCatalog = {
  owned: { icao: string; name: string; lat?: number; lon?: number }[];
@@ -25,7 +26,7 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  const geo = icaos.length > 0 ? await getAirportGeo({ data: { icaos } }) : [];
  const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
 
- // 1. Mapujemy Twoje własne samoloty
+ // 1. Mapujemy własne samoloty zalogowanego pilota
  const myAirframes = (payload.airplanes || [])
  .filter((p) => p.aircraftId)
  .map((p) => ({
@@ -38,32 +39,39 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  const myOwnedIds = new Set(myAirframes.map((a) => a.aircraftId));
  const otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[] = [];
 
- // 2. DYNAMICZNE POBIERANIE Z PUBLICZNEGO API SIMFLY (BEZ HARDCODOWANIA)
+ // 2. POBIERANIE WYŁĄCZNIE SAMOLOTÓW INNYCH GRACZY (Z NUMEREM REJESTRACYJNYM)
  try {
- const res = await fetch("https://simfly.io", { headers: { Accept: "application/json" } });
- if (res.ok) {
- const json = await res.json() as { data?: { id: string; aircraftName: string; aircraftICAO: string; tailNumber?: string; username: string }[] };
- 
- if (json.data && json.data.length > 0) {
- const uniquePlanes = new Map<string, any>();
- const currentPilot = (data.username || "").toLowerCase();
+ if (icaos.length > 0) {
+ // Odpytujemy bazę o loty na naszych hubach, odrzucając systemowe NULL-e już w SQL
+ const { data: rows } = await supabaseAdmin
+ .from("simfly_flights")
+ .select("aircraft_id, aircraft, aircraft_icao, aircraft_tail_number")
+ .not("aircraft_id", "is", null)
+ .not("aircraft_tail_number", "is", null) // <--- TEN WARUNEK CAŁKOWICIE ODSIEWA SAMOLOTY SYSTEMOWE
+ .or(`departure_icao.in.(${icaos.join(",")}),destination_icao.in.(${icaos.join(",")})`);
 
- for (const f of json.data) {
- // Ignorujemy własne samoloty pilota oraz loty bez ID maszyny
- if (f.id && f.username.toLowerCase() !== currentPilot && !myOwnedIds.has(f.id)) {
- uniquePlanes.set(f.id, {
- aircraftId: f.id,
- label: `${f.aircraftName || "Unknown Airframe"}`,
- icao: f.aircraftICAO || "ICAO",
- tailNumber: f.tailNumber || "",
+ if (rows && rows.length > 0) {
+ const uniquePlanes = new Map<string, any>();
+ 
+ for (const r of rows) {
+ // Pomijamy maszyny, które są własnością zalogowanego pilota
+ if (myOwnedIds.has(r.aircraft_id)) continue;
+
+ // Zapisujemy unikalny samolot gracza (wiemy, że ma tail number dzięki filtrowi SQL)
+ if (!uniquePlanes.has(r.aircraft_id)) {
+ uniquePlanes.set(r.aircraft_id, {
+ aircraftId: r.aircraft_id,
+ label: `${r.aircraft || "Unknown"} — ${r.aircraft_tail_number}`,
+ icao: r.aircraft_icao || "ICAO",
+ tailNumber: r.aircraft_tail_number,
  });
  }
  }
  otherAirframes.push(...uniquePlanes.values());
  }
  }
- } catch (apiErr) {
- console.error("[CATALOG DYNAMIC API FALLBACK TRIGGERED]", apiErr);
+ } catch (dbErr) {
+ console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
  }
 
  return {
