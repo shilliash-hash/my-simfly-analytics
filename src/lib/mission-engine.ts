@@ -204,7 +204,7 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
 */
   
  const { spec } = lookupAircraftSpec(inputs.aircraftIcao);
- const aircraftTier = inputs.aircraftTier ?? spec?.category ?? 1;
+ const aircraftTier = spec?.category ?? inputs.aircraftTier ?? 1;
  const planeLevel = inputs.aircraftLevel ?? 1;
  const bounds = PLANE_PROGRESSION_BOUNDARIES[aircraftTier] || { min: 0.20, max: 0.50 };
  
