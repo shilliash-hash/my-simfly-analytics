@@ -289,9 +289,20 @@ function estimateAirportEndpoint(
   // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
   // paxOther, halve to attribute to this endpoint side, then take the median
   // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
-  const roleRows = ev.ledger.myFlights.filter((f) =>
+   // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
+  const allFlightsAtAirport = ev.ledger.myFlights.filter((f) =>
     role === "dep" ? f.originIcao === up : f.destIcao === up,
   );
+
+  // 2. Próba precyzyjna: filtrujemy te loty po dokładnie tym samym ICAO samolotu
+  const exactAircraftFlights = allFlightsAtAirport.filter((f) =>
+    acIcao ? (f.aircraftIcao || "").toUpperCase() === acIcao : false
+  );
+
+  // 3. Kaskada: Jeśli leciałeś już tym typem maszyny tutaj - używamy jej.
+  // Jeśli to pierwszy lot tym samolotem - bierzemy bezpiecznie całą historię portu.
+  const roleRows = exactAircraftFlights.length > 0 ? exactAircraftFlights : allFlightsAtAirport;
+
   const perFlightPilot: number[] = [];
   for (const f of roleRows) {
     const code = (f.licence || "").toUpperCase();
