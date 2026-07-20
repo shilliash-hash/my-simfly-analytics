@@ -15,10 +15,13 @@ export type MissionCatalog = {
 export const getMissionCatalog = createServerFn({ method: "GET" })
  .inputValidator((d?: { username?: string }) => d ?? {})
  .handler(async ({ data }): Promise<MissionCatalog> => {
+ // Importujemy zaktualizowany plik funkcji
  const { getSimflyPayload, getAirportGeo, getAllGlobalAirplanes } = await import("./simfly.functions");
+ 
  const payload = await getSimflyPayload({
  data: data.username ? { username: data.username } : undefined,
  });
+ 
  const icaos = payload.airports.map((a) => a.icao);
  const geo = icaos.length > 0 ? await getAirportGeo({ data: { icaos } }) : [];
  const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
@@ -33,14 +36,17 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  tailNumber: p.tailNumber,
  }));
 
- // 2. Pobieramy i filtrujemy flotę globalną (samoloty innych pilotów)
+ // 2. Pobieramy i filtrujemy flotę globalną z bazy danych
  const myOwnedIds = new Set(myAirframes.map((a) => a.aircraftId));
- const globalAirplanes = getAllGlobalAirplanes ? await getAllGlobalAirplanes() : [];
+ 
+ // Wywołujemy nowo dopisaną funkcję bazodanową
+ const globalAirplanes = await getAllGlobalAirplanes();
+ 
  const otherAirframes = globalAirplanes
  .filter((p) => p.aircraftId && !myOwnedIds.has(p.aircraftId))
  .map((p) => ({
  aircraftId: p.aircraftId,
- label: `${p.name || p.icao}${p.tailNumber ? ` — ${p.tailNumber}` : ""} (Pilot: ${p.ownerName || "Other"})`,
+ label: `${p.name || p.icao}${p.tailNumber ? ` — ${p.tailNumber}` : ""}`,
  icao: p.icao,
  tailNumber: p.tailNumber,
  }));
@@ -55,7 +61,6 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  licences: payload.licenses.map((l) => ({ code: l.code, name: l.name })),
  };
  });
-
 
 export type PredictMissionInput = {
   username?: string;
