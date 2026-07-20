@@ -119,39 +119,33 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     const gMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
     const gDep = gMap.get(data.departure.toUpperCase());
     const gArr = gMap.get(data.arrival.toUpperCase());
-    const ac = data.aircraftId
-      ? payload.airplanes.find((p) => p.aircraftId === data.aircraftId)
-      : undefined;
-    const inputs: MissionInputs = {
-     departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
-     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
-     aircraftId: data.aircraftId,
-     aircraftIcao: ac?.icao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
+      const ac = data.aircraftId
+    ? payload.airplanes.find((p) => p.aircraftId === data.aircraftId)
+    : undefined;
+
+  // 1. Szukamy oryginalnego kontraktu misji w globalnym katalogu SimFly na podstawie ID samolotu lub ID misji
+  const marketMission = payload.missions?.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
+
+  // 2. Szukamy lotniska docelowego we wczytanym pakiecie danych, aby poznać jego parametry ulepszeń
+  const arrAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.arrival.toUpperCase());
+
+  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
+  const inputs: MissionInputs = {
+    departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
+    arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
+    aircraftId: data.aircraftId,
+    aircraftIcao: ac?.icao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
     aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
     licence: data.licence,
+    // Dodatkowo upewniamy się, że przesyłamy parametry ulepszeń lotniska docelowego do nowego silnika
+    destAirportTier: arrAirport?.category || 1,
+    destAirportLevel: arrAirport?.level || 1,
   };
 
-     return predictMission(inputs, evidenceFromPayload(payload));
-  });
+  // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
+  return predictMission(inputs, evidenceFromPayload(payload));
+});
 
-export type RankMissionsInput = {
-  username?: string;
-  departure: string;
-  aircraftId?: string;
-  licence?: string;
-  sort?: "total" | "pph" | "confidence";
-};
-
-export type RankedMission = {
-  arrival: string;
-  arrivalName: string;
-  distanceNm: number | null;
-  flightTimeMs: number | null;
-  totalPax: number;
-  paxPerHour: number | null;
-  confidence: number;
-  components: { key: string; value: number }[];
-};
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
   .inputValidator((d: RankMissionsInput) => d)
