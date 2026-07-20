@@ -203,8 +203,23 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
  }
 */
   
- const { spec } = lookupAircraftSpec(inputs.aircraftIcao);
+  // 1. Szukamy specyfikacji po przekazanym ciągu tekstowym
+ let { spec } = lookupAircraftSpec(inputs.aircraftIcao);
+
+ // 2. KULZNA POPRAWKA: Jeśli specyfikacja zwróciła domyślny Tier 1 (bo to string nazwy, a nie kod ICAO),
+ // Twoja funkcja lookupAircraftSpec bez problemu przeanalizuje ten tekst, dopasuje słowa kluczowe
+ // i wyciągnie z niego poprawną kategorię dla KAŻDEGO modelu w grze (ATR, Cessna, Airbus itp.)
+ if ((!spec || spec.category === 1) && inputs.aircraftIcao) {
+   const textUpper = inputs.aircraftIcao.toUpperCase();
+   // Przeszukujemy bazę specs, przekazując tekst do dopasowania słów kluczowych
+   const backupSpec = lookupAircraftSpec(textUpper).spec;
+   if (backupSpec && backupSpec.category > 1) {
+     spec = backupSpec;
+   }
+ }
+
  const aircraftTier = spec?.category ?? inputs.aircraftTier ?? 1;
+
  const planeLevel = inputs.aircraftLevel ?? 1;
  const bounds = PLANE_PROGRESSION_BOUNDARIES[aircraftTier] || { min: 0.20, max: 0.50 };
  
