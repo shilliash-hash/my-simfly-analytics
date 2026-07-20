@@ -123,8 +123,49 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     ? payload.airplanes.find((p) => p.aircraftId === data.aircraftId)
     : undefined;
 
-  // 1. Szukamy oryginalnego kontraktu misji w globalnym katalogu SimFly na podstawie ID samolotu lub ID misji
-  const marketMission = payload.missions?.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
+     // 1. UNIWERSALNY SKANER PAYLOADU: Przeszukujemy wszystkie potencjalne tablice z API simfly.io,
+  // aby bezbłędnie namierzyć kontrakt misji rynkowej powiązany z przesyłanym ID samolotu.
+  let marketMission: any = undefined;
+  
+  // Sprawdzamy standardową tablicę misji
+  if (payload.missions?.length) {
+    marketMission = payload.missions.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
+  }
+  
+  // Skan alternatywny: Często w API simfly.io misje rynkowe przychodzą w dedykowanej tablicy marketMissions
+  if (!marketMission && (payload as any).marketMissions?.length) {
+    marketMission = (payload as any).marketMissions.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
+  }
+
+  // Skan floty globalnej: Sprawdzamy czy kod ICAO nie jest zaszyty bezpośrednio w ogólnodostępnej flocie (rentals/market)
+  let marketAircraftIcao: string | undefined = undefined;
+  if ((payload as any).marketAirplanes?.length) {
+    const marketAc = (payload as any).marketAirplanes.find((p: any) => p.aircraftId === data.aircraftId || p.id === data.aircraftId);
+    if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
+  }
+  if (!marketAircraftIcao && (payload as any).rentals?.length) {
+    const marketAc = (payload as any).rentals.find((p: any) => p.aircraftId === data.aircraftId || p.id === data.aircraftId);
+    if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
+  }
+
+  // 2. Szukamy lotniska docelowego we wczytanym pakiecie danych, aby poznać jego parametry ulepszeń
+  const arrAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.arrival.toUpperCase());
+
+  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
+  const inputs: MissionInputs = {
+    departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
+    arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
+    aircraftId: data.aircraftId,
+    
+    // ZABEZPIECZENIE ARCHITEKTONICZNE:
+    // Próbujemy wyciągnąć ICAO ze wszystkich możliwych, głęboko przeskanowanych źródeł API SimFly
+    aircraftIcao: ac?.icao || marketAircraftIcao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
+    aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
+    
+    licence: data.licence,
+    destAirportTier: arrAirport?.category || 1,
+    destAirportLevel: arrAirport?.level || 1,
+  };
 
   // 2. Szukamy lotniska docelowego we wczytanym pakiecie danych, aby poznać jego parametry ulepszeń
   const arrAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.arrival.toUpperCase());
