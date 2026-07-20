@@ -300,13 +300,13 @@ function FieldSelectAircraft({
  ))}
  </optgroup>
  )}
-  
- {/* SEKCJA 2: SAMOLOTY INNYCH PILOTÓW */}
- {catalog?.otherAirframes && catalog.otherAirframes.length > 0 && (
- <optgroup label="── OTHER PILOTS ──" className="font-mono text-xs text-muted-foreground">
- {catalog.otherAirframes.map((a) => (
+
+ {/* SEKCJA 1B (NOWOŚĆ): SAMOLOTY SYSTEMOWE GENERIC */}
+ {catalog?.genericAirframes && catalog.genericAirframes.length > 0 && (
+ <optgroup label="── SYSTEM AIRCRAFTS (0 PAX) ──" className="font-mono text-xs text-amber-500 font-semibold tracking-wider">
+ {catalog.genericAirframes.map((a) => (
  <option key={a.aircraftId} value={a.aircraftId} className="text-foreground font-sans text-sm">
- {a.label} ({a.icao})
+ {a.label}
  </option>
  ))}
  </optgroup>
