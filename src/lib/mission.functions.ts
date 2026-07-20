@@ -9,6 +9,7 @@ export type MissionCatalog = {
  owned: { icao: string; name: string; lat?: number; lon?: number }[];
  myAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
  otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
+ genericAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
  licences: { code: string; name: string }[];
 };
 
@@ -67,37 +68,33 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  });
  }
  }
-// Definiujemy kompletną listę samolotów systemowych dla wszystkich 7 tierów SimFly (T1-T7)
-    const genericAirframes = [
-      { aircraftId: "generic-t1-single-piston", label: "T1: GENERIC SINGLE PISTON (C172 / P28A)", icao: "C172", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t2-single-turboprop", label: "T2: GENERIC SINGLE TURBOPROP (C208 / PC12)", icao: "C208", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t3-twin-turboprop", label: "T3: GENERIC TWIN TURBOPROP (TBM9 / AT76 / B350)", icao: "TBM9", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t4-twin-piston", label: "T4: GENERIC TWIN PISTON (BARO / DA42 / C310)", icao: "DA42", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t5-regional-jet", label: "T5: GENERIC REGIONAL JET (CRJ9 / E190 / C510)", icao: "CRJ9", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t6-narrowbody", label: "T6: GENERIC NARROWBODY (A320 / B738 / MD82)", icao: "A320", tailNumber: "SYSTEM" },
-      { aircraftId: "generic-t7-widebody", label: "T7: GENERIC WIDEBODY (A359 / B77W / B744)", icao: "A359", tailNumber: "SYSTEM" },
-    ];  
- otherAirframes.push(...uniquePlanes.values());
- }
- }
- } catch (dbErr) {
- console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
- }
+// DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi. 
+   // Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
+   const genericAirframes = [
+     { aircraftId: "generic-t1-single-piston", label: "T1: GENERIC SINGLE PISTON (C172 / P28A)", icao: "C172", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t2-single-turboprop", label: "T2: GENERIC SINGLE TURBOPROP (C208 / PC12)", icao: "C208", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t3-twin-turboprop", label: "T3: GENERIC TWIN TURBOPROP (TBM9 / AT76 / B350)", icao: "TBM9", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t4-twin-piston", label: "T4: GENERIC TWIN PISTON (BARO / DA42 / C310)", icao: "DA42", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t5-regional-jet", label: "T5: GENERIC REGIONAL JET (CRJ9 / E190 / C510)", icao: "CRJ9", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t6-narrowbody", label: "T6: GENERIC NARROWBODY (A320 / B738 / MD82)", icao: "A320", tailNumber: "SYSTEM" },
+     { aircraftId: "generic-t7-widebody", label: "T7: GENERIC WIDEBODY (A359 / B77W / B744)", icao: "A359", tailNumber: "SYSTEM" },
+   ];
 
- return {
- owned: (payload.airports || []).map((a) => {
- const g = geoMap.get(a.icao.toUpperCase());
- return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
- }),
- myAirframes,
- otherAirframes,
- licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
- };
+   return {
+     owned: (payload.airports || []).map((a) => {
+       const g = geoMap.get(a.icao.toUpperCase());
+       return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
+     }),
+     myAirframes,
+     otherAirframes: Array.from(uniquePlanes.values()), // Przypisujemy czyste samoloty innych pilotów
+     genericAirframes, // Przekazujemy naszą nową, pancerną listę systemową
+     licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
+   };
  } catch (globalCrash) {
- console.error("[CRITICAL CATALOG CRASH]", globalCrash);
- return { owned: [], myAirframes: [], otherAirframes: [], licences: [] };
+   console.error("[CRITICAL CATALOG CRASH]", globalCrash);
+   return { owned: [], myAirframes: [], otherAirframes: [], genericAirframes: [], licences: [] };
  }
- });
+});
 
 
 export type PredictMissionInput = {
