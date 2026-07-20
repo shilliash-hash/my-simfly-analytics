@@ -67,7 +67,7 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  tailNumber: r.aircraft_tail_number,
  });
  }
- }
+ 
 // DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi. 
    // Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
    const genericAirframes = [
