@@ -187,13 +187,32 @@ function MissionForm(props: {
 }) {
   const { catalog } = props;
   return (
-    <section className="panel mb-6 grid gap-4 rounded-xl p-5 sm:grid-cols-2 lg:grid-cols-4">
+       <section className="panel mb-6 grid gap-4 rounded-xl p-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* 1. Wybór samolotu (Przeniesiony na górę) */}
+      <FieldSelectAircraft
+        label="Aircraft"
+        value={props.aircraftId}
+        onChange={props.onAircraftId}
+        catalog={catalog}
+      />
+
+      {/* 2. Wybór licencji (Przeniesiony na górę) */}
+      <FieldSelect
+        label="Licence"
+        value={props.licence}
+        onChange={props.onLicence}
+        options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
+      />
+
+      {/* 3. Lotnisko odlotu */}
       <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
         options={catalog?.owned.map((o) => o.icao) ?? []}
       />
+
+      {/* 4. Lotnisko przylotu (Zachowujemy warunek showArrival) */}
       {props.showArrival && (
         <FieldIcao
           label="Arrival"
@@ -202,19 +221,6 @@ function MissionForm(props: {
           options={catalog?.owned.map((o) => o.icao) ?? []}
         />
       )}
-    <FieldSelectAircraft
-  label="Aircraft"
-  value={props.aircraftId}
-  onChange={props.onAircraftId}
-  catalog={catalog}
-/>
-
-      <FieldSelect
-        label="Licence"
-        value={props.licence}
-        onChange={props.onLicence}
-        options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
-      />
     </section>
   );
 }
