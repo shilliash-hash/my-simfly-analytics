@@ -191,6 +191,7 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
  const isRental = (inputs as any).missionType === "airplane-rental" || (inputs as any).isRental === true;
 
  // Bezpiecznik: Jeśli nie własny i nie rental, wtedy faktycznie zysk wynosi 0
+  /*
  if (!ownAircraft && !isRental) {
  return {
  key: "aircraft",
@@ -200,7 +201,8 @@ const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
  note: "You don't own this aircraft — aircraft-owner share is credited to its owner.",
  };
  }
-
+*/
+  
  const { spec } = lookupAircraftSpec(inputs.aircraftIcao);
  const aircraftTier = inputs.aircraftTier ?? spec?.category ?? 1;
  const planeLevel = inputs.aircraftLevel ?? 1;
