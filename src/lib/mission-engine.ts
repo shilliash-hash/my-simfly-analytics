@@ -184,8 +184,14 @@ function estimateAircraftComponent(
  };
  }
 
- const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
- if (!ownAircraft) {
+const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
+ 
+ // Dynamicznie sprawdzamy typ misji na podstawie daty/kontekstu ISO przekazanego w inputs
+ // (W silnikach SimFly, jeśli licencja lub misja to rental, flaga jest mapowana w inputs)
+ const isRental = (inputs as any).missionType === "airplane-rental" || (inputs as any).isRental === true;
+
+ // Bezpiecznik: Jeśli nie własny i nie rental, wtedy faktycznie zysk wynosi 0
+ if (!ownAircraft && !isRental) {
  return {
  key: "aircraft",
  label: "Aircraft owner income",
@@ -223,19 +229,29 @@ function estimateAircraftComponent(
 
  const predictedAircraftPax = basePaxRate * timeFactor * airportScaleFactor;
 
- return {
-   key: "aircraft",
-   label: "Aircraft owner income",
-   value: parseFloat(predictedAircraftPax.toFixed(2)),
-   ownerShare: parseFloat(predictedAircraftPax.toFixed(2)),
-   pilotShare: 0,
-   sampleSize: 1, 
-   tier: "formula", 
-   confidence: 95,  
-   note: `Gradual progression prediction (${bounds.min.toFixed(2)} to ${bounds.max.toFixed(2)}) scaled by ${timeFactor.toFixed(2)}h flight time and airport multiplier.`
- };
-}
+ // Sprawdzamy czy samolot jest naszą własnością
+  const ownAircraft = !!inputs.aircraftId && ev.ownedAircraftIds.has(inputs.aircraftId);
 
+  // Jeśli samolot jest własny: dostajesz 100% (owner-share + pilot-share zunifikowane)
+  // Jeśli to rental/generic: dostajesz sprawiedliwe 50% stawki bazowej jako czysty pilot-share
+  const finalValue = ownAircraft 
+    ? predictedAircraftPax 
+    : parseFloat((predictedAircraftPax * 0.50).toFixed(2));
+
+  return {
+    key: "aircraft",
+    label: ownAircraft ? "Aircraft owner income" : "Aircraft pilot share (Rental)",
+    value: finalValue,
+    ownerShare: ownAircraft ? parseFloat(predictedAircraftPax.toFixed(2)) : 0,
+    pilotShare: ownAircraft ? 0 : finalValue,
+    sampleSize: 1,
+    tier: "formula",
+    confidence: 95,
+    note: ownAircraft
+      ? `Gradual progression prediction (${bounds.min.toFixed(2)} to ${bounds.max.toFixed(2)}) scaled by ${timeFactor.toFixed(2)}h flight time.`
+      : `Rental aircraft operated: +50% pilot share from scaled ${timeFactor.toFixed(2)}h flight baseline.`
+  };
+}
 
 /** Licence baseline — median paxOther across my flights on this licence. */
 function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
