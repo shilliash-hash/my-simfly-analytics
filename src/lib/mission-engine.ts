@@ -162,15 +162,19 @@ function estimateAircraftComponent(
 ): ComponentEstimate {
   const acId = inputs.aircraftId;
   const acIcao = (inputs.aircraftIcao || "").toUpperCase();
-  const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
 
-  if (!ownAircraft) {
+  // NOWY WARUNEK: Jeśli wybrano maszynę systemową (Generic), odcinamy zarobki PAX i zwracamy czyste 0
+  if (acId && acId.startsWith("generic-")) {
     return {
       key: "aircraft",
-      label: "Aircraft owner income",
-      value: 0, ownerShare: 0, pilotShare: 0,
-      sampleSize: 0, tier: "none", confidence: 100,
-      note: "You don't own this aircraft — aircraft-owner share is credited to its owner.",
+      label: "Aircraft owner income (Generic Tool)",
+      value: 0,
+      ownerShare: 0,
+      pilotShare: 0,
+      sampleSize: 0,
+      tier: "none",
+      confidence: 100,
+      note: "System aircraft used as a tool. Zero PAX generated for aircraft owner.",
     };
   }
 
