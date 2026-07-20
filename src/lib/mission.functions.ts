@@ -4,7 +4,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { predictMission, type MissionInputs, type MissionPrediction } from "./mission-engine";
 
-// Nowa, rozszerzona struktura katalogu z podziałem na grupy
 export type MissionCatalog = {
  owned: { icao: string; name: string; lat?: number; lon?: number }[];
  myAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
@@ -15,8 +14,8 @@ export type MissionCatalog = {
 export const getMissionCatalog = createServerFn({ method: "GET" })
  .inputValidator((d?: { username?: string }) => d ?? {})
  .handler(async ({ data }): Promise<MissionCatalog> => {
- // Importujemy zaktualizowany plik funkcji
- const { getSimflyPayload, getAirportGeo, getAllGlobalAirplanes } = await import("./simfly.functions");
+ try {
+ const { getSimflyPayload, getAirportGeo } = await import("./simfly.functions");
  
  const payload = await getSimflyPayload({
  data: data.username ? { username: data.username } : undefined,
@@ -27,7 +26,7 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
 
  // 1. Mapujemy Twoje własne samoloty
- const myAirframes = payload.airplanes
+ const myAirframes = (payload.airplanes || [])
  .filter((p) => p.aircraftId)
  .map((p) => ({
  aircraftId: p.aircraftId,
@@ -36,31 +35,52 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  tailNumber: p.tailNumber,
  }));
 
- // 2. Pobieramy i filtrujemy flotę globalną z bazy danych
  const myOwnedIds = new Set(myAirframes.map((a) => a.aircraftId));
+ const otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[] = [];
+
+ // 2. DYNAMICZNE POBIERANIE Z PUBLICZNEGO API SIMFLY (BEZ HARDCODOWANIA)
+ try {
+ const res = await fetch("https://simfly.io", { headers: { Accept: "application/json" } });
+ if (res.ok) {
+ const json = await res.json() as { data?: { id: string; aircraftName: string; aircraftICAO: string; tailNumber?: string; username: string }[] };
  
- // Wywołujemy nowo dopisaną funkcję bazodanową
- const globalAirplanes = await getAllGlobalAirplanes();
- 
- const otherAirframes = globalAirplanes
- .filter((p) => p.aircraftId && !myOwnedIds.has(p.aircraftId))
- .map((p) => ({
- aircraftId: p.aircraftId,
- label: `${p.name || p.icao}${p.tailNumber ? ` — ${p.tailNumber}` : ""}`,
- icao: p.icao,
- tailNumber: p.tailNumber,
- }));
+ if (json.data && json.data.length > 0) {
+ const uniquePlanes = new Map<string, any>();
+ const currentPilot = (data.username || "").toLowerCase();
+
+ for (const f of json.data) {
+ // Ignorujemy własne samoloty pilota oraz loty bez ID maszyny
+ if (f.id && f.username.toLowerCase() !== currentPilot && !myOwnedIds.has(f.id)) {
+ uniquePlanes.set(f.id, {
+ aircraftId: f.id,
+ label: `${f.aircraftName || "Unknown Airframe"}`,
+ icao: f.aircraftICAO || "ICAO",
+ tailNumber: f.tailNumber || "",
+ });
+ }
+ }
+ otherAirframes.push(...uniquePlanes.values());
+ }
+ }
+ } catch (apiErr) {
+ console.error("[CATALOG DYNAMIC API FALLBACK TRIGGERED]", apiErr);
+ }
 
  return {
- owned: payload.airports.map((a) => {
+ owned: (payload.airports || []).map((a) => {
  const g = geoMap.get(a.icao.toUpperCase());
  return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
  }),
  myAirframes,
  otherAirframes,
- licences: payload.licenses.map((l) => ({ code: l.code, name: l.name })),
+ licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
  };
+ } catch (globalCrash) {
+ console.error("[CRITICAL CATALOG CRASH]", globalCrash);
+ return { owned: [], myAirframes: [], otherAirframes: [], licences: [] };
+ }
  });
+
 
 export type PredictMissionInput = {
   username?: string;
