@@ -167,22 +167,6 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     destAirportLevel: arrAirport?.level || 1,
   };
 
-  // 2. Szukamy lotniska docelowego we wczytanym pakiecie danych, aby poznać jego parametry ulepszeń
-  const arrAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.arrival.toUpperCase());
-
-  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
-  const inputs: MissionInputs = {
-    departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
-    arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
-    aircraftId: data.aircraftId,
-    aircraftIcao: ac?.icao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
-    aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
-    licence: data.licence,
-    // Dodatkowo upewniamy się, że przesyłamy parametry ulepszeń lotniska docelowego do nowego silnika
-    destAirportTier: arrAirport?.category || 1,
-    destAirportLevel: arrAirport?.level || 1,
-  };
-
   // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
   return predictMission(inputs, evidenceFromPayload(payload));
 });
