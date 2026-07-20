@@ -157,43 +157,21 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
     aircraftId: data.aircraftId,
     
-             aircraftIcao: (() => {
+           aircraftIcao: (() => {
       if (ac?.icao) return ac.icao;
       
-      const upId = data.aircraftId;
-      if (!upId) return (data as any).aircraftIcao;
-
-      // Szukamy w moich lotach zapisanego ICAO dla tego UUID
-      if (payload.ledger?.myFlights) {
-        const found = payload.ledger.myFlights.find((f) => f.aircraftId === upId);
-        if (found?.aircraftIcao) return found.aircraftIcao.toUpperCase();
+      const label = (data as any).aircraftLabel || (data as any).aircraftName || "";
+      if (label && label.includes(" - ")) {
+        return label.split(" - ")[0].trim();
       }
-
-      // Jeśli nie ma, szukamy w lotach innych pilotów (gości) odwiedzających nasze bazy
-      if (payload.ledger?.visitorFlights) {
-        const found = payload.ledger.visitorFlights.find((v) => v.aircraftId === upId);
-        if (found?.aircraftIcao) return found.aircraftIcao.toUpperCase();
-      }
-
       return (data as any).aircraftIcao;
     })(),
-    aircraftLabel: (() => {
-      if (ac?.name) return ac.name;
-      
-      const upId = data.aircraftId;
-      if (!upId) return "Rental Aircraft";
-
-      if (payload.ledger?.myFlights) {
-        const found = payload.ledger.myFlights.find((f) => f.aircraftId === upId);
-        if (found?.aircraft) return found.aircraft;
-      }
-
-      return "Rental Aircraft";
-    })(),
+    aircraftLabel: ac?.name || (data as any).aircraftLabel || (data as any).aircraftName || "Rental Aircraft",
     licence: data.licence,
     destAirportTier: arrAirport?.category || 1,
     destAirportLevel: arrAirport?.level || 1,
   };
+
 
   // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
   return predictMission(inputs, evidenceFromPayload(payload));
