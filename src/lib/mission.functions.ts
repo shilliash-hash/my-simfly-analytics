@@ -126,25 +126,10 @@ export const predictMissionFn = createServerFn({ method: "GET" })
      departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
      arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
      aircraftId: data.aircraftId,
-     aircraftIcao: (() => {
-       if (ac?.icao) return ac.icao;
-       
-          // 1. Szukamy oryginalnego kontraktu misji w globalnym katalogu SimFly na podstawie ID samolotu lub ID misji
-   const marketMission = payload.missions?.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
-
-   const inputs: MissionInputs = {
-     departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
-     arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
-     aircraftId: data.aircraftId,
-     
-     // UNIWERSALNY LOOKUP PO ID:
-     // - Jeśli to Twój samolot, bierzemy ac.icao
-     // - Jeśli to rental z rynku, wyciągamy oryginalny kod ICAO wprost z struktury misji simfly.io!
      aircraftIcao: ac?.icao || marketMission?.aircraft_icao || marketMission?.aircraft?.icao || marketMission?.aircraftIcao || (data as any).aircraftIcao,
-     aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
-     
-     licence: data.licence,
-   };
+    aircraftLabel: ac?.name || marketMission?.aircraft_name || marketMission?.aircraft?.name || "Rental Aircraft",
+    licence: data.licence,
+  };
 
      return predictMission(inputs, evidenceFromPayload(payload));
   });
