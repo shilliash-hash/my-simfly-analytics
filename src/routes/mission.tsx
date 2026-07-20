@@ -82,10 +82,10 @@ function MissionPlanner() {
 
   // Auto-select first aircraft/licence when catalog loads.
   useMemo(() => {
-    if (catalog) {
-      if (!aircraftId && catalog.aircraft[0]) setAircraftId(catalog.aircraft[0].aircraftId);
-      if (!licence && catalog.licences[0]) setLicence(catalog.licences[0].code);
-      if (!departure && catalog.owned[0]) setDeparture(catalog.owned[0].icao);
+ if (catalog) {
+ if (!aircraftId && catalog.myAirframes[0]) setAircraftId(catalog.myAirframes[0].aircraftId);
+ if (!licence && catalog.licences[0]) setLicence(catalog.licences[0].code);
+ if (!departure && catalog.owned[0]) setDeparture(catalog.owned[0].icao);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catalog]);
@@ -202,17 +202,12 @@ function MissionForm(props: {
           options={catalog?.owned.map((o) => o.icao) ?? []}
         />
       )}
-      <FieldSelect
-        label="Aircraft"
-        value={props.aircraftId}
-        onChange={props.onAircraftId}
-        options={
-          catalog?.aircraft.map((a) => ({
-            value: a.aircraftId,
-            label: `${a.label}${a.tailNumber ? ` — ${a.tailNumber}` : ""} (${a.icao})`,
-          })) ?? []
-        }
-      />
+      <FieldSelectAircraft
+ label="Aircraft"
+ value={props.aircraftId}
+ onChange={props.onAircraftId}
+ catalog={catalog}
+ />
       <FieldSelect
         label="Licence"
         value={props.licence}
@@ -254,6 +249,54 @@ function FieldIcao({
     </label>
   );
 }
+
+function FieldSelectAircraft({
+ label,
+ value,
+ onChange,
+ catalog,
+}: {
+ label: string;
+ value: string;
+ onChange: (v: string) => void;
+ catalog: MissionCatalog | undefined;
+}) {
+ return (
+ <label className="flex flex-col gap-1.5">
+ <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
+ <select
+ value={value}
+ onChange={(e) => onChange(e.target.value)}
+ className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-runway/40 font-sans"
+ >
+ <option value="">— Select Airframe —</option>
+ 
+ {/* SEKCJA 1: TWOJE SAMOLOTY */}
+ {catalog?.myAirframes && catalog.myAirframes.length > 0 && (
+ <optgroup label="── MY AIRFRAMES ──" className="font-mono text-xs text-muted-foreground">
+ {catalog.myAirframes.map((a) => (
+ <option key={a.aircraftId} value={a.aircraftId} className="text-foreground font-sans text-sm">
+ {a.label}{a.tailNumber ? ` — ${a.tailNumber}` : ""} ({a.icao})
+ </option>
+ ))}
+ </optgroup>
+ )}
+
+ {/* SEKCJA 2: SAMOLOTY INNYCH PILOTÓW */}
+ {catalog?.otherAirframes && catalog.otherAirframes.length > 0 && (
+ <optgroup label="── OTHER PILOTS ──" className="font-mono text-xs text-muted-foreground">
+ {catalog.otherAirframes.map((a) => (
+ <option key={a.aircraftId} value={a.aircraftId} className="text-foreground font-sans text-sm">
+ {a.label} ({a.icao})
+ </option>
+ ))}
+ </optgroup>
+ )}
+ </select>
+ </label>
+ );
+}
+
 
 function FieldSelect({
   label,
