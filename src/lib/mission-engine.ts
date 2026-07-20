@@ -279,7 +279,7 @@ function estimateAirportEndpoint(
         : (v.destIcao || "").toUpperCase() === up,
     );
     const values = [
-      ...myAtEndpoint.map((r) => r.paxAirport),
+      ...myAtEndpoint.map((r) => r.paxAirportOwn),
       ...visAtEndpoint.map((v) => v.paxAirport),
     ].filter((x) => x > 0);
     ownerN = values.length;
@@ -289,27 +289,33 @@ function estimateAirportEndpoint(
   // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
   // paxOther, halve to attribute to this endpoint side, then take the median
   // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
-   // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
+     // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
   const allFlightsAtAirport = ev.ledger.myFlights.filter((f) =>
-    role === "dep" ? f.originIcao === up : f.destIcao === up,
+    role === "dep" ? f.originIcao === up : f.destIcao === up
   );
 
-  // 2. Próba precyzyjna: filtrujemy te loty po dokładnie tym samym ICAO samolotu
+  // 2. Próba precyzyjna: bezpieczne filtrowanie po ICAO z użyciem Optional Chaining
   const exactAircraftFlights = allFlightsAtAirport.filter((f) =>
     acIcao ? f.aircraftIcao?.toUpperCase() === acIcao : false
   );
 
-  // 3. Kaskada: Jeśli leciałeś już tym typem maszyny tutaj - używamy jej.
-  // Jeśli to pierwszy lot tym samolotem - bierzemy bezpiecznie całą historię portu.
+  // 3. Kaskada: Jeśli są loty tym typem maszyny — bierzemy je, jeśli nie — ogólna historia huba
   const roleRows = exactAircraftFlights.length > 0 ? exactAircraftFlights : allFlightsAtAirport;
 
-  const perFlightPilot: number[] = [];
+  const perflightPilot: number[] = [];
   for (const f of roleRows) {
     const code = (f.licence || "").toUpperCase();
     const licenceRow = code ? (licenceMedianByCode.get(code) ?? 0) : 0;
-    const airportPortion = Math.max(0, f.paxOther - licenceRow);
-    perFlightPilot.push(airportPortion / 2);
+    
+    // ZABEZPIECZENIE: Wymuszamy konwersję na liczbę, aby zapobiec błędom typu NaN na frontendzie
+    const rawPax = Number(f.paxOther || f.pax || 0);
+    const airportPortion = Math.max(0, rawPax - licenceRow);
+    
+    if (!isNaN(airportPortion)) {
+      perflightPilot.push(airportPortion / 2);
+    }
   }
+
   const rawPilot = perFlightPilot.length > 0 ? median(perFlightPilot) : 0;
   // Normalize to current airport pilot payout % (confidence-weighted shrinkage).
   const cur = ev.currentAirportPilotPct.get(up);
