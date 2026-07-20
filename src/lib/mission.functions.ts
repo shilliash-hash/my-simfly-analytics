@@ -1,6 +1,5 @@
 // Mission Intelligence — thin server functions.
 // Reuses the shared income ledger from getSimflyPayload. Adds NO accounting.
-
 import { createServerFn } from "@tanstack/react-start";
 import { predictMission, type MissionInputs, type MissionPrediction } from "./mission-engine";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
@@ -18,11 +17,9 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  .handler(async ({ data }): Promise<MissionCatalog> => {
  try {
  const { getSimflyPayload, getAirportGeo } = await import("./simfly.functions");
- 
  const payload = await getSimflyPayload({
  data: data.username ? { username: data.username } : undefined,
  });
- 
  const icaos = payload.airports.map((a) => a.icao);
  const geo = icaos.length > 0 ? await getAirportGeo({ data: { icaos } }) : [];
  const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
@@ -39,6 +36,7 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
 
  const myOwnedIds = new Set(myAirframes.map((a) => a.aircraftId));
  const otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[] = [];
+ const uniquePlanes = new Map<string, any>(); // Deklaracja na wyższym poziomie, aby uniknąć błędów zasięgu zmiennej
 
  // 2. POBIERANIE WYŁĄCZNIE SAMOLOTÓW INNYCH GRACZY (Z NUMEREM REJESTRACYJNYM)
  try {
@@ -48,16 +46,13 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  .from("simfly_flights")
  .select("aircraft_id, aircraft, aircraft_icao, aircraft_tail_number")
  .not("aircraft_id", "is", null)
- .not("aircraft_tail_number", "is", null) // <--- TEN WARUNEK CAŁKOWICIE ODSIEWA SAMOLOTY SYSTEMOWE
+ .not("aircraft_tail_number", "is", null)
  .or(`departure_icao.in.(${icaos.join(",")}),destination_icao.in.(${icaos.join(",")})`);
 
  if (rows && rows.length > 0) {
- const uniquePlanes = new Map<string, any>();
- 
  for (const r of rows) {
  // Pomijamy maszyny, które są własnością zalogowanego pilota
  if (myOwnedIds.has(r.aircraft_id)) continue;
-
  // Zapisujemy unikalny samolot gracza (wiemy, że ma tail number dzięki filtrowi SQL)
  if (!uniquePlanes.has(r.aircraft_id)) {
  uniquePlanes.set(r.aircraft_id, {
@@ -66,38 +61,42 @@ export const getMissionCatalog = createServerFn({ method: "GET" })
  icao: r.aircraft_icao || "ICAO",
  tailNumber: r.aircraft_tail_number,
  });
-   }
-} catch (dbErr) {
-  console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
-
-// DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi.
-// Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
-const genericAirframes = [
-  { aircraftId: "generic-t1-single-piston", label: "T1: GENERIC SINGLE PISTON (C172 / P28A)", icao: "C172", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t2-single-turboprop", label: "T2: GENERIC SINGLE TURBOPROP (C208 / PC12)", icao: "C208", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t3-twin-turboprop", label: "T3: GENERIC TWIN TURBOPROP (TBM9 / AT76 / B350)", icao: "TBM9", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t4-twin-piston", label: "T4: GENERIC TWIN PISTON (BARO / DA42 / C310)", icao: "DA42", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t5-regional-jet", label: "T5: GENERIC REGIONAL JET (CRJ9 / E190 / C510)", icao: "CRJ9", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t6-narrowbody", label: "T6: GENERIC NARROWBODY (A320 / B738 / MD82)", icao: "A320", tailNumber: "SYSTEM" },
-  { aircraftId: "generic-t7-widebody", label: "T7: GENERIC WIDEBODY (A359 / B77W / B744)", icao: "A359", tailNumber: "SYSTEM" },
-];
-
-
-   return {
-     owned: (payload.airports || []).map((a) => {
-       const g = geoMap.get(a.icao.toUpperCase());
-       return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
-     }),
-     myAirframes,
-     otherAirframes: Array.from(uniquePlanes.values()), // Przypisujemy czyste samoloty innych pilotów
-     genericAirframes, // Przekazujemy naszą nową, pancerną listę systemową
-     licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
-   };
- } catch (globalCrash) {
-   console.error("[CRITICAL CATALOG CRASH]", globalCrash);
-   return { owned: [], myAirframes: [], otherAirframes: [], genericAirframes: [], licences: [] };
  }
-});
+ }
+ }
+ }
+ } catch (dbErr) {
+ console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
+ }
+
+ // DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi.
+ // Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
+ const genericAirframes = [
+ { aircraftId: "generic-t1-single-piston", label: "T1: GENERIC SINGLE PISTON (C172 / P28A)", icao: "C172", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t2-single-turboprop", label: "T2: GENERIC SINGLE TURBOPROP (C208 / PC12)", icao: "C208", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t3-twin-turboprop", label: "T3: GENERIC TWIN TURBOPROP (TBM9 / AT76 / B350)", icao: "TBM9", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t4-twin-piston", label: "T4: GENERIC TWIN PISTON (BARO / DA42 / C310)", icao: "DA42", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t5-regional-jet", label: "T5: GENERIC REGIONAL JET (CRJ9 / E190 / C510)", icao: "CRJ9", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t6-narrowbody", label: "T6: GENERIC NARROWBODY (A320 / B738 / MD82)", icao: "A320", tailNumber: "SYSTEM" },
+ { aircraftId: "generic-t7-widebody", label: "T7: GENERIC WIDEBODY (A359 / B77W / B744)", icao: "A359", tailNumber: "SYSTEM" },
+ ];
+
+ return {
+ owned: (payload.airports || []).map((a) => {
+ const g = geoMap.get(a.icao.toUpperCase());
+ return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
+ }),
+ myAirframes,
+ otherAirframes: Array.from(uniquePlanes.values()),
+ genericAirframes,
+ licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
+ };
+ } catch (globalCrash) {
+ console.error("[CRITICAL CATALOG CRASH]", globalCrash);
+ return { owned: [], myAirframes: [], otherAirframes: [], genericAirframes: [], licences: [] };
+ }
+ });
+
 
 
 export type PredictMissionInput = {
