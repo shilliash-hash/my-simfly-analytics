@@ -3,7 +3,7 @@
 // Zero I/O. Reads the existing IncomeLedger (built by buildIncomeLedger — the
 // single accounting source of truth also used by Stats and Income Intelligence)
 // and returns four INDEPENDENT component estimates plus a temporary weekly-
-// bonus modifier. Base Prediction = sum of the four components. Bonuses are
+// bonus modifier. Historical base = sum of the four components. Bonuses are
 // surfaced separately so historical evidence and temporary multipliers are
 // never conflated.
 
@@ -58,7 +58,7 @@ export type MissionPrediction = {
   distanceNm: number | null;
   flightTimeMs: number | null;
   cruiseKt: number | null;
-  /** Base historical prediction — sum of the four components. Never includes bonuses. */
+   /** Historical base — sum of the four components. Never includes bonuses. */
   totalPax: number;
   /** Base + weekly bonus. */
   projectedPax: number;
@@ -89,6 +89,8 @@ export type MissionEvidence = {
   frequentVisitorsAt: Map<string, number>;
   /** Current SimFly weekly cycle (Mon 00:00 UTC → now). */
   weeklyWindow: { startMs: number; endMs: number };
+   /** Current airport pilot-payout percentage (0..100) keyed by ICAO. */
+  currentAirportPilotPct: Map<string, number>;
 };
 
 // ---------- Helpers ----------
@@ -97,6 +99,7 @@ const MIN_DIRECT = 4;
 const MIN_NEAR = 3;
 const MIN_CLASS = 5;
 const WEEKLY_BONUS_MULTIPLIER = 3; // SimFly Weekly Cycle First Movement ×3
+const ASSUMED_HIST_PILOT_PCT = 60; // conservative anchor: assume historical rows sat at max pilot share
 
 function mean(xs: number[]): number {
   if (xs.length === 0) return 0;
@@ -133,6 +136,21 @@ function weeklyWindow(nowMs = Date.now()): { startMs: number; endMs: number } {
     0, 0, 0, 0,
   );
   return { startMs: start, endMs: nowMs };
+}
+
+/** Median paxOther per licence code across my flights — used for per-row licence attribution. */
+function buildLicenceMedianMap(ledger: IncomeLedger): Map<string, number> {
+  const byCode = new Map<string, number[]>();
+  for (const f of ledger.myFlights) {
+    const code = (f.licence || "").toUpperCase();
+    if (!code) continue;
+    let arr = byCode.get(code);
+    if (!arr) { arr = []; byCode.set(code, arr); }
+    arr.push(f.paxOther);
+  }
+  const out = new Map<string, number>();
+  for (const [code, xs] of byCode) out.set(code, median(xs));
+  return out;
 }
 
 // ---------- Component estimators ----------
@@ -231,22 +249,12 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-/** Median paxOther on my flights touching an endpoint (origin or dest). */
-function pilotOtherAt(icao: string, ev: MissionEvidence): { median: number; n: number } {
-  const up = icao.toUpperCase();
-  const rows = ev.ledger.myFlights.filter(
-    (f) => f.originIcao === up || f.destIcao === up,
-  );
-  return { median: rows.length > 0 ? median(rows.map((r) => r.paxOther)) : 0, n: rows.length };
-}
-
-/** Airport endpoint — owner-share (only when mine) + pilot-share (always). */
+/** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized. */
 function estimateAirportEndpoint(
   role: "dep" | "arr",
   icao: string,
   ev: MissionEvidence,
-  licenceValue: number,
-  otherEndpoint: string,
+  licenceMedianByCode: Map<string, number>,
 ): ComponentEstimate {
   const key = role === "dep" ? "airport_dep" : "airport_arr";
   const label = role === "dep" ? "Departure airport" : "Arrival airport";
@@ -260,7 +268,7 @@ function estimateAirportEndpoint(
     const myAtEndpoint = ev.ledger.myFlights.filter((f) =>
       role === "dep" ? f.originIcao === up : f.destIcao === up,
     );
-    // Also visitor rows through this airport in the same role — those credit me as owner.
+   
     const visAtEndpoint = ev.ledger.visitorFlights.filter((v) =>
       role === "dep"
         ? (v.originIcao || "").toUpperCase() === up
@@ -274,24 +282,35 @@ function estimateAirportEndpoint(
     ownerShare = values.length > 0 ? median(values) : 0;
   }
 
-  // Pilot share at this airport (always mine as the flying pilot, 0–60% depending
-  // on airport owner's setting). Historical proxy: my paxOther on flights touching
-  // this airport, minus the licence-attributable slice that we're already booking
-  // in the licence component (split evenly between the two endpoints).
-  const here = pilotOtherAt(up, ev);
-  const there = pilotOtherAt(otherEndpoint, ev);
-  const licenceHalf = licenceValue / 2;
-  let pilotShare = Math.max(0, here.median - licenceHalf);
-  // When both endpoints have samples, weight so both endpoints don't double-count
-  // the same paxOther pool.
-  if (here.median > 0 && there.median > 0) {
-    const share = here.median / (here.median + there.median);
-    const combinedOther = (here.median + there.median) / 2; // typical flight paxOther
-    pilotShare = Math.max(0, combinedOther * share - licenceHalf * share * 2);
+  // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
+  // paxOther, halve to attribute to this endpoint side, then take the median
+  // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
+  const roleRows = ev.ledger.myFlights.filter((f) =>
+    role === "dep" ? f.originIcao === up : f.destIcao === up,
+  );
+  const perFlightPilot: number[] = [];
+  for (const f of roleRows) {
+    const code = (f.licence || "").toUpperCase();
+    const licenceRow = code ? (licenceMedianByCode.get(code) ?? 0) : 0;
+    const airportPortion = Math.max(0, f.paxOther - licenceRow);
+    perFlightPilot.push(airportPortion / 2);
+  }
+  const rawPilot = perFlightPilot.length > 0 ? median(perFlightPilot) : 0;
+  // Normalize to current airport pilot payout % (confidence-weighted shrinkage).
+  const cur = ev.currentAirportPilotPct.get(up);
+  let pilotShare = rawPilot;
+  let normalizedNote = "";
+  if (cur !== undefined && rawPilot > 0) {
+    const w = Math.min(1, perFlightPilot.length / 12);
+    const scaled = rawPilot * (cur / ASSUMED_HIST_PILOT_PCT);
+    pilotShare = rawPilot * w + scaled * (1 - w);
+    if (Math.abs(pilotShare - rawPilot) > 0.01) {
+      normalizedNote = ` Normalized ${rawPilot.toFixed(2)} → ${pilotShare.toFixed(2)} PAX (current pilot payout ${cur.toFixed(0)}%, ${perFlightPilot.length} sample${perFlightPilot.length === 1 ? "" : "s"}).`;
+    }
   }
 
   const total = ownerShare + pilotShare;
-  const sample = ownerN + here.n;
+  const sample = ownerN + perFlightPilot.length;
   let tier: ConfidenceTier;
   if (sample >= MIN_DIRECT * 2) tier = "direct";
   else if (sample >= MIN_NEAR * 2) tier = "near";
@@ -299,21 +318,21 @@ function estimateAirportEndpoint(
   else if (sample > 0) tier = "formula";
   else tier = "none";
 
-  const note = own
-    ? `Owner share from ${ownerN} historical flights at ${up} + pilot share (${here.n} touches).`
-    : `Pilot share from ${here.n} of my flights through ${up} (airport pilot cut 0–60%).`;
+    const baseNote = own
+    ? `Owner share from ${ownerN} historical flights at ${up} + pilot share (${perFlightPilot.length} of my flights).`
+    : `Pilot share from ${perFlightPilot.length} of my flights through ${up} (airport pilot cut only).`;
 
   return {
     key, label,
     value: total, ownerShare, pilotShare,
     sampleSize: sample, tier,
     confidence: confidenceFromTier(tier, sample),
-    note,
+    note: baseNote + normalizedNote,
   };
 }
 
-/** Licence component — half of the licence baseline (the other half is allocated
- *  across the two airport-pilot-share rows to avoid double-counting paxOther). */
+/** Licence component — full historical baseline (real historical averages already
+ *  encode landing quality). */
 function estimateLicenceComponent(
  inputs: MissionInputs,
  baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
@@ -333,11 +352,14 @@ function estimateLicenceComponent(
  tier: baseline.tier,
  confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
  note: baseline.sampleSize > 0
- ? `Full licence baseline (${baseline.value.toFixed(2)} PAX median across ${baseline.sampleSize} flights on ${code}).`
+  ? `Historical median: ${value.toFixed(2)} PAX across ${baseline.sampleSize} flights on ${code}.`
  : `No history on ${code} yet.` };
 }
 
-/** Weekly first-arrival ×3 detection. */
+/** Weekly first-arrival ×3 detection.
+ *  Depends only on: selected licence, arrival ICAO, current weekly window,
+ *  and whether the licence has already landed at the arrival this week.
+ *  Airport ownership is deliberately not considered. */
 function estimateWeeklyBonus(
   inputs: MissionInputs,
   ev: MissionEvidence,
@@ -360,8 +382,7 @@ function estimateWeeklyBonus(
     return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
       reason: `Licence ${code} already landed at ${arr} this weekly cycle.` };
   }
-  // ×3 replaces the licence slice — extra = licenceComponent × (multiplier − 1).
-  const extraPax = Math.max(0, licenceComponent * (WEEKLY_BONUS_MULTIPLIER - 1));
+ const extraPax = Math.max(0, licenceComponent * (WEEKLY_BONUS_MULTIPLIER - 1));
   return { available: true, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax,
     reason: `First landing this week for ${code} at ${arr} — ×${WEEKLY_BONUS_MULTIPLIER} on licence share.` };
 }
@@ -393,9 +414,10 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
   }
 
   const baseline = licenceBaseline(inputs, ev);
+  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
   const aircraft = estimateAircraftComponent(inputs, ev);
-  const dep = estimateAirportEndpoint("dep", depUp, ev, baseline.value, arrUp);
-  const arr = estimateAirportEndpoint("arr", arrUp, ev, baseline.value, depUp);
+  const dep = estimateAirportEndpoint("dep", depUp, ev, licenceMedianByCode);
+  const arr = estimateAirportEndpoint("arr", arrUp, ev, licenceMedianByCode);
   const licence = estimateLicenceComponent(inputs, baseline);
   const components = [aircraft, dep, arr, licence];
 
@@ -417,7 +439,7 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
       hint: `${spec.model} typical range is ${spec.rangeNm} NM.` });
   }
   if (paxPerHour !== null) {
-    signals.push({ key: "pph", label: "PAX / hour", value: paxPerHour.toFixed(1), tone: "neutral" });
+     signals.push({ key: "pph", label: "PAX / hour", value: paxPerHour.toFixed(2), tone: "neutral" });
   }
   const visitFreq = ev.frequentVisitorsAt.get(arrUp) ?? 0;
   if (visitFreq > 0) {
@@ -452,10 +474,14 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
 export function buildEvidence(args: {
   ledger: IncomeLedger;
   aircraftIcaoById: Record<string, string>;
+  currentAirportPilotPct?: Record<string, number>;
 }): MissionEvidence {
   const ownedIcaos = new Set(args.ledger.ownedAirports.map((a) => a.icao.toUpperCase()));
   const ownedAircraftIds = new Set(args.ledger.ownedAircraft.map((a) => a.aircraftId));
   const aircraftIcaoById = new Map<string, string>(Object.entries(args.aircraftIcaoById));
+  const currentAirportPilotPct = new Map<string, number>(
+    Object.entries(args.currentAirportPilotPct ?? {}).map(([k, v]) => [k.toUpperCase(), v]),
+  );
 
   const byPilot = new Map<string, number>();
   for (const v of args.ledger.visitorFlights) {
@@ -479,5 +505,6 @@ export function buildEvidence(args: {
   return {
     ledger: args.ledger, ownedIcaos, ownedAircraftIds, aircraftIcaoById,
     frequentVisitorsAt, weeklyWindow: weeklyWindow(),
+    currentAirportPilotPct,
   };
 }
