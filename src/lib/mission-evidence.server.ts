@@ -12,6 +12,16 @@ export function buildAircraftIcaoMap(payload: SimflyPayload): Record<string, str
   return map;
 }
 
+export function buildCurrentAirportPilotPct(payload: SimflyPayload): Record<string, number> {
+  const map: Record<string, number> = {};
+  for (const a of payload.airports) {
+    if (a.icao && Number.isFinite(a.percToUser)) {
+      map[a.icao.toUpperCase()] = a.percToUser;
+    }
+  }
+  return map;
+}
+
 export function evidenceFromPayload(payload: SimflyPayload): MissionEvidence {
   if (!payload.incomeLedger) {
     throw new Error("Income ledger missing from SimflyPayload");
