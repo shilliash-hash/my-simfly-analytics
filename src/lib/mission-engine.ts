@@ -407,7 +407,7 @@ function estimateWeeklyBonus(
  const extraPax = Math.max(0, baseForBonus * (WEEKLY_BONUS_MULTIPLIER - 1));
  
  return { available: true, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax,
- reason: `First landing this week for ${code} at ${arr} — ×${WEEKLY_BONUS_MULTIPLIER} on airport pilot shares.` };
+ reason: `First weekly flight for ${code} to ${arr} — +200% bonus (×3) applied to eligible non-owned airport pilot shares.` };
 }
 
 // ---------- Assembler ----------
