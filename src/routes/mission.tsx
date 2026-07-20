@@ -102,20 +102,35 @@ function MissionPlanner() {
           departure,
           arrival,
           aircraftId,
-                aircraftLabel: (() => {
+               aircraftLabel: (() => {
+          // 1. Jeśli samolot należy do gracza, pobieramy jego nazwę z floty
           const own = catalog?.airplanes?.find(p => p.aircraftId === aircraftId)?.name;
           if (own) return own;
 
-          const activeOption = document.querySelector(`option[value="${aircraftId}"]`) as HTMLOptionElement;
-          if (activeOption && activeOption.text) {
-            return activeOption.text;
+          // 2. GŁĘBOKI SKANER KATALOGU API: Przeszukujemy dynamicznie wszystkie tablice (tablice misji rynkowych)
+          // i wyciągamy nazwę samolotu dla każdego modelu w grze (ATR, Cessna, Boeing, Airbus itp.)
+          if (catalog) {
+            const catalogObj = catalog as Record<string, any>;
+            
+            // Iterujemy po wszystkich kluczach w obiekcie catalog (np. missions, availableMissions, marketMissions)
+            for (const key of Object.keys(catalogObj)) {
+              const list = catalogObj[key];
+              if (Array.isArray(list)) {
+                // Szukamy kontraktu misji powiązanego z wybranym aircraftId
+                const match = list.find((m: any) => m?.aircraftId === aircraftId || m?.id === aircraftId || m?.aircraft_id === aircraftId);
+                if (match) {
+                  // Wyciągamy nazwę samolotu z dowolnego formatu zwracanego przez API simfly.io
+                  const foundName = match.aircraft_name || match.aircraft?.name || match.aircraft;
+                  if (typeof foundName === "string" && foundName.length > 0) {
+                    return foundName;
+                  }
+                }
+              }
+            }
           }
 
-          const c: any = catalog;
-          const market = (c?.availableMissions || c?.marketMissions || c?.missions || [])
-            .find((m: any) => m.aircraftId === aircraftId || m.id === aircraftId);
-            
-          return market?.aircraft_name || market?.aircraft?.name || market?.aircraft || "Airbus A350-900";
+          // 3. Brak sztywnych fallbacków - zwracamy pusty string, jeśli to rzadka/nowa maszyna
+          return "";
         })(),
 
           licence: licence || undefined,
