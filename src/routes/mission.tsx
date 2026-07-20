@@ -202,12 +202,13 @@ function MissionForm(props: {
           options={catalog?.owned.map((o) => o.icao) ?? []}
         />
       )}
-      <FieldSelectAircraft
- label="Aircraft"
- value={props.aircraftId}
- onChange={props.onAircraftId}
- catalog={catalog}
- />
+    <FieldSelectAircraft
+  label="Aircraft"
+  value={props.aircraftId}
+  onChange={props.onAircraftId}
+  catalog={catalog}
+/>
+
       <FieldSelect
         label="Licence"
         value={props.licence}
@@ -281,7 +282,18 @@ function FieldSelectAircraft({
  ))}
  </optgroup>
  )}
-
+ 
+ {/* SEKCJA 1B (NOWOŚĆ): SAMOLOTY SYSTEMOWE GENERIC */}
+ {catalog?.genericAirframes && catalog.genericAirframes.length > 0 && (
+ <optgroup label="── SYSTEM AIRCRAFTS (0 PAX) ──" className="font-mono text-xs text-amber-500 font-semibold tracking-wider">
+ {catalog.genericAirframes.map((a) => (
+ <option key={a.aircraftId} value={a.aircraftId} className="text-foreground font-sans text-sm">
+ {a.label}
+ </option>
+ ))}
+ </optgroup>
+ )}
+   
  {/* SEKCJA 2: SAMOLOTY INNYCH PILOTÓW */}
  {catalog?.otherAirframes && catalog.otherAirframes.length > 0 && (
  <optgroup label="── OTHER PILOTS ──" className="font-mono text-xs text-muted-foreground">
