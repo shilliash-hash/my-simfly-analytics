@@ -102,6 +102,11 @@ function MissionPlanner() {
           departure,
           arrival,
           aircraftId,
+        aircraftLabel: catalog?.airplanes?.find(p => p.aircraftId === aircraftId)?.name || (() => {
+          const m = catalog?.missions?.find(m => m.aircraftId === aircraftId || m.id === aircraftId || m.aircraft_id === aircraftId);
+          if (!m) return "Rental Aircraft";
+          return m.aircraft_name || m.aircraft?.name || m.aircraft || "Rental Aircraft";
+        })(),
           licence: licence || undefined,
           ...(username ? { username } : {}),
         },
