@@ -289,37 +289,16 @@ function estimateAirportEndpoint(
   // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
   // paxOther, halve to attribute to this endpoint side, then take the median
   // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
-    // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
-  const allFlightsAtAirport = ev.ledger.myFlights.filter((f) =>
-    role === "dep" ? f.originIcao === up : f.destIcao === up
+  const roleRows = ev.ledger.myFlights.filter((f) =>
+    role === "dep" ? f.originIcao === up : f.destIcao === up,
   );
-
-  // 2. KASKADA: Jeśli wybrano maszynę systemową (Generic), nie filtrujemy po ICAO (bo to ślepe narzędzie)
-  // i od razu używamy ogólnej historii lotniska. W innym wypadku filtrujemy precyzyjnie po kodzie samolotu.
-  const isGeneric = acId && acId.startsWith("generic-");
-  
-  const exactAircraftFlights = !isGeneric && acIcao 
-    ? allFlightsAtAirport.filter((f) => f.aircraftIcao?.toUpperCase() === acIcao.toUpperCase())
-    : [];
-
-  // 3. Finalny wybór danych wejściowych do pętli pilockiej
-  const roleRows = exactAircraftFlights.length > 0 ? exactAircraftFlights : allFlightsAtAirport;
-
-
-  const perflightPilot: number[] = [];
+  const perFlightPilot: number[] = [];
   for (const f of roleRows) {
     const code = (f.licence || "").toUpperCase();
     const licenceRow = code ? (licenceMedianByCode.get(code) ?? 0) : 0;
-    
-    // ZABEZPIECZENIE: Wymuszamy konwersję na liczbę, aby zapobiec błędom typu NaN na frontendzie
-    const rawPax = Number(f.paxOther || f.pax || 0);
-    const airportPortion = Math.max(0, rawPax - licenceRow);
-    
-    if (!isNaN(airportPortion)) {
-      perflightPilot.push(airportPortion / 2);
-    }
+    const airportPortion = Math.max(0, f.paxOther - licenceRow);
+    perFlightPilot.push(airportPortion / 2);
   }
-
   const rawPilot = perFlightPilot.length > 0 ? median(perFlightPilot) : 0;
   // Normalize to current airport pilot payout % (confidence-weighted shrinkage).
   const cur = ev.currentAirportPilotPct.get(up);
