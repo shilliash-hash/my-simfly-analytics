@@ -174,7 +174,7 @@ function estimateAircraftComponent(
       sampleSize: 0,
       tier: "none",
       confidence: 100,
-      note: "System aircraft used as a tool. Zero PAX generated for aircraft owner.",
+      note: "System aircraft used for this flight. Zero PAX generated for pilot and owner.",
     };
   }
 
