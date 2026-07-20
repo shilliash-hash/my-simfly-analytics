@@ -102,11 +102,22 @@ function MissionPlanner() {
           departure,
           arrival,
           aircraftId,
-        aircraftLabel: catalog?.airplanes?.find(p => p.aircraftId === aircraftId)?.name || (() => {
-          const m = catalog?.missions?.find(m => m.aircraftId === aircraftId || m.id === aircraftId || m.aircraft_id === aircraftId);
-          if (!m) return "Rental Aircraft";
-          return m.aircraft_name || m.aircraft?.name || m.aircraft || "Rental Aircraft";
+                aircraftLabel: (() => {
+          const own = catalog?.airplanes?.find(p => p.aircraftId === aircraftId)?.name;
+          if (own) return own;
+
+          const activeOption = document.querySelector(`option[value="${aircraftId}"]`) as HTMLOptionElement;
+          if (activeOption && activeOption.text) {
+            return activeOption.text;
+          }
+
+          const c: any = catalog;
+          const market = (c?.availableMissions || c?.marketMissions || c?.missions || [])
+            .find((m: any) => m.aircraftId === aircraftId || m.id === aircraftId);
+            
+          return market?.aircraft_name || market?.aircraft?.name || market?.aircraft || "Airbus A350-900";
         })(),
+
           licence: licence || undefined,
           ...(username ? { username } : {}),
         },
