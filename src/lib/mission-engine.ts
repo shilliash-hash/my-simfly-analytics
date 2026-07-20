@@ -289,18 +289,22 @@ function estimateAirportEndpoint(
   // Pilot share: per-row, subtract that row's licence-median (0 if unknown) from
   // paxOther, halve to attribute to this endpoint side, then take the median
   // across the resulting per-flight values. Airport-only — no cross-endpoint mixing.
-     // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
+    // 1. Ogólny fallback: pobieramy WSZYSTKIE Twoje loty na tym lotnisku
   const allFlightsAtAirport = ev.ledger.myFlights.filter((f) =>
     role === "dep" ? f.originIcao === up : f.destIcao === up
   );
 
-  // 2. Próba precyzyjna: bezpieczne filtrowanie po ICAO z użyciem Optional Chaining
-  const exactAircraftFlights = allFlightsAtAirport.filter((f) =>
-    acIcao ? f.aircraftIcao?.toUpperCase() === acIcao : false
-  );
+  // 2. KASKADA: Jeśli wybrano maszynę systemową (Generic), nie filtrujemy po ICAO (bo to ślepe narzędzie)
+  // i od razu używamy ogólnej historii lotniska. W innym wypadku filtrujemy precyzyjnie po kodzie samolotu.
+  const isGeneric = acId && acId.startsWith("generic-");
+  
+  const exactAircraftFlights = !isGeneric && acIcao 
+    ? allFlightsAtAirport.filter((f) => f.aircraftIcao?.toUpperCase() === acIcao.toUpperCase())
+    : [];
 
-  // 3. Kaskada: Jeśli są loty tym typem maszyny — bierzemy je, jeśli nie — ogólna historia huba
+  // 3. Finalny wybór danych wejściowych do pętli pilockiej
   const roleRows = exactAircraftFlights.length > 0 ? exactAircraftFlights : allFlightsAtAirport;
+
 
   const perflightPilot: number[] = [];
   for (const f of roleRows) {
