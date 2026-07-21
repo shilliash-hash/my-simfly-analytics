@@ -293,17 +293,6 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
 }
 
 /** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized. */
-// DOKŁADNIE SKALIBROWANA CIASNA BAZA DLA SAMYCH LOTNISK (L1)
-const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
-  1: 0.21,
-  2: 0.22,
-  3: 0.24,
-  4: 0.26,
-  5: 0.28
-};
-const AIRPORT_LEVEL_GROWTH = 0.096;
-const AIRCRAFT_TIER_GROWTH = 0.027; // +2.7% wyliczone z Twojego realnego lotu B738M na LEBL
-
 // ZWIĘKSZONA BAZA WYJŚCIOWA DLA LOTNISK (Podbicie zaniżonych dochodów)
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32, // podbite z 0.21
