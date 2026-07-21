@@ -292,13 +292,13 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// PEŁNY, ODSEPAROWANY ENGINE FALLBACK (Zapisz to w mission-engine.ts)
+// WYREGULOWANA BAZA DLA CLOUDFLARE (Zapisz w mission-engine.ts)
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
-  3: 0.38,
-  4: 0.42,
-  5: 0.46
+  3: 0.38, // baza dla BIAR
+  4: 0.42, // baza dla ENVA
+  5: 0.46  // baza dla LEBL
 };
 const AIRPORT_LEVEL_GROWTH = 0.096;
 const AIRCRAFT_TIER_GROWTH = 0.027;
@@ -306,15 +306,17 @@ const AIRCRAFT_TIER_GROWTH = 0.027;
 function estimateAirportEndpoint(
  role: "dep" | "arr",
  icao: string,
+ inputs: MissionInputs,
  ev: MissionEvidence,
- flightTimeMs: number | null,
- aircraftTier: number,
- inputs: MissionInputs
+ licenceMedianByCode: Map<string, number>,
+ flightTimeMs: number | null // Przekazany z nadrzędnego assemblera
 ): ComponentEstimate {
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
+ const own = ev.ownedIcaos.has(up);
 
+ // 1. Mnożnik czasu lotu (Oryginalne odcięcie 3h)
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const CUT_OFF_HOURS = 3.0;
  let timeFactor = hours > 0 ? hours : 1.0;
@@ -324,60 +326,59 @@ function estimateAirportEndpoint(
   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
  }
 
- // KROK 1: Szukamy lotniska w Twoich własnych hubach
- const ownedAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
- 
+ // Aircraft category dla obliczeń gabarytowych
+ const acId = inputs.aircraftId;
+ const acCat = acId === GENERIC_AIRCRAFT_ID
+ ? undefined
+ : (acId ? ev.aircraftCatById.get(acId) : undefined)
+ ?? lookupAircraftSpec((inputs.aircraftIcao || "").toUpperCase())?.spec?.category;
+
+ // 2. PRODUKCYJNY SKANER INFRASTRUKTURY (Skanuje dane wprost z Waszego payloadu w ledgerze)
  let tier = 1;
  let level = 1;
+
+ // Szukamy lotniska w ledgerze ownedAirports
+ const ownedAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
 
  if (ownedAirport) {
   tier = ownedAirport.category ?? 1;
   level = ownedAirport.level ?? 1;
  } else {
-  // KROK 2: Jeśli to obce lotnisko, PRZESZUKUJEMY LEDGER HISTORII LOTÓW (ev.ledger)
-  // Szukamy jakiejkolwiek misji, która lądowała lub startowała z tego portu, by wyciągnąć jego parametry
-  const historicalMission = ev.ledger.missions?.find(m => 
-    m.departure_icao?.toUpperCase() === up || m.arrival_icao?.toUpperCase() === up
-  );
-
-  if (historicalMission) {
-    // Wyciągamy zarejestrowany w historii poziom i kategorię tego obcego portu
-    tier = historicalMission.departure_icao?.toUpperCase() === up 
-      ? (historicalMission.departure_category ?? 1) 
-      : (historicalMission.arrival_category ?? 1);
-      
-    level = historicalMission.departure_icao?.toUpperCase() === up 
-      ? (historicalMission.departure_level ?? 1) 
-      : (historicalMission.arrival_level ?? 1);
+  // Jeśli portu nie ma w ownedAirports (np. to obce lotnisko), sprawdzamy czy globalny payload 
+  // przekazał listę portów wewnątrz struktury ledger (często zrzucaną do ev.ledger jako surowy obiekt)
+  const rawPayload = (ev.ledger as any)._rawPayload || (ev as any)._payload;
+  const backupAirport = rawPayload?.airports?.find((a: any) => a.icao.toUpperCase() === up);
+  
+  if (backupAirport) {
+    tier = backupAirport.category || backupAirport.tier || 1;
+    level = backupAirport.level || 1;
   } else {
-    // Ostateczny bezpiecznik rynkowy, jeśli trasa jest absolutnie dziewicza (n=0 w całym systemie)
-    tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
-    level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
+   // Ostateczny bezpiecznik z inputs
+   tier = role === "dep" ? (inputs.aircraftTier ?? 1) : 1; // bezpieczna podstawa
+   level = 1;
   }
  }
 
- // KROK 3: MATEMATYKA KOŃCOWA
+ // 3. MATEMATYKA BAZOWA (Nasza ciasna, zweryfikowana z logami progresja)
  const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
- const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, aircraftTier - 1);
+ const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, (acCat ?? 1) - 1);
 
  const predictedAirportPax = tierBasePax * airportLevelFactor * timeFactor * aircraftScaleFactor;
-
- const isMine = ev.ownedIcaos.has(up);
  const finalValue = parseFloat(predictedAirportPax.toFixed(2));
 
  return {
-  key,
-  label,
-  value: finalValue,
-  ownerShare: isMine ? finalValue : 0, 
+  key, label,
+  value: finalValue, 
+  ownerShare: own ? finalValue : 0, // Zysk dla właściciela tylko gdy port jest Twój
   pilotShare: finalValue,
-  sampleSize: 1,
+  sampleSize: 1, 
   tier: "formula",
   confidence: 95,
-  note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level} and Aircraft Tier ${aircraftTier}.`
+  note: `Production matrix fallback scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level}.`
  };
 }
+
 
 
 /** Licence component — full historical baseline (real historical averages already
