@@ -153,56 +153,41 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
  const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
 
-  // 2. PRODUKCYJNE POBIERANIE INFRASTRUKTURY Z LOKALNEJ BAZY HUB-A
- async function getAirportMetaFromProductionDb(icaoCode: string): Promise<{ category: number; level: number; ownerName: string | null }> {
-   const upIcao = icaoCode.toUpperCase().trim();
+   // 2. PRODUKCYJNE POBIERANIE INFRASTRUKTURY Z LOKALNEJ BAZY HUB-A (Bezpieczny odczyt T/L)
+ async function getAirportMetaFromProductionDb(icaoCode: string): Promise<{ category: number; level: number }> {
+ const upIcao = icaoCode.toUpperCase().trim();
    
    // Zabezpieczenie przed dziwnymi wpisami (kod ICAO musi mieć dokładnie 4 znaki)
    if (upIcao.length !== 4) {
-     return { category: 1, level: 1, ownerName: null };
+     return { category: 1, level: 1 };
    }
 
    try {
-     // Odpytujemy bezpośrednio Twoją oficjalną tabelę lotnisk w uniwersum huba
-     // Szukamy kolumn category, level oraz owner/właściciela (jeśli kolumna z właścicielem nazywa się inaczej, np. owner, dostosuj ją)
+     // Odpytujemy Twoją oficjalną tabelę lotnisk w uniwersum huba
      const { data: airportRow } = await supabaseAdmin
        .from("simfly_airports")
-       .select("category, level, owner_name") // <--- Jeśli kolumna właściciela w simfly_airports ma inną nazwę, zmień ją tutaj
+       .select("category, level")
        .eq("icao", upIcao)
        .single();
 
      if (airportRow) {
        return {
          category: airportRow.category ?? 1,
-         level: airportRow.level ?? 1,
-         ownerName: airportRow.owner_name ?? null
+         level: airportRow.level ?? 1
        };
      }
 
-     // Jeśli z jakiegoś powodu lotniska nie ma w simfly_airports, sprawdzamy nasz cache awaryjny
-     const { data: cached } = await supabaseAdmin
-       .from("simfly_airports_cache")
-       .select("category, level, owner_name")
-       .eq("icao", upIcao)
-       .single();
-
-     if (cached) {
-       return { category: cached.category, level: cached.level, ownerName: cached.owner_name };
-     }
-
-     return { category: 1, level: 1, ownerName: null };
-
+     return { category: 1, level: 1 };
    } catch (e) {
-     // Pancerny bezpiecznik — błąd zapytania nigdy nie wysypie działania modułu planowania
-     return { category: 1, level: 1, ownerName: null };
+     // Pełne bezpieczeństwo — w razie jakiegokolwiek błędu zwracamy bezpieczną podstawę T1 L1
+     return { category: 1, level: 1 };
    }
  }
 
- // Pobieramy w ułamku milisekundy twarde dane z bazy dla obu portów trasy
  const depInfra = await getAirportMetaFromProductionDb(data.departure);
  const arrInfra = await getAirportMetaFromProductionDb(data.arrival);
 
- // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
+ // 3. Budujemy czysty, fabryczny i bezpieczny obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
  departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
  arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
@@ -220,13 +205,11 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Nasycamy inputs prawdziwymi liczbami wyciągniętymi bezpośrednio z Twojej bazy danych
+ // Przekazujemy nasycone, pewne typy numeryczne do silnika (Gwarancja braku błędu NaN!)
  departureAirportTier: depInfra.category,
  departureAirportLevel: depInfra.level,
- departureAirportOwner: depInfra.ownerName,
  destAirportTier: arrInfra.category,
  destAirportLevel: arrInfra.level,
- destAirportOwner: arrInfra.ownerName,
  };
 
  // 4. Przekazujemy w pełni bezpieczny inputs do czystego silnika predykcji w mission-engine.ts
