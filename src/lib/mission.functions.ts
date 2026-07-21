@@ -148,22 +148,25 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
   }
 
- const depInfra = await getAirportMetaWithWeeklyCache(data.departure);
- const arrInfra = await getAirportMetaWithWeeklyCache(data.arrival);
+  // 2. DEFENSYWNE, PRODUKCYJNE SKANOWANIE GLOBALNEGO PAYLOADU (Odporne na puste stany formularza)
+ // Bezpiecznie wyciągamy kody ICAO, sprawdzając czy formularz nie przesłał wartości undefined/null
+ const rawDep = (data.departure || "").toUpperCase().trim();
+ const rawArr = (data.arrival || "").toUpperCase().trim();
 
- // 3. Budujemy czysty, fabryczny i bezpieczny obiekt inputs dla silnika predykcji
-  // 2. PRODUKCYJNE SKANOWANIE GLOBALNEGO PAYLOADU (Nazwy pól zsynchronizowane z podstroną My Airports)
- const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase().trim());
- const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase().trim());
+ // Szukamy lotnisk w globalnym payloadzie tylko wtedy, gdy kody mają poprawną długość
+ const depAirport = rawDep.length === 4 ? payload.airports?.find((a: any) => a.icao?.toUpperCase() === rawDep) : undefined;
+ const arrAirport = rawArr.length === 4 ? payload.airports?.find((a: any) => a.icao?.toUpperCase() === rawArr) : undefined;
 
+ // Mapujemy kolumny 'tier' oraz 'level' dokładnie tak, jak robi to sprawna podstrona airports
  const finalDepTier = depAirport?.tier || depAirport?.category || 1;
  const finalDepLevel = depAirport?.level || 1;
  const finalArrTier = arrAirport?.tier || arrAirport?.category || 1;
  const finalArrLevel = arrAirport?.level || 1;
-   
+
+ // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
- departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
- arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
+ departure: { icao: rawDep, lat: gDep?.lat, lon: gDep?.lon },
+ arrival: { icao: rawArr, lat: gArr?.lat, lon: gArr?.lon },
  aircraftId: data.aircraftId,
  
  aircraftIcao: (() => {
@@ -175,20 +178,19 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  
  return (data as any).aircraftIcao;
  })(),
-  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
+ aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // NOWOŚĆ: Nasycamy inputs autentycznymi liczbami z globalnego katalogu (Gwarancja braku błędu NaN!)
+ // Nasycamy inputs bezpiecznymi, twardymi liczbami z pamięci RAM (Gwarancja braku błędu NaN!)
  departureAirportTier: finalDepTier,
  departureAirportLevel: finalDepLevel,
  destAirportTier: finalArrTier,
  destAirportLevel: finalArrLevel,
  };
 
- // 4. Przekazujemy inputs oraz evidence bezpośrednio do czystego silnika predykcji w mission-engine.ts
+ // 4. Przekazujemy w pełni bezpieczny inputs do czystego silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
-
 
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
