@@ -292,13 +292,13 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// DOKŁADNIE SKALIBROWANE STAWKI WYJŚCIOWE
+// DOKŁADNIE SKALIBROWANE STAWKI WYJŚCIOWE DLA ODPOWIEDNICH TIERÓW
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
-  3: 0.38, // baza dla BIAR
-  4: 0.42, // baza dla ENVA
-  5: 0.46  // baza dla LEBL
+  3: 0.38,
+  4: 0.42,
+  5: 0.46
 };
 const AIRPORT_LEVEL_GROWTH = 0.096;
 const AIRCRAFT_TIER_GROWTH = 0.027;
@@ -313,64 +313,50 @@ function estimateAirportEndpoint(
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
+
+ // 1. ODCZYTUJEMY WŁAŚCICIELA I SPRAWDZAMY STATUS PORTU (System vs Player)
+ const airportOwner = role === "dep" ? (inputs as any).departureAirportOwner : (inputs as any).destAirportOwner;
+ 
+ // REGUŁA BRZEGOWA: Jeśli lotnisko nie ma właściciela (jest systemowe/bankowe jak ENOL) -> zysk wynosi 0 PAX!
+ if (!airportOwner) {
+   return {
+    key, label, value: 0, ownerShare: 0, pilotShare: 0,
+    sampleSize: 1, tier: "formula", confidence: 95,
+    note: `System-owned airport (${up}) does not generate passenger revenue.`
+   };
+ }
+
+ // --- DALSZA CZĘŚĆ FUNKCJI (Wywoływana wyłącznie dla lotnisk należących do graczy) ---
  const own = ev.ownedIcaos.has(up);
 
- // 1. LEGALNE OBLICZENIE CZASU LOTU ZGODNIE Z ARCHITEKTURĄ PLIKU
- // Wyciągamy czas lotu przeliczając eta bezpośrednio ze współrzędnych geograficznych inputs
+ // Obliczamy czas lotu natywną metodą z koordynatów inputs
  let flightTimeMs: number | null = null;
- if (Number.isFinite(inputs.departure.lat) && Number.isFinite(inputs.departure.lon) &&
-     Number.isFinite(inputs.arrival.lat) && Number.isFinite(inputs.arrival.lon)) {
-   
-   // Korzystamy z zaimportowanej na górze Waszego pliku metody computeEta
+ if (inputs.departure.lat && inputs.arrival.lat) {
    const eta = computeEta({
      departureMs: Date.now(),
-     origin: { lat: inputs.departure.lat as number, lon: inputs.departure.lon as number },
-     destination: { lat: inputs.arrival.lat as number, lon: inputs.arrival.lon as number },
+     origin: { lat: inputs.departure.lat, lon: inputs.departure.lon },
+     destination: { lat: inputs.arrival.lat, lon: inputs.arrival.lon },
      aircraftICAO: inputs.aircraftIcao,
    });
-   if (eta) {
-     flightTimeMs = eta.durationMs;
-   }
+   if (eta) flightTimeMs = eta.durationMs;
  }
 
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
- const CUT_OFF_HOURS = 3.0;
- let timeFactor = hours > 0 ? hours : 1.0;
- if (hours > CUT_OFF_HOURS) {
-  const overtime = hours - CUT_OFF_HOURS;
-  const halfHourBlocks = Math.ceil(overtime / 0.5);
-  timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
- }
+ const timeFactor = hours > 0 ? hours : 1.0;
 
- // Aircraft category dla mnożnika gabarytowego
+ // Odczytujemy stabilne, nasycone z bazy dane numeryczne z inputs
+ const tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
+ const level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
+
  const acId = inputs.aircraftId;
- const acCat = acId === GENERIC_AIRCRAFT_ID
- ? undefined
- : (acId ? ev.aircraftCatById.get(acId) : undefined)
- ?? lookupAircraftSpec((inputs.aircraftIcao || "").toUpperCase())?.spec?.category;
+ const acCat = (acId ? ev.aircraftCatById.get(acId) : undefined) ?? 1;
 
- // 2. WYSZUKIWANIE INFRASTRUKTURY (Zabezpieczone na wielkość liter)
- let tier = 1;
- let level = 1;
-
- const ownedAirport = ev.ledger.ownedAirports.find(a => 
-   a.icao?.toUpperCase() === up || a.icao?.toLowerCase() === icao.toLowerCase()
- );
-
- if (ownedAirport) {
-  tier = ownedAirport.category ?? 1;
-  level = ownedAirport.level ?? 1;
- } else {
-  tier = ev.airportCatByIcao.get(up) ?? 1;
-  level = 1;
- }
-
- // 3. MATEMATYKA BAZOWA (Ciasna, wykalibrowana z logami progresja)
- const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
+ // Pancerne obliczenia na twardych liczbach
+ const baseRate = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
- const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, (acCat ?? 1) - 1);
+ const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, acCat - 1);
 
- const predictedAirportPax = tierBasePax * airportLevelFactor * timeFactor * aircraftScaleFactor;
+ const predictedAirportPax = baseRate * airportLevelFactor * timeFactor * aircraftScaleFactor;
  const finalValue = parseFloat(predictedAirportPax.toFixed(2));
 
  return {
@@ -381,9 +367,10 @@ function estimateAirportEndpoint(
   sampleSize: 1, 
   tier: "formula",
   confidence: 95,
-  note: `Production matrix fallback scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level}.`
+  note: `Market-aligned estimate for Player-owned airport (${airportOwner}) Tier ${tier}, Level ${level}.`
  };
 }
+
 
 
 
