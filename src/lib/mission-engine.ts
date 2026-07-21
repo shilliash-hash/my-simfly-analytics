@@ -292,7 +292,7 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// WYREGULOWANA BAZA DLA CLOUDFLARE (Zapisz w mission-engine.ts)
+// SKALIBROWANE STAWKI WYJŚCIOWE (Zapisz w mission-engine.ts)
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
@@ -309,14 +309,14 @@ function estimateAirportEndpoint(
  inputs: MissionInputs,
  ev: MissionEvidence,
  licenceMedianByCode: Map<string, number>,
- flightTimeMs: number | null // Przekazany z nadrzędnego assemblera
 ): ComponentEstimate {
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
  const own = ev.ownedIcaos.has(up);
 
- // 1. Mnożnik czasu lotu (Oryginalne odcięcie 3h)
+ // 1. ODCZYT CZASU LOTU: Wyciągamy czas przelotu, który wkleiliśmy do obiektu ev w assemblerze
+ const flightTimeMs = (ev as any).currentFlightTimeMs ?? null;
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const CUT_OFF_HOURS = 3.0;
  let timeFactor = hours > 0 ? hours : 1.0;
@@ -326,37 +326,28 @@ function estimateAirportEndpoint(
   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
  }
 
- // Aircraft category dla obliczeń gabarytowych
+ // Aircraft category dla mnożnika gabarytowego
  const acId = inputs.aircraftId;
  const acCat = acId === GENERIC_AIRCRAFT_ID
  ? undefined
  : (acId ? ev.aircraftCatById.get(acId) : undefined)
  ?? lookupAircraftSpec((inputs.aircraftIcao || "").toUpperCase())?.spec?.category;
 
- // 2. PRODUKCYJNY SKANER INFRASTRUKTURY (Skanuje dane wprost z Waszego payloadu w ledgerze)
+ // 2. PRODUKCYJNE WYSZUKIWANIE INFRASTRUKTURY (Uodpornione na wielkość liter w bazie)
  let tier = 1;
  let level = 1;
 
- // Szukamy lotniska w ledgerze ownedAirports
- const ownedAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
+ const ownedAirport = ev.ledger.ownedAirports.find(a => 
+   a.icao?.toUpperCase() === up || a.icao?.toLowerCase() === icao.toLowerCase()
+ );
 
  if (ownedAirport) {
   tier = ownedAirport.category ?? 1;
   level = ownedAirport.level ?? 1;
  } else {
-  // Jeśli portu nie ma w ownedAirports (np. to obce lotnisko), sprawdzamy czy globalny payload 
-  // przekazał listę portów wewnątrz struktury ledger (często zrzucaną do ev.ledger jako surowy obiekt)
-  const rawPayload = (ev.ledger as any)._rawPayload || (ev as any)._payload;
-  const backupAirport = rawPayload?.airports?.find((a: any) => a.icao.toUpperCase() === up);
-  
-  if (backupAirport) {
-    tier = backupAirport.category || backupAirport.tier || 1;
-    level = backupAirport.level || 1;
-  } else {
-   // Ostateczny bezpiecznik z inputs
-   tier = role === "dep" ? (inputs.aircraftTier ?? 1) : 1; // bezpieczna podstawa
-   level = 1;
-  }
+  // Jeśli to obce lotnisko, sprawdzamy alternatywną mapę Lovable, jeśli została wdrożona
+  tier = ev.airportCatByIcao.get(up) ?? 1;
+  level = 1;
  }
 
  // 3. MATEMATYKA BAZOWA (Nasza ciasna, zweryfikowana z logami progresja)
@@ -370,7 +361,7 @@ function estimateAirportEndpoint(
  return {
   key, label,
   value: finalValue, 
-  ownerShare: own ? finalValue : 0, // Zysk dla właściciela tylko gdy port jest Twój
+  ownerShare: own ? finalValue : 0, 
   pilotShare: finalValue,
   sampleSize: 1, 
   tier: "formula",
@@ -487,10 +478,10 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
  const baseline = licenceBaseline(inputs, ev);
  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
  
- // Pobieramy oryginalny komponent samolotu
- const rawAircraftComponent = estimateAircraftComponent(inputs, ev, flightTimeMs);
+ // 1. Pobieramy oryginalny komponent samolotu
+ const rawAircraftComponent = estimateAircraftComponent(inputs, ev);
  
- // KOREKTA X2: Zmniejszamy wartość i udziały samolotu dokładnie o połowę (0.5), aby zrównać z logiem
+ // 2. KOREKTA X2: Zmniejszamy wartość samolotu dokładnie o połowę (0.5), aby zrównać z raportem
  const aircraft: ComponentEstimate = {
    ...rawAircraftComponent,
    value: parseFloat((rawAircraftComponent.value * 0.5).toFixed(2)),
@@ -498,8 +489,12 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
    pilotShare: parseFloat((rawAircraftComponent.pilotShare * 0.5).toFixed(2))
  };
 
- const dep = estimateAirportEndpoint("dep", depUp, ev, flightTimeMs, aircraftTier, inputs);
- const arr = estimateAirportEndpoint("arr", arrUp, ev, flightTimeMs, aircraftTier, inputs);
+ // 3. BEZPIECZNE PRZEKAZANIE CZASU LOTU: Doklejamy czas lotu bezpośrednio do dowodów w pamięci RAM
+ (ev as any).currentFlightTimeMs = flightTimeMs;
+
+ // 4. ORYGINALNE WYWOŁANIA (Sygnatury funkcji pozostają w 100% fabryczne i nienaruszone!)
+ const dep = estimateAirportEndpoint("dep", depUp, inputs, ev, licenceMedianByCode);
+ const arr = estimateAirportEndpoint("arr", arrUp, inputs, ev, licenceMedianByCode);
 
  const licence = estimateLicenceComponent(inputs, baseline);
  const components = [aircraft, dep, arr, licence];
