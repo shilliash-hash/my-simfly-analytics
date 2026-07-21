@@ -153,7 +153,66 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
  const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
 
- // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
+ // 2. AUTONOMICZNY CACHE TYGODNIOWY Z DETEKCJĄ LOTNISK SYSTEMOWYCH
+ async function getAirportMetaWithWeeklyCache(icaoCode: string): Promise<{ category: number; level: number; ownerName: string | null }> {
+   const upIcao = icaoCode.toUpperCase();
+   const JEDEN_TYDZIEN_MS = 7 * 24 * 60 * 60 * 1000;
+
+   try {
+     // Odpytujemy nową, otwartą tabelę cache w Supabase
+     const { data: cached } = await supabaseAdmin
+       .from("simfly_airports_cache")
+       .select("category, level, owner_name, last_synced_at")
+       .eq("icao", upIcao)
+       .single();
+
+     const teraz = Date.now();
+     const czasOdSynchronizacji = cached ? (teraz - new Date(cached.last_synced_at).getTime()) : Infinity;
+
+     // HIT: Jeśli dane są w bazie i mają mniej niż tydzień -> zwracamy je z bazy w 1 milisekundę
+     if (cached && czasOdSynchronizacji < JEDEN_TYDZIEN_MS) {
+       return { category: cached.category, level: cached.level, ownerName: cached.owner_name };
+     }
+
+     // MISS: Dane wygasły lub brak w bazie -> robimy bezpieczny, darmowy fetch z rynku SimFly
+     const rynkowyUrl = `https://simfly.io{encodeURIComponent(upIcao)}`;
+     const apiRes = await fetch(rynkowyUrl, { headers: { Accept: "application/json" } })
+       .then(res => res.ok ? res.json() : null)
+       .catch(() => null);
+
+     const finalCategory = apiRes?.category || 1;
+     const finalLevel = apiRes?.level || 1;
+     
+     // Dynamicznie wyciągamy właściciela na podstawie twardej struktury JSON
+     let finalOwner: string | null = null;
+     if (apiRes && apiRes.owner && apiRes.owner.username) {
+       finalOwner = apiRes.owner.username;
+     }
+
+     // Zapisujemy (upsert) zaktualizowany stan do naszej otwartej tabeli w Supabase
+     await supabaseAdmin
+       .from("simfly_airports_cache")
+       .upsert({
+         icao: upIcao,
+         category: finalCategory,
+         level: finalLevel,
+         owner_name: finalOwner,
+         last_synced_at: new Date().toISOString()
+       }, { onConflict: "icao" });
+
+     return { category: finalCategory, level: finalLevel, ownerName: finalOwner };
+
+   } catch (e) {
+     // Pancerny bezpiecznik sieciowy — w razie awarii zwraca bezpieczną podstawę T1 L1, nie zrywając tabeli
+     return { category: 1, level: 1, ownerName: null };
+   }
+ }
+
+ // Pobieramy kompletne, nasycone dane rynkowe z tygodniowego cache'u lokalnego dla obu portów
+ const depInfra = await getAirportMetaWithWeeklyCache(data.departure);
+ const arrInfra = await getAirportMetaWithWeeklyCache(data.arrival);
+
+ // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
  departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
  arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
@@ -161,8 +220,6 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  
  aircraftIcao: (() => {
  if (ac?.icao) return ac.icao;
- 
- // Korzystamy ze skanera marketMission zaimplementowanego przez Ciebie wyżej (linie 126-149)
  if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
  if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
  if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
@@ -173,16 +230,19 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Przekazujemy pełne parametry rynkowe obu portów (wylotu i przylotu) do silnika
- departureAirportTier: depAirport?.category || 1,
- departureAirportLevel: depAirport?.level || 1,
- destAirportTier: arrAirport?.category || 1,
- destAirportLevel: arrAirport?.level || 1,
+ // Przekazujemy nasycone, pewne typy numeryczne i tekstowe do silnika (Gwarancja braku błędu NaN!)
+ departureAirportTier: depInfra.category,
+ departureAirportLevel: depInfra.level,
+ departureAirportOwner: depInfra.ownerName,
+ destAirportTier: arrInfra.category,
+ destAirportLevel: arrInfra.level,
+ destAirportOwner: arrInfra.ownerName,
  };
 
- // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
+ // 4. Przekazujemy inputs oraz evidence bezpośrednio do czystego silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
+
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
   .inputValidator((d: RankMissionsInput) => d)
