@@ -163,10 +163,10 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  const finalArrTier = arrAirport?.tier || arrAirport?.category || 1;
  const finalArrLevel = arrAirport?.level || 1;
 
- // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
+  // 3. Budujemy czysty, w 100% fabryczny obiekt inputs (Rozwiązuje konflikt typów na frontendzie)
  const inputs: MissionInputs = {
- departure: { icao: rawDep, lat: gDep?.lat, lon: gDep?.lon },
- arrival: { icao: rawArr, lat: gArr?.lat, lon: gArr?.lon },
+ departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
+ arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
  aircraftId: data.aircraftId,
  
  aircraftIcao: (() => {
@@ -180,17 +180,12 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  })(),
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
- 
- // Nasycamy inputs bezpiecznymi, twardymi liczbami z pamięci RAM (Gwarancja braku błędu NaN!)
- departureAirportTier: finalDepTier,
- departureAirportLevel: finalDepLevel,
- destAirportTier: finalArrTier,
- destAirportLevel: finalArrLevel,
  };
 
- // 4. Przekazujemy w pełni bezpieczny inputs do czystego silnika predykcji w mission-engine.ts
+ // 4. Przekazujemy czysty inputs do silnika predykcji
  return predictMission(inputs, evidenceFromPayload(payload));
 });
+
 
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
