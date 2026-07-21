@@ -148,9 +148,10 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
   }
 
-  // 2. Szukamy PARAMETRÓW OBU LOTNISK we wczytanym pakiecie danych, aby poznać ich ulepszenia
- const depAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.departure.toUpperCase());
- const arrAirport = payload.airports.find((a) => a.icao.toUpperCase() === data.arrival.toUpperCase());
+ // 2. Szukamy PARAMETRÓW OBU LOTNISK we wczytanym pakiecie danych, aby poznać ich ulepszenia
+ // Przeszukujemy globalną tablicę airports dostarczoną przez getSimflyPayload
+ const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
+ const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
 
  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
@@ -161,23 +162,18 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftIcao: (() => {
  if (ac?.icao) return ac.icao;
  
- // Szukamy kontraktu misji w globalnym katalogu na podstawie przesyłanego ID samolotu
- const marketMission = payload.missions?.find((m: any) => 
- m.aircraftId === data.aircraftId || 
- m.id === data.aircraftId || 
- m.aircraft_id === data.aircraftId
- );
- // Wyciągamy czysty kod ICAO przypisany do tej misji przez API simfly.io
+ // Korzystamy ze skanera marketMission zaimplementowanego przez Ciebie wyżej (linie 126-149)
  if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
  if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
  if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
+ if (marketAircraftIcao) return marketAircraftIcao;
  
  return (data as any).aircraftIcao;
  })(),
- aircraftLabel: ac?.name || payload.missions?.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId)?.aircraft_name || "Rental Aircraft",
+ aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // NOWOŚĆ: Przekazujemy pełne parametry rynkowe obu portów (wylotu i przylotu) do silnika
+ // Przekazujemy pełne parametry rynkowe obu portów (wylotu i przylotu) do silnika
  departureAirportTier: depAirport?.category || 1,
  departureAirportLevel: depAirport?.level || 1,
  destAirportTier: arrAirport?.category || 1,
@@ -187,8 +183,6 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
-
-
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
   .inputValidator((d: RankMissionsInput) => d)
