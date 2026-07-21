@@ -292,14 +292,13 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-/** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized. */
-// ZWIĘKSZONA BAZA WYJŚCIOWA DLA LOTNISK (Podbicie zaniżonych dochodów)
+// PEŁNY, ODSEPAROWANY ENGINE FALLBACK (Zapisz to w mission-engine.ts)
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
-  1: 0.32, // podbite z 0.21
-  2: 0.35, // podbite z 0.22
-  3: 0.38, // podbite z 0.24 (baza dla BIAR T3)
-  4: 0.42, // podbite z 0.26 (baza dla ENVA T4)
-  5: 0.46  // podbite z 0.28 (baza dla LEBL T5)
+  1: 0.32,
+  2: 0.35,
+  3: 0.38,
+  4: 0.42,
+  5: 0.46
 };
 const AIRPORT_LEVEL_GROWTH = 0.096;
 const AIRCRAFT_TIER_GROWTH = 0.027;
@@ -325,20 +324,39 @@ function estimateAirportEndpoint(
   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
  }
 
- const destAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
+ // KROK 1: Szukamy lotniska w Twoich własnych hubach
+ const ownedAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
  
  let tier = 1;
  let level = 1;
 
- if (destAirport) {
-  tier = destAirport.category ?? 1;
-  level = destAirport.level ?? 1;
+ if (ownedAirport) {
+  tier = ownedAirport.category ?? 1;
+  level = ownedAirport.level ?? 1;
  } else {
-  tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
-  level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
+  // KROK 2: Jeśli to obce lotnisko, PRZESZUKUJEMY LEDGER HISTORII LOTÓW (ev.ledger)
+  // Szukamy jakiejkolwiek misji, która lądowała lub startowała z tego portu, by wyciągnąć jego parametry
+  const historicalMission = ev.ledger.missions?.find(m => 
+    m.departure_icao?.toUpperCase() === up || m.arrival_icao?.toUpperCase() === up
+  );
+
+  if (historicalMission) {
+    // Wyciągamy zarejestrowany w historii poziom i kategorię tego obcego portu
+    tier = historicalMission.departure_icao?.toUpperCase() === up 
+      ? (historicalMission.departure_category ?? 1) 
+      : (historicalMission.arrival_category ?? 1);
+      
+    level = historicalMission.departure_icao?.toUpperCase() === up 
+      ? (historicalMission.departure_level ?? 1) 
+      : (historicalMission.arrival_level ?? 1);
+  } else {
+    // Ostateczny bezpiecznik rynkowy, jeśli trasa jest absolutnie dziewicza (n=0 w całym systemie)
+    tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
+    level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
+  }
  }
 
- // Kalkulacja na mocniejszej, podbitej bazie
+ // KROK 3: MATEMATYKA KOŃCOWA
  const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
  const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, aircraftTier - 1);
@@ -360,7 +378,6 @@ function estimateAirportEndpoint(
   note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level} and Aircraft Tier ${aircraftTier}.`
  };
 }
-
 
 
 /** Licence component — full historical baseline (real historical averages already
