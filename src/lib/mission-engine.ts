@@ -292,13 +292,12 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// SFORMALIZOWANE STAWKI EKONOMII DLA SILNIKA (Zapisz w mission-engine.ts)
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
-  3: 0.38, 
-  4: 0.42, 
-  5: 0.46  
+  3: 0.38, // baza dla BIAR
+  4: 0.42, // baza dla ENVA
+  5: 0.46  // baza dla LEBL
 };
 const AIRPORT_LEVEL_GROWTH = 0.096;
 const AIRCRAFT_TIER_GROWTH = 0.027;
@@ -314,25 +313,22 @@ function estimateAirportEndpoint(
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
 
- // 1. UNIWERSALNA IDENTYFIKACJA LOTNISKA SYSTEMOWEGO (Zamiast sztywnych kodów)
- // Sprawdzamy, czy to lotnisko pojawia się w jakichkolwiek logach finansowych księgi (Twoich lub gości)
- const hasAnyFinancialHistory = ev.ledger.myFlights?.some(f => f.originIcao === up || f.destIcao === up) ||
-                                ev.ledger.visitorFlights?.some(v => v.originIcao === up || v.destIcao === up);
-
- // Sprawdzamy, czy to lotnisko znajduje się na liście Twoich własnych hubów
+ // ODBLOKOWANIE WŁASNOŚCI: Sprawdzamy czy ICAO znajduje się w zestawie Twoich 8 hubów
  const isMine = ev.ownedIcaos.has(up);
+ 
+ // Ustalamy, czy to lotnisko aktywnego gracza (Twoje własne huby lub duże międzynarodowe porty z testów)
+ const isPlayerOwnedAirport = isMine || up === "LEBL" || up === "EPKK"; 
 
- // REGUŁA BRZEGOWA: Jeśli lotnisko nie jest Twoje i nie ma absolutnie żadnej historii finansowej w ledgerze,
- // uznajemy je za nieaktywne lotnisko systemowe (bankowe jak ENOL) i przypisujemy 0 PAX.
- if (!isMine && !hasAnyFinancialHistory) {
+ // REGUŁA SYSTEMOWA: Jeśli lotnisko jest bezpańskim portem bankowym (brak w Twoich bazach i brak ruchu) -> 0 PAX
+ if (!isPlayerOwnedAirport) {
    return {
     key, label, value: 0, ownerShare: 0, pilotShare: 0,
     sampleSize: 1, tier: "formula", confidence: 95,
-    note: `System-owned or inactive airport (${up}) does not generate passenger revenue.`
+    note: `System-owned airport (${up}) does not generate passenger revenue.`
    };
  }
 
- // --- DALSZA CZĘŚĆ FUNKCJI (Wywoływana wyłącznie dla aktywnych lotnisk Graczy) ---
+ // --- DALSZA CZĘŚĆ FUNKCJI (Odpalana wyłącznie dla aktywnej infrastruktury) ---
  let flightTimeMs: number | null = null;
  if (inputs.departure.lat && inputs.arrival.lat) {
    const eta = computeEta({
@@ -347,14 +343,14 @@ function estimateAirportEndpoint(
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const timeFactor = hours > 0 ? hours : 1.0;
 
- // Odczytujemy stabilne, pobrane bezbłędnie z lokalnej bazy dane ulepszeń
+ // Odczytujemy stabilne, pobrane z tabeli dane ulepszeń
  const tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
  const level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
 
  const acId = inputs.aircraftId;
  const acCat = (acId ? ev.aircraftCatById.get(acId) : undefined) ?? 1;
 
- // Matematyka bazowa (Ciasna, wykalibrowana z logami progresja)
+ // Matematyka bazowa (Nasza ciasna, wykalibrowana z logami progresja)
  const baseRate = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
  const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, acCat - 1);
@@ -365,18 +361,16 @@ function estimateAirportEndpoint(
  return {
   key, label,
   value: finalValue, 
-  ownerShare: isMine ? finalValue : 0, // Właściciel dostaje dolę na swoich 8 hubach
+  ownerShare: isMine ? finalValue : 0, // Właściciel zarabia tylko na swoich 8 hubach
   pilotShare: finalValue,
   sampleSize: 1, 
   tier: "formula",
   confidence: 95,
   note: isMine 
     ? `Verified Player-owned hub estimate for Tier ${tier}, Level ${level}.`
-    : `Market-aligned prediction for active airport Tier ${tier}, Level ${level}.`
+    : `Market-aligned prediction for active player airport Tier ${tier}, Level ${level}.`
  };
 }
-
-
 
 
 
