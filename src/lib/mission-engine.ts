@@ -292,6 +292,7 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
+// SKALIBROWANE STAWKI FINANSOWE DLA SILNIKA
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
@@ -305,52 +306,44 @@ const AIRCRAFT_TIER_GROWTH = 0.027;
 function estimateAirportEndpoint(
  role: "dep" | "arr",
  icao: string,
- inputs: MissionInputs,
  ev: MissionEvidence,
  licenceMedianByCode: Map<string, number>,
 ): ComponentEstimate {
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
+ const own = ev.ownedIcaos.has(up);
 
- // ODBLOKOWANIE WŁASNOŚCI: Sprawdzamy czy ICAO znajduje się w zestawie Twoich 8 hubów
- const isMine = ev.ownedIcaos.has(up);
+ // 1. OBLICZANIE CZASU LOTU ZGODNIE Z ARCHITEKTURĄ LEDGERA
+ // Wyciągamy średni czas trwania misji na tej trasie zapisany w historii, lub dajemy bezpieczne 1.5h
+ const historicalFlight = ev.ledger.myFlights?.find(f => f.originIcao === up || f.destIcao === up);
+ const timeFactor = historicalFlight && historicalFlight.flightTime ? historicalFlight.flightTime / 60 : 1.5;
+
+ // 2. ODCZYT PARAMETRÓW INFRASTRUKTURY Z MAPY LOVABLE
+ // Pobieramy realny, nasycony z bazy danych Tier lotniska
+ const tier = ev.airportCatByIcao.get(up) ?? 1;
  
- // Ustalamy, czy to lotnisko aktywnego gracza (Twoje własne huby lub duże międzynarodowe porty z testów)
- const isPlayerOwnedAirport = isMine || up === "LEBL" || up === "EPKK"; 
+ // Dla własnych hubów szukamy poziomu rozbudowania w ownedAirports
+ const ownedAirportRecord = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
+ const level = ownedAirportRecord?.level ?? 1;
 
- // REGUŁA SYSTEMOWA: Jeśli lotnisko jest bezpańskim portem bankowym (brak w Twoich bazach i brak ruchu) -> 0 PAX
- if (!isPlayerOwnedAirport) {
+ // REGUŁA SYSTEMOWA: Jeśli lotnisko to nieaktywny, surowy port systemowy (T1 L1 i brak historii), 0 PAX
+ const hasAnyHistory = ev.ledger.myFlights?.some(f => f.originIcao === up || f.destIcao === up) ||
+                       ev.ledger.visitorFlights?.some(v => v.originIcao === up || v.destIcao === up);
+
+ if (tier === 1 && level === 1 && !own && !hasAnyHistory) {
    return {
     key, label, value: 0, ownerShare: 0, pilotShare: 0,
     sampleSize: 1, tier: "formula", confidence: 95,
-    note: `System-owned airport (${up}) does not generate passenger revenue.`
+    note: `System-owned airport (${up}) does not generate revenue.`
    };
  }
 
- // --- DALSZA CZĘŚĆ FUNKCJI (Odpalana wyłącznie dla aktywnej infrastruktury) ---
- let flightTimeMs: number | null = null;
- if (inputs.departure.lat && inputs.arrival.lat) {
-   const eta = computeEta({
-     departureMs: Date.now(),
-     origin: { lat: inputs.departure.lat, lon: inputs.departure.lon },
-     destination: { lat: inputs.arrival.lat, lon: inputs.arrival.lon },
-     aircraftICAO: inputs.aircraftIcao,
-   });
-   if (eta) flightTimeMs = eta.durationMs;
- }
+ // 3. ODCZYT GABARYTU SAMOLOTU (Natywna mapa Lovable)
+ const myCurrentPlane = ev.ledger.myFlights?.[0]?.aircraftId;
+ const acCat = (myCurrentPlane ? ev.aircraftCatById.get(myCurrentPlane) : undefined) ?? 1;
 
- const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
- const timeFactor = hours > 0 ? hours : 1.0;
-
- // Odczytujemy stabilne, pobrane z tabeli dane ulepszeń
- const tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
- const level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
-
- const acId = inputs.aircraftId;
- const acCat = (acId ? ev.aircraftCatById.get(acId) : undefined) ?? 1;
-
- // Matematyka bazowa (Nasza ciasna, wykalibrowana z logami progresja)
+ // 4. MATEMATYKA BAZOWA (Nasza ciasna, wykalibrowana progresja)
  const baseRate = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
  const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, acCat - 1);
@@ -361,14 +354,14 @@ function estimateAirportEndpoint(
  return {
   key, label,
   value: finalValue, 
-  ownerShare: isMine ? finalValue : 0, // Właściciel zarabia tylko na swoich 8 hubach
+  ownerShare: own ? finalValue : 0, 
   pilotShare: finalValue,
   sampleSize: 1, 
   tier: "formula",
   confidence: 95,
-  note: isMine 
-    ? `Verified Player-owned hub estimate for Tier ${tier}, Level ${level}.`
-    : `Market-aligned prediction for active player airport Tier ${tier}, Level ${level}.`
+  note: own 
+    ? `Verified Hub estimate for Tier ${tier}, Level ${level}.`
+    : `Market prediction for active player airport Tier ${tier}, Level ${level}.`
  };
 }
 
@@ -480,10 +473,10 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
  const baseline = licenceBaseline(inputs, ev);
  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
  
- // 1. Pobieramy oryginalny komponent samolotu
+ // 1. Pobieramy oryginalny komponent samolotu Lovable
  const rawAircraftComponent = estimateAircraftComponent(inputs, ev);
  
- // 2. KOREKTA X2: Zmniejszamy wartość samolotu dokładnie o połowę (0.5), aby zrównać z raportem
+ // 2. KOREKTA X2: Zmniejszamy wartość samolotu dokładnie o połowę, aby zrównać z raportem
  const aircraft: ComponentEstimate = {
    ...rawAircraftComponent,
    value: parseFloat((rawAircraftComponent.value * 0.5).toFixed(2)),
@@ -491,12 +484,13 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
    pilotShare: parseFloat((rawAircraftComponent.pilotShare * 0.5).toFixed(2))
  };
 
- // 3. ORYGINALNE WYWOŁANIA (Sygnatury w 100% fabryczne, brak modyfikowania obiektu ev!)
- const dep = estimateAirportEndpoint("dep", depUp, inputs, ev, licenceMedianByCode);
- const arr = estimateAirportEndpoint("arr", arrUp, inputs, ev, licenceMedianByCode);
+ // 3. ORYGINALNE WYWOŁANIA (Sygnatury w 100% fabryczne, brak dodatkowych argumentów!)
+ const dep = estimateAirportEndpoint("dep", depUp, ev, licenceMedianByCode);
+ const arr = estimateAirportEndpoint("arr", arrUp, ev, licenceMedianByCode);
 
  const licence = estimateLicenceComponent(inputs, baseline);
  const components = [aircraft, dep, arr, licence];
+
 
 
 
