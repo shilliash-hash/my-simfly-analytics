@@ -148,15 +148,17 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
   }
 
- // 2. KULOODPORNE, RÓWNOLEGLE POBIERANIE INFRASTRUKTURY Z PUBLICZNEGO API
- // Pobieramy dane dla obu lotnisk jednocześnie, używając wbudowanego fetchJSON
- const depUrl = `https://simfly.io{encodeURIComponent(data.departure.toUpperCase())}`;
- const arrUrl = `https://simfly.io{encodeURIComponent(data.arrival.toUpperCase())}`;
+ // 2. POBIERANIE INFRASTRUKTURY PRZEZ OFICJALNY I ZABEZPIECZONY EMBEDDED WRAPPER
+ // Wykorzystujemy pobrane na początku funkcji tokeny identity (username i nonce)
+ const qsTokens = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
+ const depApiUrl = `https://simfly.io{encodeURIComponent(data.departure.toUpperCase())}?${qsTokens}`;
+ const arrApiUrl = `https://simfly.io{encodeURIComponent(data.arrival.toUpperCase())}?${qsTokens}`;
 
- // Odpalamy oba zapytania w tym samym momencie (concurrency), co drastycznie skraca czas oczekiwania
+ // Pobieramy dane dla obu lotnisk jednocześnie za pomocą wbudowanego mechanizmu fetchJSON
+ // Używamy bloku .then i .catch, aby ewentualny brak odpowiedzi w API nigdy nie uszkodził reszty obiektów (np. spec samolotu)
  const [depApiResponse, arrApiResponse] = await Promise.all([
-   fetch(depUrl, { headers: { Accept: "application/json" } }).then(res => res.ok ? res.json() : null).catch(() => null),
-   fetch(arrUrl, { headers: { Accept: "application/json" } }).then(res => res.ok ? res.json() : null).catch(() => null)
+   fetch(depApiUrl, { headers: { Accept: "application/json" } }).then(res => res.ok ? res.json() : null).catch(() => null),
+   fetch(arrApiUrl, { headers: { Accept: "application/json" } }).then(res => res.ok ? res.json() : null).catch(() => null)
  ]);
 
  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
@@ -177,7 +179,7 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Wstrzykujemy realne dane z publicznego API SimFly (jeśli brak odpowiedzi, bezpiecznik daje 1)
+ // Wstrzykujemy realne, autentyczne dane o infrastrukturze z autoryzowanego zapytania API
  departureAirportTier: (depApiResponse as any)?.category || 1,
  departureAirportLevel: (depApiResponse as any)?.level || 1,
  destAirportTier: (arrApiResponse as any)?.category || 1,
@@ -187,6 +189,7 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
+
 
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
