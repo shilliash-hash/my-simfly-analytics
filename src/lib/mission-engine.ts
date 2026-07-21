@@ -22,6 +22,10 @@ export type MissionInputs = {
   aircraftLevel?: number;
   licence?: string;
   dateIso?: string;
+  departureAirportTier?: number;
+  departureAirportLevel?: number;
+  destAirportTier?: number;
+  destAirportLevel?: number;
 };
 
 export type ConfidenceTier = "direct" | "near" | "class" | "formula" | "none";
@@ -289,49 +293,84 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
 }
 
 /** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized. */
+// DOKŁADNIE SKALIBROWANA CIASNA BAZA DLA SAMYCH LOTNISK (L1)
+const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
+  1: 0.21,
+  2: 0.22,
+  3: 0.24,
+  4: 0.26,
+  5: 0.28
+};
+const AIRPORT_LEVEL_GROWTH = 0.096;
+const AIRCRAFT_TIER_GROWTH = 0.027; // +2.7% wyliczone z Twojego realnego lotu B738M na LEBL
+
 function estimateAirportEndpoint(
  role: "dep" | "arr",
  icao: string,
  ev: MissionEvidence,
- flightTimeMs: number | null
+ flightTimeMs: number | null,
+ aircraftTier: number, // <--- NOWY PARAMETR MASZYNY
+ inputs: MissionInputs  // <--- NOWY INPUTS DLA OBCEGO TIERU/LEVELU
 ): ComponentEstimate {
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
 
- // 1. Mnożnik czasu lotu (zabezpieczenie 3h cut-off przed anomaliami czasowymi)
+ // 1. Mnożnik czasu lotu (Zostawiamy nienaruszony oryginalny bezpiecznik 3h cut-off)
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const CUT_OFF_HOURS = 3.0;
  let timeFactor = hours > 0 ? hours : 1.0;
-
  if (hours > CUT_OFF_HOURS) {
-   const overtime = hours - CUT_OFF_HOURS;
-   const halfHourBlocks = Math.ceil(overtime / 0.5);
-   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
+  const overtime = hours - CUT_OFF_HOURS;
+  const halfHourBlocks = Math.ceil(overtime / 0.5);
+  timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
  }
 
- // 2. Pobieramy Tiery i Levele lotniska bezpośrednio z załadowanego już do pamięci ledger.ownedAirports
+ // 2. Dynamiczne pobieranie poziomów (ownedAirports dla Twoich huba, inputs dla obcych)
  const destAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
- const tier = destAirport?.category ?? 1; // Jeśli to obce lotnisko, baza to Tier 1
- const level = destAirport?.level ?? 1;   // Jeśli obce, baza to Level 1
+ 
+ let tier = 1;
+ let level = 1;
 
- // 3. Wyliczamy stabilną stawkę PAX (Baza dla T1 L1 to 0.11 PAX na godzinę lotu)
- const airportTierFactor = 1 + (tier - 1) * 0.25;
- const airportLevelFactor = 1 + (level - 1) * 0.096;
- const predictedAirportPax = 0.11 * timeFactor * airportTierFactor * airportLevelFactor;
+ if (destAirport) {
+  tier = destAirport.category ?? 1;
+  level = destAirport.level ?? 1;
+ } else {
+  // Jeśli port nie jest nasz, wyciągamy dane przekazane z cienkiego serwera
+  tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
+  level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
+ }
+
+ // 3. NOWA LOGIKA MATEMATYCZNA (Uzdrowienie Fallbacku i Progresji)
+ const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.21;
+ 
+ // Wpływ poziomu lotniska (+9.6% co level, potęgowanie analogiczne do samolotów)
+ const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
+ 
+ // Wpływ klasy samolotu (+2.7% co Tier maszyny — chroni przed płaskim fallbackiem)
+ const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, aircraftTier - 1);
+
+ // Końcowy przychód: baza portu * poziomy * czas * skala maszyny
+ const predictedAirportPax = tierBasePax * airportLevelFactor * timeFactor * aircraftScaleFactor;
+
+ // Sprawdzamy status własności, aby poprawnie obsłużyć tabelę składowych
+ const isMine = ev.ownedIcaos.has(up);
+ const finalValue = parseFloat(predictedAirportPax.toFixed(2));
 
  return {
-   key,
-   label,
-   value: parseFloat(predictedAirportPax.toFixed(2)),
-   ownerShare: 0,
-   pilotShare: parseFloat(predictedAirportPax.toFixed(2)),
-   sampleSize: 1,
-   tier: "formula",
-   confidence: 95,
-   note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Tier ${tier} and Level ${level}.`
+  key,
+  label,
+  value: finalValue,
+  // POPRAWKA: Właściciel widzi swoją dolę tylko gdy port faktycznie należy do niego
+  ownerShare: isMine ? finalValue : 0, 
+  pilotShare: finalValue, // Pilot widzi zawsze
+  sampleSize: 1,
+  tier: "formula",
+  confidence: 95,
+  note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level} and Aircraft Tier ${aircraftTier}.`
  };
 }
+
 
 /** Licence component — full historical baseline (real historical averages already
  * encode landing quality). */
@@ -434,13 +473,19 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
     if (eta) { flightTimeMs = eta.durationMs; cruiseKt = eta.cruiseKt; }
   }
 
-  const baseline = licenceBaseline(inputs, ev);
-  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
-  const aircraft = estimateAircraftComponent(inputs, ev, flightTimeMs);
-  const dep = estimateAirportEndpoint("dep", depUp, ev, flightTimeMs);
-  const arr = estimateAirportEndpoint("arr", arrUp, ev, flightTimeMs);
-  const licence = estimateLicenceComponent(inputs, baseline);
-  const components = [aircraft, dep, arr, licence];
+ const aircraftTier = spec?.category ?? inputs.aircraftTier ?? 1;
+
+ const baseline = licenceBaseline(inputs, ev);
+ const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
+ const aircraft = estimateAircraftComponent(inputs, ev, flightTimeMs);
+
+ // ZMODYFIKOWANE WYWOŁANIA (Przekazujemy aircraftTier oraz inputs):
+ const dep = estimateAirportEndpoint("dep", depUp, ev, flightTimeMs, aircraftTier, inputs);
+ const arr = estimateAirportEndpoint("arr", arrUp, ev, flightTimeMs, aircraftTier, inputs);
+
+ const licence = estimateLicenceComponent(inputs, baseline);
+ const components = [aircraft, dep, arr, licence];
+
 
   const totalPax = components.reduce((s, c) => s + c.value, 0);
  // Przekazujemy dep.pilotShare oraz arr.pilotShare zamiast licence.value
