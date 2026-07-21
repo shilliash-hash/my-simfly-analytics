@@ -148,11 +148,6 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
   }
 
- // 2. Szukamy PARAMETRÓW OBU LOTNISK we wczytanym pakiecie danych, aby poznać ich ulepszenia
- // Przeszukujemy globalną tablicę airports dostarczoną przez getSimflyPayload
- const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
- const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
-
  // 3. Budujemy czysty i zunifikowany obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
  departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
@@ -161,8 +156,6 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  
  aircraftIcao: (() => {
  if (ac?.icao) return ac.icao;
- 
- // Korzystamy ze skanera marketMission zaimplementowanego przez Ciebie wyżej (linie 126-149)
  if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
  if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
  if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
@@ -173,16 +166,17 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Przekazujemy pełne parametry rynkowe obu portów (wylotu i przylotu) do silnika
- departureAirportTier: depAirport?.category || 1,
- departureAirportLevel: depAirport?.level || 1,
- destAirportTier: arrAirport?.category || 1,
- destAirportLevel: arrAirport?.level || 1,
+ // NOWOŚĆ: Mapujemy parametry infrastruktury z obiektów bazy danych gDep i gArr (wyciągniętych przez getAirportGeo)
+ departureAirportTier: (gDep as any)?.category || (gDep as any)?.tier || 1,
+ departureAirportLevel: (gDep as any)?.level || 1,
+ destAirportTier: (gArr as any)?.category || (gArr as any)?.tier || 1,
+ destAirportLevel: (gArr as any)?.level || 1,
  };
 
  // 4. Przekazujemy inputs oraz evidence bezpośrednio do silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
+
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
   .inputValidator((d: RankMissionsInput) => d)
