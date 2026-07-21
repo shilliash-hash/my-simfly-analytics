@@ -153,69 +153,59 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
  const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
 
- // 2. AUTONOMICZNY CACHE TYGODNIOWY Z DETEKCJĄ LOTNISK SYSTEMOWYCH
- async function getAirportMetaWithWeeklyCache(icaoCode: string): Promise<{ category: number; level: number; ownerName: string | null }> {
-   const upIcao = icaoCode.toUpperCase();
-   const JEDEN_TYDZIEN_MS = 7 * 24 * 60 * 60 * 1000;
+  // 2. PRODUKCYJNE POBIERANIE INFRASTRUKTURY Z LOKALNEJ BAZY HUB-A
+ async function getAirportMetaFromProductionDb(icaoCode: string): Promise<{ category: number; level: number; ownerName: string | null }> {
+   const upIcao = icaoCode.toUpperCase().trim();
+   
+   // Zabezpieczenie przed dziwnymi wpisami (kod ICAO musi mieć dokładnie 4 znaki)
+   if (upIcao.length !== 4) {
+     return { category: 1, level: 1, ownerName: null };
+   }
 
    try {
-     // Odpytujemy nową, otwartą tabelę cache w Supabase
-     const { data: cached } = await supabaseAdmin
-       .from("simfly_airports_cache")
-       .select("category, level, owner_name, last_synced_at")
+     // Odpytujemy bezpośrednio Twoją oficjalną tabelę lotnisk w uniwersum huba
+     // Szukamy kolumn category, level oraz owner/właściciela (jeśli kolumna z właścicielem nazywa się inaczej, np. owner, dostosuj ją)
+     const { data: airportRow } = await supabaseAdmin
+       .from("simfly_airports")
+       .select("category, level, owner_name") // <--- Jeśli kolumna właściciela w simfly_airports ma inną nazwę, zmień ją tutaj
        .eq("icao", upIcao)
        .single();
 
-     const teraz = Date.now();
-     const czasOdSynchronizacji = cached ? (teraz - new Date(cached.last_synced_at).getTime()) : Infinity;
+     if (airportRow) {
+       return {
+         category: airportRow.category ?? 1,
+         level: airportRow.level ?? 1,
+         ownerName: airportRow.owner_name ?? null
+       };
+     }
 
-     // HIT: Jeśli dane są w bazie i mają mniej niż tydzień -> zwracamy je z bazy w 1 milisekundę
-     if (cached && czasOdSynchronizacji < JEDEN_TYDZIEN_MS) {
+     // Jeśli z jakiegoś powodu lotniska nie ma w simfly_airports, sprawdzamy nasz cache awaryjny
+     const { data: cached } = await supabaseAdmin
+       .from("simfly_airports_cache")
+       .select("category, level, owner_name")
+       .eq("icao", upIcao)
+       .single();
+
+     if (cached) {
        return { category: cached.category, level: cached.level, ownerName: cached.owner_name };
      }
 
-     // MISS: Dane wygasły lub brak w bazie -> robimy bezpieczny, darmowy fetch z rynku SimFly
-     const rynkowyUrl = `https://simfly.io{encodeURIComponent(upIcao)}`;
-     const apiRes = await fetch(rynkowyUrl, { headers: { Accept: "application/json" } })
-       .then(res => res.ok ? res.json() : null)
-       .catch(() => null);
-
-     const finalCategory = apiRes?.category || 1;
-     const finalLevel = apiRes?.level || 1;
-     
-     // Dynamicznie wyciągamy właściciela na podstawie twardej struktury JSON
-     let finalOwner: string | null = null;
-     if (apiRes && apiRes.owner && apiRes.owner.username) {
-       finalOwner = apiRes.owner.username;
-     }
-
-     // Zapisujemy (upsert) zaktualizowany stan do naszej otwartej tabeli w Supabase
-     await supabaseAdmin
-       .from("simfly_airports_cache")
-       .upsert({
-         icao: upIcao,
-         category: finalCategory,
-         level: finalLevel,
-         owner_name: finalOwner,
-         last_synced_at: new Date().toISOString()
-       }, { onConflict: "icao" });
-
-     return { category: finalCategory, level: finalLevel, ownerName: finalOwner };
+     return { category: 1, level: 1, ownerName: null };
 
    } catch (e) {
-     // Pancerny bezpiecznik sieciowy — w razie awarii zwraca bezpieczną podstawę T1 L1, nie zrywając tabeli
+     // Pancerny bezpiecznik — błąd zapytania nigdy nie wysypie działania modułu planowania
      return { category: 1, level: 1, ownerName: null };
    }
  }
 
- // Pobieramy kompletne, nasycone dane rynkowe z tygodniowego cache'u lokalnego dla obu portów
- const depInfra = await getAirportMetaWithWeeklyCache(data.departure);
- const arrInfra = await getAirportMetaWithWeeklyCache(data.arrival);
+ // Pobieramy w ułamku milisekundy twarde dane z bazy dla obu portów trasy
+ const depInfra = await getAirportMetaFromProductionDb(data.departure);
+ const arrInfra = await getAirportMetaFromProductionDb(data.arrival);
 
  // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
- departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
- arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
+ departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
+ arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
  aircraftId: data.aircraftId,
  
  aircraftIcao: (() => {
@@ -230,7 +220,7 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Przekazujemy nasycone, pewne typy numeryczne i tekstowe do silnika (Gwarancja braku błędu NaN!)
+ // Nasycamy inputs prawdziwymi liczbami wyciągniętymi bezpośrednio z Twojej bazy danych
  departureAirportTier: depInfra.category,
  departureAirportLevel: depInfra.level,
  departureAirportOwner: depInfra.ownerName,
@@ -239,9 +229,10 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  destAirportOwner: arrInfra.ownerName,
  };
 
- // 4. Przekazujemy inputs oraz evidence bezpośrednio do czystego silnika predykcji w mission-engine.ts
+ // 4. Przekazujemy w pełni bezpieczny inputs do czystego silnika predykcji w mission-engine.ts
  return predictMission(inputs, evidenceFromPayload(payload));
 });
+
 
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
