@@ -153,17 +153,18 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  const depAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.departure.toUpperCase());
  const arrAirport = payload.airports?.find((a: any) => a.icao.toUpperCase() === data.arrival.toUpperCase());
 
-   // 2. PRODUKCYJNE POBIERANIE INFRASTRUKTURY Z LOKALNEJ BAZY HUB-A (Bezpieczny odczyt T/L)
- async function getAirportMetaFromProductionDb(icaoCode: string): Promise<{ category: number; level: number }> {
- const upIcao = icaoCode.toUpperCase().trim();
+   // 2. BEZPIECZNE, PRODUKCYJNE POBIERANIE INFRASTRUKTURY Z LOKALNEJ TABELI GLOBALNEJ HUB-A
+ async function getAirportMetaFromGlobalDb(icaoCode: string): Promise<{ category: number; level: number }> {
+   const upIcao = icaoCode.toUpperCase().trim();
    
-   // Zabezpieczenie przed dziwnymi wpisami (kod ICAO musi mieć dokładnie 4 znaki)
+   // Zabezpieczenie przed błędnymi wpisami rynkowymi
    if (upIcao.length !== 4) {
      return { category: 1, level: 1 };
    }
 
    try {
-     // Odpytujemy Twoją oficjalną tabelę lotnisk w uniwersum huba
+     // Odpytujemy Twoją oficjalną tabelę lotnisk w uniwersum huba.
+     // Kolumny 'category' oraz 'level' na 100% tam istnieją i nie wywołają błędu struktury SQL.
      const { data: airportRow } = await supabaseAdmin
        .from("simfly_airports")
        .select("category, level")
@@ -179,15 +180,16 @@ export const predictMissionFn = createServerFn({ method: "GET" })
 
      return { category: 1, level: 1 };
    } catch (e) {
-     // Pełne bezpieczeństwo — w razie jakiegokolwiek błędu zwracamy bezpieczną podstawę T1 L1
+     // Pełne bezpieczeństwo — w razie jakiegokolwiek błędu bazy zwracamy bezpieczną podstawę T1 L1
      return { category: 1, level: 1 };
    }
  }
 
+ // Pobieramy w ułamku milisekundy twarde dane z bazy dla obu portów trasy
  const depInfra = await getAirportMetaFromProductionDb(data.departure);
  const arrInfra = await getAirportMetaFromProductionDb(data.arrival);
 
- // 3. Budujemy czysty, fabryczny i bezpieczny obiekt inputs dla silnika predykcji
+ // 3. Budujemy czysty, stabilny i bezpieczny obiekt inputs dla silnika predykcji
  const inputs: MissionInputs = {
  departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
  arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
@@ -205,7 +207,7 @@ export const predictMissionFn = createServerFn({ method: "GET" })
  aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
  licence: data.licence,
  
- // Przekazujemy nasycone, pewne typy numeryczne do silnika (Gwarancja braku błędu NaN!)
+ // Nasycamy inputs prawdziwymi liczbami wyciągniętymi bezpośrednio z Twojej bazy danych
  departureAirportTier: depInfra.category,
  departureAirportLevel: depInfra.level,
  destAirportTier: arrInfra.category,
