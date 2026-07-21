@@ -304,19 +304,29 @@ const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
 const AIRPORT_LEVEL_GROWTH = 0.096;
 const AIRCRAFT_TIER_GROWTH = 0.027; // +2.7% wyliczone z Twojego realnego lotu B738M na LEBL
 
+// ZWIĘKSZONA BAZA WYJŚCIOWA DLA LOTNISK (Podbicie zaniżonych dochodów)
+const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
+  1: 0.32, // podbite z 0.21
+  2: 0.35, // podbite z 0.22
+  3: 0.38, // podbite z 0.24 (baza dla BIAR T3)
+  4: 0.42, // podbite z 0.26 (baza dla ENVA T4)
+  5: 0.46  // podbite z 0.28 (baza dla LEBL T5)
+};
+const AIRPORT_LEVEL_GROWTH = 0.096;
+const AIRCRAFT_TIER_GROWTH = 0.027;
+
 function estimateAirportEndpoint(
  role: "dep" | "arr",
  icao: string,
  ev: MissionEvidence,
  flightTimeMs: number | null,
- aircraftTier: number, // <--- NOWY PARAMETR MASZYNY
- inputs: MissionInputs  // <--- NOWY INPUTS DLA OBCEGO TIERU/LEVELU
+ aircraftTier: number,
+ inputs: MissionInputs
 ): ComponentEstimate {
  const key = role === "dep" ? "airport_dep" : "airport_arr";
  const label = role === "dep" ? "Departure airport" : "Arrival airport";
  const up = icao.toUpperCase();
 
- // 1. Mnożnik czasu lotu (Zostawiamy nienaruszony oryginalny bezpiecznik 3h cut-off)
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const CUT_OFF_HOURS = 3.0;
  let timeFactor = hours > 0 ? hours : 1.0;
@@ -326,7 +336,6 @@ function estimateAirportEndpoint(
   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
  }
 
- // 2. Dynamiczne pobieranie poziomów (ownedAirports dla Twoich huba, inputs dla obcych)
  const destAirport = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
  
  let tier = 1;
@@ -336,24 +345,17 @@ function estimateAirportEndpoint(
   tier = destAirport.category ?? 1;
   level = destAirport.level ?? 1;
  } else {
-  // Jeśli port nie jest nasz, wyciągamy dane przekazane z cienkiego serwera
   tier = role === "dep" ? (inputs.departureAirportTier ?? 1) : (inputs.destAirportTier ?? 1);
   level = role === "dep" ? (inputs.departureAirportLevel ?? 1) : (inputs.destAirportLevel ?? 1);
  }
 
- // 3. NOWA LOGIKA MATEMATYCZNA (Uzdrowienie Fallbacku i Progresji)
- const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.21;
- 
- // Wpływ poziomu lotniska (+9.6% co level, potęgowanie analogiczne do samolotów)
+ // Kalkulacja na mocniejszej, podbitej bazie
+ const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
- 
- // Wpływ klasy samolotu (+2.7% co Tier maszyny — chroni przed płaskim fallbackiem)
  const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, aircraftTier - 1);
 
- // Końcowy przychód: baza portu * poziomy * czas * skala maszyny
  const predictedAirportPax = tierBasePax * airportLevelFactor * timeFactor * aircraftScaleFactor;
 
- // Sprawdzamy status własności, aby poprawnie obsłużyć tabelę składowych
  const isMine = ev.ownedIcaos.has(up);
  const finalValue = parseFloat(predictedAirportPax.toFixed(2));
 
@@ -361,15 +363,15 @@ function estimateAirportEndpoint(
   key,
   label,
   value: finalValue,
-  // POPRAWKA: Właściciel widzi swoją dolę tylko gdy port faktycznie należy do niego
   ownerShare: isMine ? finalValue : 0, 
-  pilotShare: finalValue, // Pilot widzi zawsze
+  pilotShare: finalValue,
   sampleSize: 1,
   tier: "formula",
   confidence: 95,
   note: `Market-aligned airport share scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level} and Aircraft Tier ${aircraftTier}.`
  };
 }
+
 
 
 /** Licence component — full historical baseline (real historical averages already
@@ -477,14 +479,24 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
 
  const baseline = licenceBaseline(inputs, ev);
  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
- const aircraft = estimateAircraftComponent(inputs, ev, flightTimeMs);
+ 
+ // Pobieramy oryginalny komponent samolotu
+ const rawAircraftComponent = estimateAircraftComponent(inputs, ev, flightTimeMs);
+ 
+ // KOREKTA X2: Zmniejszamy wartość i udziały samolotu dokładnie o połowę (0.5), aby zrównać z logiem
+ const aircraft: ComponentEstimate = {
+   ...rawAircraftComponent,
+   value: parseFloat((rawAircraftComponent.value * 0.5).toFixed(2)),
+   ownerShare: parseFloat((rawAircraftComponent.ownerShare * 0.5).toFixed(2)),
+   pilotShare: parseFloat((rawAircraftComponent.pilotShare * 0.5).toFixed(2))
+ };
 
- // ZMODYFIKOWANE WYWOŁANIA (Przekazujemy aircraftTier oraz inputs):
  const dep = estimateAirportEndpoint("dep", depUp, ev, flightTimeMs, aircraftTier, inputs);
  const arr = estimateAirportEndpoint("arr", arrUp, ev, flightTimeMs, aircraftTier, inputs);
 
  const licence = estimateLicenceComponent(inputs, baseline);
  const components = [aircraft, dep, arr, licence];
+
 
 
   const totalPax = components.reduce((s, c) => s + c.value, 0);
