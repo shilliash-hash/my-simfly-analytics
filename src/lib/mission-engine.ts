@@ -292,7 +292,7 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// SKALIBROWANE STAWKI WYJŚCIOWE (Zapisz w mission-engine.ts)
+// DOKŁADNIE SKALIBROWANE STAWKI WYJŚCIOWE
 const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
   1: 0.32,
   2: 0.35,
@@ -315,8 +315,24 @@ function estimateAirportEndpoint(
  const up = icao.toUpperCase();
  const own = ev.ownedIcaos.has(up);
 
- // 1. ODCZYT CZASU LOTU: Wyciągamy czas przelotu, który wkleiliśmy do obiektu ev w assemblerze
- const flightTimeMs = (ev as any).currentFlightTimeMs ?? null;
+ // 1. LEGALNE OBLICZENIE CZASU LOTU ZGODNIE Z ARCHITEKTURĄ PLIKU
+ // Wyciągamy czas lotu przeliczając eta bezpośrednio ze współrzędnych geograficznych inputs
+ let flightTimeMs: number | null = null;
+ if (Number.isFinite(inputs.departure.lat) && Number.isFinite(inputs.departure.lon) &&
+     Number.isFinite(inputs.arrival.lat) && Number.isFinite(inputs.arrival.lon)) {
+   
+   // Korzystamy z zaimportowanej na górze Waszego pliku metody computeEta
+   const eta = computeEta({
+     departureMs: Date.now(),
+     origin: { lat: inputs.departure.lat as number, lon: inputs.departure.lon as number },
+     destination: { lat: inputs.arrival.lat as number, lon: inputs.arrival.lon as number },
+     aircraftICAO: inputs.aircraftIcao,
+   });
+   if (eta) {
+     flightTimeMs = eta.durationMs;
+   }
+ }
+
  const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
  const CUT_OFF_HOURS = 3.0;
  let timeFactor = hours > 0 ? hours : 1.0;
@@ -333,7 +349,7 @@ function estimateAirportEndpoint(
  : (acId ? ev.aircraftCatById.get(acId) : undefined)
  ?? lookupAircraftSpec((inputs.aircraftIcao || "").toUpperCase())?.spec?.category;
 
- // 2. PRODUKCYJNE WYSZUKIWANIE INFRASTRUKTURY (Uodpornione na wielkość liter w bazie)
+ // 2. WYSZUKIWANIE INFRASTRUKTURY (Zabezpieczone na wielkość liter)
  let tier = 1;
  let level = 1;
 
@@ -345,12 +361,11 @@ function estimateAirportEndpoint(
   tier = ownedAirport.category ?? 1;
   level = ownedAirport.level ?? 1;
  } else {
-  // Jeśli to obce lotnisko, sprawdzamy alternatywną mapę Lovable, jeśli została wdrożona
   tier = ev.airportCatByIcao.get(up) ?? 1;
   level = 1;
  }
 
- // 3. MATEMATYKA BAZOWA (Nasza ciasna, zweryfikowana z logami progresja)
+ // 3. MATEMATYKA BAZOWA (Ciasna, wykalibrowana z logami progresja)
  const tierBasePax = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
  const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
  const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, (acCat ?? 1) - 1);
@@ -369,6 +384,7 @@ function estimateAirportEndpoint(
   note: `Production matrix fallback scaled by ${timeFactor.toFixed(2)}h flight time, Airport Tier ${tier}, Level ${level}.`
  };
 }
+
 
 
 
@@ -489,10 +505,7 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
    pilotShare: parseFloat((rawAircraftComponent.pilotShare * 0.5).toFixed(2))
  };
 
- // 3. BEZPIECZNE PRZEKAZANIE CZASU LOTU: Doklejamy czas lotu bezpośrednio do dowodów w pamięci RAM
- (ev as any).currentFlightTimeMs = flightTimeMs;
-
- // 4. ORYGINALNE WYWOŁANIA (Sygnatury funkcji pozostają w 100% fabryczne i nienaruszone!)
+ // 3. ORYGINALNE WYWOŁANIA (Sygnatury w 100% fabryczne, brak modyfikowania obiektu ev!)
  const dep = estimateAirportEndpoint("dep", depUp, inputs, ev, licenceMedianByCode);
  const arr = estimateAirportEndpoint("arr", arrUp, inputs, ev, licenceMedianByCode);
 
