@@ -10,6 +10,24 @@
 import type { IncomeLedger } from "./types";
 import { computeEta, haversineNm, lookupAircraftSpec } from "./aircraft-specs";
 
+/** Sentinel aircraftId for the legacy single "Generic Plane" option (kept for backwards compat). */
+export const GENERIC_AIRCRAFT_ID = "__generic__";
+/** Prefix for tiered generic aircraft: __generic_t1__ … __generic_t7__. */
+export const GENERIC_TIER_PREFIX = "__generic_t";
+export const GENERIC_TIERS = [1, 2, 3, 4, 5, 6, 7] as const;
+export function genericTierId(tier: number): string {
+  return `${GENERIC_TIER_PREFIX}${tier}__`;
+}
+export function isGenericAircraftId(id: string | undefined | null): boolean {
+  if (!id) return false;
+  return id === GENERIC_AIRCRAFT_ID || id.startsWith(GENERIC_TIER_PREFIX);
+}
+export function genericTierFromId(id: string | undefined | null): number | undefined {
+  if (!id || !id.startsWith(GENERIC_TIER_PREFIX)) return undefined;
+  const m = id.match(/^__generic_t(\d+)__$/);
+  return m ? Number(m[1]) : undefined;
+}
+
 // ---------- Inputs & outputs ----------
 
 export type MissionInputs = {
@@ -22,10 +40,6 @@ export type MissionInputs = {
   aircraftLevel?: number;
   licence?: string;
   dateIso?: string;
-  departureAirportTier?: number;
-  departureAirportLevel?: number;
-  destAirportTier?: number;
-  destAirportLevel?: number;
 };
 
 export type ConfidenceTier = "direct" | "near" | "class" | "formula" | "none";
@@ -42,11 +56,25 @@ export type ComponentEstimate = {
   note: string;
 };
 
+export type WeeklyBonusPart = {
+  role: "dep" | "arr";
+  icao: string;
+  eligible: boolean;
+  ownedByMe: boolean;
+  value: number;                 // PAX added by this endpoint
+  sampleSize: number;
+  tier: ConfidenceTier;
+  reason: string;
+  source: "historical" | "fallback" | "owned" | "not-eligible" | "no-licence";
+};
+
 export type WeeklyBonus = {
   available: boolean;
-  multiplier: number;      // e.g. 3
-  extraPax: number;        // additional PAX projected today
+  multiplier: number;      // 2 — spec: base × 2
+  extraPax: number;        // depBonus + arrBonus
   reason: string;
+  departure: WeeklyBonusPart;
+  arrival: WeeklyBonusPart;
 };
 
 export type MissionSignal = {
@@ -62,7 +90,7 @@ export type MissionPrediction = {
   distanceNm: number | null;
   flightTimeMs: number | null;
   cruiseKt: number | null;
-   /** Historical base — sum of the four components. Never includes bonuses. */
+  /** Historical base — sum of the four components. Never includes bonuses. */
   totalPax: number;
   /** Base + weekly bonus. */
   projectedPax: number;
@@ -84,16 +112,32 @@ export type MissionPrediction = {
 
 // ---------- Evidence bundle ----------
 
+export type MatrixCell = { avgPax: number; count: number };
+/** key = `${aircraftCat}:${airportCat}` */
+export type TierMatrix = Map<string, MatrixCell>;
+
 export type MissionEvidence = {
   ledger: IncomeLedger;
   ownedIcaos: Set<string>;
   ownedAircraftIds: Set<string>;
   aircraftIcaoById: Map<string, string>;
+  /** SimFly category (1..6) by aircraftId — merged from owned + rentals when known. */
+  aircraftCatById: Map<string, number>;
+  /** SimFly category (1..6) by airport ICAO — owned + fetched endpoints. */
+  airportCatByIcao: Map<string, number>;
+  /** Reference matrices keyed `${aircraftCat}:${airportCat}` */
+  airportOwnerMatrix: { dep: TierMatrix; arr: TierMatrix };
+  airportPilotMatrix: { dep: TierMatrix; arr: TierMatrix };
+  aircraftOwnerMatrix: TierMatrix;
+  /** Optional community-derived airport matrices (dep/arr), from all pilots' flights. */
+  communityAirportMatrix?: { dep: TierMatrix; arr: TierMatrix };
+  /** Whether community evidence should be blended into predictions. */
+  useCommunity?: boolean;
   /** Great-circle distance from top-visitor pilots' owned airports to my hubs. */
   frequentVisitorsAt: Map<string, number>;
   /** Current SimFly weekly cycle (Mon 00:00 UTC → now). */
   weeklyWindow: { startMs: number; endMs: number };
-   /** Current airport pilot-payout percentage (0..100) keyed by ICAO. */
+  /** Current airport pilot-payout percentage (0..100) keyed by ICAO. */
   currentAirportPilotPct: Map<string, number>;
 };
 
@@ -102,7 +146,8 @@ export type MissionEvidence = {
 const MIN_DIRECT = 4;
 const MIN_NEAR = 3;
 const MIN_CLASS = 5;
-const WEEKLY_BONUS_MULTIPLIER = 3; // SimFly Weekly Cycle First Movement ×3
+const WEEKLY_BONUS_MULTIPLIER = 2; // Weekly First-Arrival bonus = base airport × 2
+const WEEKLY_BONUS_FLAT_FALLBACK = 0.35; // PAX per eligible endpoint when no history
 const ASSUMED_HIST_PILOT_PCT = 60; // conservative anchor: assume historical rows sat at max pilot share
 
 function mean(xs: number[]): number {
@@ -159,122 +204,123 @@ function buildLicenceMedianMap(ledger: IncomeLedger): Map<string, number> {
 
 // ---------- Component estimators ----------
 
-const PLANE_PROGRESSION_BOUNDARIES: Record<number, { min: number; max: number }> = {
-  1: { min: 0.18, max: 0.28 }, // Kat 1: Małe single (C152, C172)
-  2: { min: 0.22, max: 0.50 }, // Kat 2: Lekkie turbośmigłowe (TBM9, AT76)
-  3: { min: 0.25, max: 0.65 }, // Kat 3: Bizjety (C750, HDJT)
-  4: { min: 0.32, max: 0.72 }, // Kat 4: Regionalne (CRJ7)
-  5: { min: 0.42, max: 0.85 }, // Kat 5: Wąskokadłubowe (A320, B738)
-  6: { min: 0.50, max: 1.10 }, // Kat 6: Szerokokadłubowe (A359)
-  7: { min: 0.55, max: 1.30 }  // Kat 7: Ciężkie Cargo (B77W)
-};
-
-/** Aircraft-owner slice — full amount when I own the plane, else 0. */
+/** Aircraft-owner slice — full amount when I own the plane, else 0.
+ *  Iteration 5: direct/near/class → aircraft reference matrix → 0/formula. */
 function estimateAircraftComponent(
- inputs: MissionInputs,
- ev: MissionEvidence,
- flightTimeMs: number | null
+  inputs: MissionInputs,
+  ev: MissionEvidence,
 ): ComponentEstimate {
- const acId = inputs.aircraftId;
- const acIcao = (inputs.aircraftIcao || "").toUpperCase();
+  const acId = inputs.aircraftId;
+  const acIcao = (inputs.aircraftIcao || "").toUpperCase();
 
- if (acId && acId.startsWith("generic-")) {
- return {
- key: "aircraft",
- label: "Aircraft owner income (Generic Tool)",
- value: 0, ownerShare: 0, pilotShare: 0,
- sampleSize: 0, tier: "none", confidence: 100,
- note: "System aircraft used for this flight. Zero PAX generated for pilot and owner.",
- };
- }
+  // Generic Plane (legacy sentinel or tiered) — planning only, aircraft income forced to zero.
+  if (isGenericAircraftId(acId)) {
+    const tier = genericTierFromId(acId);
+    return {
+      key: "aircraft",
+      label: "Aircraft owner income",
+      value: 0, ownerShare: 0, pilotShare: 0,
+      sampleSize: 0, tier: "none", confidence: 100,
+      note: tier
+        ? `Generic Tier ${tier} — planning only. Aircraft income = 0.00.`
+        : "Generic plane — planning only. Aircraft income = 0.00.",
+    };
+  }
 
-const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
- 
- // Dynamicznie sprawdzamy typ misji na podstawie daty/kontekstu ISO przekazanego w inputs
- // (W silnikach SimFly, jeśli licencja lub misja to rental, flaga jest mapowana w inputs)
- const isRental = (inputs as any).missionType === "airplane-rental" || (inputs as any).isRental === true;
+  const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
 
- // Bezpiecznik: Jeśli nie własny i nie rental, wtedy faktycznie zysk wynosi 0
-  /*
- if (!ownAircraft && !isRental) {
- return {
- key: "aircraft",
- label: "Aircraft owner income",
- value: 0, ownerShare: 0, pilotShare: 0,
- sampleSize: 0, tier: "none", confidence: 100,
- note: "You don't own this aircraft — aircraft-owner share is credited to its owner.",
- };
- }
-*/
-  
-  // 1. Szukamy specyfikacji po przekazanym ciągu tekstowym
- let { spec } = lookupAircraftSpec(inputs.aircraftIcao);
+  if (!ownAircraft) {
+    return {
+      key: "aircraft",
+      label: "Aircraft owner income",
+      value: 0, ownerShare: 0, pilotShare: 0,
+      sampleSize: 0, tier: "none", confidence: 100,
+      note: "Rental — aircraft-owner share credited to the pilot who owns this aircraft.",
+    };
+  }
 
- // 2. KULZNA POPRAWKA: Jeśli specyfikacja zwróciła domyślny Tier 1 (bo to string nazwy, a nie kod ICAO),
- // Twoja funkcja lookupAircraftSpec bez problemu przeanalizuje ten tekst, dopasuje słowa kluczowe
- // i wyciągnie z niego poprawną kategorię dla KAŻDEGO modelu w grze (ATR, Cessna, Airbus itp.)
- if ((!spec || spec.category === 1) && inputs.aircraftIcao) {
-   const textUpper = inputs.aircraftIcao.toUpperCase();
-   // Przeszukujemy bazę specs, przekazując tekst do dopasowania słów kluczowych
-   const backupSpec = lookupAircraftSpec(textUpper).spec;
-   if (backupSpec && backupSpec.category > 1) {
-     spec = backupSpec;
-   }
- }
+  const dep = inputs.departure.icao.toUpperCase();
+  const arr = inputs.arrival.icao.toUpperCase();
 
- const aircraftTier = spec?.category ?? inputs.aircraftTier ?? 1;
+  // Ownership-anchored predicate: if the aircraftId is currently owned, every
+  // historical row on that aircraftId is by definition ours — do not depend on
+  // the row-level `ownAircraft` flag alone, which may be missing on older rows.
+  const ownRows = ev.ledger.myFlights.filter(
+    (f) => f.aircraftId === acId && (f.ownAircraft || ev.ownedAircraftIds.has(acId!)),
+  );
 
- const planeLevel = inputs.aircraftLevel ?? 1;
- const bounds = PLANE_PROGRESSION_BOUNDARIES[aircraftTier] || { min: 0.20, max: 0.50 };
- 
- const safeLevel = Math.max(1, Math.min(10, planeLevel));
- const gradualStep = (bounds.max - bounds.min) / 9;
- const basePaxRate = bounds.min + (safeLevel - 1) * gradualStep;
+  const paxAircraftHas = ownRows.some((r) => r.paxAircraftOwn > 0);
 
- const hours = flightTimeMs ? flightTimeMs / 3600000 : 0;
- const CUT_OFF_HOURS = 3.0;
- let timeFactor = hours > 0 ? hours : 1.0;
+  // Direct: same aircraft × same corridor.
+  const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
+  if (direct.length >= MIN_DIRECT) {
+    const v = median(direct.map((r) => r.paxAircraftOwn));
+    return { key: "aircraft", label: "Aircraft owner income",
+      value: v, ownerShare: v, pilotShare: 0,
+      sampleSize: direct.length, tier: "direct",
+      confidence: confidenceFromTier("direct", direct.length),
+      note: `Median of ${direct.length} flights on this aircraft × this corridor.` };
+  }
 
- if (hours > CUT_OFF_HOURS) {
-   const overtime = hours - CUT_OFF_HOURS;
-   const halfHourBlocks = Math.ceil(overtime / 0.5);
-   timeFactor = CUT_OFF_HOURS * (1 + halfHourBlocks * 0.01);
- }
+  // Near: same aircraft, any corridor.
+  if (ownRows.length >= MIN_NEAR) {
+    const v = median(ownRows.map((r) => r.paxAircraftOwn));
+    return { key: "aircraft", label: "Aircraft owner income",
+      value: v, ownerShare: v, pilotShare: 0,
+      sampleSize: ownRows.length, tier: "near",
+      confidence: confidenceFromTier("near", ownRows.length),
+      note: v === 0 && ownRows.length > 0 && !paxAircraftHas
+        ? `Diagnostic: ${ownRows.length} flights on this aircraft but ledger reports no owner attribution. Classifier may be crediting it elsewhere.`
+        : `Median across ${ownRows.length} flights on this aircraft.` };
+  }
 
- const destTier = (inputs as any).destAirportTier || 1;
- const destLevel = (inputs as any).destAirportLevel || 1;
- 
- const airportTierFactor = 1 + (destTier - 1) * 0.25;
- const airportLevelFactor = 1 + (destLevel - 1) * 0.096;
- const airportScaleFactor = airportTierFactor * airportLevelFactor;
+  // Class: any of my owned aircraft with same ICAO type.
+  const cls = ev.ledger.myFlights.filter((f) => {
+    if (!f.aircraftId) return false;
+    if (!f.ownAircraft && !ev.ownedAircraftIds.has(f.aircraftId)) return false;
+    const t = ev.aircraftIcaoById.get(f.aircraftId);
+    return t && t.toUpperCase() === acIcao;
+  });
+  if (cls.length >= MIN_CLASS) {
+    const v = median(cls.map((r) => r.paxAircraftOwn));
+    return { key: "aircraft", label: "Aircraft owner income",
+      value: v, ownerShare: v, pilotShare: 0,
+      sampleSize: cls.length, tier: "class",
+      confidence: confidenceFromTier("class", cls.length),
+      note: `Median across ${cls.length} flights on aircraft type ${acIcao || "same type"}.` };
+  }
 
- const predictedAircraftPax = basePaxRate * timeFactor * airportScaleFactor;
+  // Reference matrix — aircraftCat × airportCat (endpoint-agnostic).
+  const acCat = acId ? ev.aircraftCatById.get(acId)
+    : (lookupAircraftSpec(acIcao)?.spec?.category);
+  const depCat = ev.airportCatByIcao.get(dep);
+  const arrCat = ev.airportCatByIcao.get(arr);
+  const cellDep = matrixLookup(ev.aircraftOwnerMatrix, acCat, depCat);
+  const cellArr = matrixLookup(ev.aircraftOwnerMatrix, acCat, arrCat);
+  const matrixCell = cellDep && cellArr
+    ? { avgPax: (cellDep.avgPax + cellArr.avgPax) / 2, count: cellDep.count + cellArr.count }
+    : (cellDep ?? cellArr);
+  if (matrixCell) {
+    return { key: "aircraft", label: "Aircraft owner income",
+      value: matrixCell.avgPax, ownerShare: matrixCell.avgPax, pilotShare: 0,
+      sampleSize: matrixCell.count, tier: "class",
+      confidence: confidenceFromTier("class", matrixCell.count),
+      note: `Reference matrix: aircraft tier ${acCat} × airport tier ${(depCat ?? arrCat)} (${matrixCell.count} historical flights).` };
+  }
 
-   // OFICJALNY SYSTEM ROZLICZANIA RENTALU (GLOBALNY STANDARD RYNKOWY)
-  // Sztywny punkt odniesienia: 60% dla pilota (współczynnik najczęściej stosowany przez graczy).
-  // Informujemy użytkownika w notatce, że właściciel maszyny mógł ustawić niższy suwak.
-  const DEFAULT_RENTAL_PILOT_SHARE = 0.60;
-
-  const finalValue = ownAircraft 
-    ? predictedAircraftPax 
-    : parseFloat((predictedAircraftPax * DEFAULT_RENTAL_PILOT_SHARE).toFixed(2));
-
-  return {
-    key: "aircraft",
-    label: ownAircraft ? "Aircraft owner income" : "Aircraft pilot share (Rental)",
-    value: finalValue,
-    ownerShare: ownAircraft ? parseFloat(predictedAircraftPax.toFixed(2)) : 0,
-    pilotShare: ownAircraft ? 0 : finalValue,
-    sampleSize: 1,
-    tier: "formula",
-    confidence: 95,
-    note: ownAircraft
-      ? `Gradual progression prediction (${bounds.min.toFixed(2)} to ${bounds.max.toFixed(2)}) scaled by ${timeFactor.toFixed(2)}h flight time.`
-      : `Rental flight prediction based on 60% standard market share. Check aircraft pilot share while setting up missions — it may be lower than 60%.`
-  };
+  const anyOwn = ev.ledger.myFlights.filter(
+    (f) => (f.ownAircraft || (f.aircraftId && ev.ownedAircraftIds.has(f.aircraftId))) && f.paxAircraftOwn > 0,
+  );
+  const v = anyOwn.length > 0 ? mean(anyOwn.map((r) => r.paxAircraftOwn)) : 0;
+  return { key: "aircraft", label: "Aircraft owner income",
+    value: v, ownerShare: v, pilotShare: 0,
+    sampleSize: anyOwn.length,
+    tier: anyOwn.length > 0 ? "formula" : "none",
+    confidence: confidenceFromTier(anyOwn.length > 0 ? "formula" : "none", anyOwn.length),
+    note: anyOwn.length > 0
+      ? `Fallback: mean aircraft-owner PAX across ${anyOwn.length} of my owner flights.`
+      : "No aircraft-owner attribution found in ledger for this aircraft." };
 }
-
-
 
 /** Licence baseline — median paxOther across my flights on this licence. */
 function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
@@ -292,153 +338,238 @@ function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
            tier: any.length > 0 ? "formula" : "none" };
 }
 
-// WYREGULOWANE STAWKI FINANSOWE (Zapisz w mission-engine.ts)
-const FALLBACK_AIRPORT_TIER_PAX: Record<number, number> = {
-  1: 0.32,
-  2: 0.35,
-  3: 0.38, // baza dla BIAR
-  4: 0.42, // baza dla ENVA
-  5: 0.46  // baza dla LEBL
-};
-const AIRPORT_LEVEL_GROWTH = 0.096;
-const AIRCRAFT_TIER_GROWTH = 0.027;
-
+/** Airport endpoint — owner-share (only when mine) + pilot-share (always), normalized.
+ *  Iteration 5: adds reference-matrix fallback for both owner and pilot slices. */
 function estimateAirportEndpoint(
- role: "dep" | "arr",
- icao: string,
- inputs: MissionInputs,
- ev: MissionEvidence,
- licenceMedianByCode: Map<string, number>,
+  role: "dep" | "arr",
+  icao: string,
+  inputs: MissionInputs,
+  ev: MissionEvidence,
+  licenceMedianByCode: Map<string, number>,
 ): ComponentEstimate {
- const key = role === "dep" ? "airport_dep" : "airport_arr";
- const label = role === "dep" ? "Departure airport" : "Arrival airport";
- const up = icao.toUpperCase();
+  const key = role === "dep" ? "airport_dep" : "airport_arr";
+  const label = role === "dep" ? "Departure airport" : "Arrival airport";
+  const up = icao.toUpperCase();
+  const own = ev.ownedIcaos.has(up);
 
- // 1. SPRAWDZENIE WŁASNOŚCI I STATUSU PORTU
- const isMine = ev.ownedIcaos.has(up);
+  // Aircraft category for matrix lookups (generic tiered aircraft supply their own tier).
+  const acId = inputs.aircraftId;
+  const genericTier = genericTierFromId(acId);
+  const acCat = genericTier
+    ?? (inputs.aircraftTier
+      ?? (acId && !isGenericAircraftId(acId) ? ev.aircraftCatById.get(acId) : undefined)
+      ?? lookupAircraftSpec((inputs.aircraftIcao || "").toUpperCase())?.spec?.category);
+  const apCat = ev.airportCatByIcao.get(up);
+  const ownerMatrix = role === "dep" ? ev.airportOwnerMatrix.dep : ev.airportOwnerMatrix.arr;
+  const pilotMatrix = role === "dep" ? ev.airportPilotMatrix.dep : ev.airportPilotMatrix.arr;
+  const commMatrix = ev.useCommunity && ev.communityAirportMatrix
+    ? (role === "dep" ? ev.communityAirportMatrix.dep : ev.communityAirportMatrix.arr)
+    : undefined;
 
- // Wyciągamy rzeczywisty, nasycony z globalnego payloadu Tier lotniska z mapy Lovable!
- const tier = ev.airportCatByIcao.get(up) ?? 1;
- 
- // Dla własnych hubów szukamy poziomu rozbudowania w ownedAirports
- const ownedAirportRecord = ev.ledger.ownedAirports.find(a => a.icao.toUpperCase() === up);
- const level = ownedAirportRecord?.level ?? 1;
+  // Owner share: only my own flights matter — paxAirportOwn is the airport-owner slice.
+  let ownerShare = 0;
+  let ownerN = 0;
+  let ownerNote = "";
+  if (own) {
+    const myAtEndpoint = ev.ledger.myFlights.filter((f) =>
+      role === "dep" ? f.originIcao === up : f.destIcao === up,
+    );
+    const visAtEndpoint = ev.ledger.visitorFlights.filter((v) =>
+      role === "dep"
+        ? (v.originIcao || "").toUpperCase() === up
+        : (v.destIcao || "").toUpperCase() === up,
+    );
+    const values = [
+      ...myAtEndpoint.map((r) => r.paxAirportOwn),
+      ...visAtEndpoint.map((v) => v.paxAirport),
+    ].filter((x) => x > 0);
+    ownerN = values.length;
+    if (values.length > 0) {
+      ownerShare = median(values);
+      ownerNote = `Owner share from ${ownerN} historical flights at ${up}.`;
+    } else {
+      const cell = matrixLookup(ownerMatrix, acCat, apCat);
+      if (cell) {
+        ownerShare = cell.avgPax;
+        ownerN = cell.count;
+        ownerNote = `Owner share from reference matrix (aircraft T${acCat} × airport T${apCat}, ${cell.count} flights).`;
+      }
+    }
+  }
 
- // REGUŁA SYSTEMOWA: Jeśli to nieaktywny, surowy port systemowy (T1 L1 i brak historii w ledgerze), 0 PAX
- const hasAnyHistory = ev.ledger.myFlights?.some(f => f.originIcao === up || f.destIcao === up) ||
-                       ev.ledger.visitorFlights?.some(v => v.originIcao === up || v.destIcao === up);
+  // Pilot share: per-row residual (paxOther − licence baseline) / 2 per endpoint side.
+  const roleRows = ev.ledger.myFlights.filter((f) =>
+    role === "dep" ? f.originIcao === up : f.destIcao === up,
+  );
+  const perFlightPilot: number[] = [];
+  for (const f of roleRows) {
+    const code = (f.licence || "").toUpperCase();
+    const licenceRow = code ? (licenceMedianByCode.get(code) ?? 0) : 0;
+    const airportPortion = Math.max(0, f.paxOther - licenceRow);
+    perFlightPilot.push(airportPortion / 2);
+  }
+  let rawPilot = perFlightPilot.length > 0 ? median(perFlightPilot) : 0;
+  let pilotSample = perFlightPilot.length;
+  let pilotSourceNote = `Pilot share from ${perFlightPilot.length} of my flights through ${up}.`;
 
- if (tier === 1 && level === 1 && !isMine && !hasAnyHistory) {
-   return {
-    key, label, value: 0, ownerShare: 0, pilotShare: 0,
-    sampleSize: 1, tier: "formula", confidence: 95,
-    note: `System-owned airport (${up}) does not generate revenue.`
-   };
- }
+  // Matrix fallback when there is no direct history at this endpoint.
+  if (perFlightPilot.length === 0) {
+    const cell = matrixLookup(pilotMatrix, acCat, apCat);
+    if (cell) {
+      rawPilot = cell.avgPax;
+      pilotSample = cell.count;
+      pilotSourceNote = `Pilot share from reference matrix (aircraft T${acCat} × airport T${apCat}, ${cell.count} flights).`;
+    }
+  }
 
- // 2. ODCZYT GABARYTU SAMOLOTU
- const acId = inputs.aircraftId;
- const acCat = (acId ? ev.aircraftCatById.get(acId) : undefined) ?? 1;
+  // Community Intelligence blend — supplementary evidence, never inflates confidence.
+  let communityBlend = 0;
+  let communityNote = "";
+  if (commMatrix) {
+    const commCell = matrixLookup(commMatrix, acCat, apCat);
+    if (commCell) {
+      const own = perFlightPilot.length;
+      const w = Math.min(0.40, Math.max(0.05, 1 / (1 + own / 5)));
+      const before = rawPilot;
+      rawPilot = rawPilot * (1 - w) + commCell.avgPax * w;
+      communityBlend = w;
+      communityNote = ` Community blend ${(w * 100).toFixed(0)}%: ${before.toFixed(2)} → ${rawPilot.toFixed(2)} PAX from ${commCell.count} community flights.`;
+    }
+  }
 
- // 3. UZDOLNIONA FINANSOWO FORMUŁA MATEMATYCZNA (Uśredniony punkt rynkowy, bezpieczny przed NaN)
- const baseRate = FALLBACK_AIRPORT_TIER_PAX[tier] || 0.32;
- const airportLevelFactor = Math.pow(1 + AIRPORT_LEVEL_GROWTH, level - 1);
- const aircraftScaleFactor = Math.pow(1 + AIRCRAFT_TIER_GROWTH, acCat - 1);
+  // Normalize to current airport pilot payout % (confidence-weighted shrinkage).
+  const cur = ev.currentAirportPilotPct.get(up);
+  let pilotShare = rawPilot;
+  let normalizedNote = "";
+  if (cur !== undefined && rawPilot > 0) {
+    const w = Math.min(1, pilotSample / 12);
+    const scaled = rawPilot * (cur / ASSUMED_HIST_PILOT_PCT);
+    pilotShare = rawPilot * w + scaled * (1 - w);
+    if (Math.abs(pilotShare - rawPilot) > 0.01) {
+      normalizedNote = ` Normalized ${rawPilot.toFixed(2)} → ${pilotShare.toFixed(2)} PAX (current pilot payout ${cur.toFixed(0)}%, ${pilotSample} sample${pilotSample === 1 ? "" : "s"}).`;
+    }
+  }
 
- const predictedAirportPax = baseRate * airportLevelFactor * aircraftScaleFactor;
- const finalValue = parseFloat(predictedAirportPax.toFixed(2));
+  const total = ownerShare + pilotShare;
+  const sample = ownerN + pilotSample;
+  let tier: ConfidenceTier;
+  if (sample >= MIN_DIRECT * 2) tier = "direct";
+  else if (sample >= MIN_NEAR * 2) tier = "near";
+  else if (sample >= MIN_CLASS) tier = "class";
+  else if (sample > 0) tier = "formula";
+  else tier = "none";
 
- return {
-  key, label,
-  value: finalValue, 
-  ownerShare: isMine ? finalValue : 0, // Właściciel dostaje dolę tylko na swoich 8 hubach
-  pilotShare: finalValue,
-  sampleSize: 1, 
-  tier: "formula",
-  confidence: 95,
-  note: isMine 
-    ? `Verified Player-owned hub estimate for Tier ${tier}, Level ${level}.`
-    : `Market prediction for active player airport Tier ${tier}, Level ${level}.`
- };
+  const baseNote = (ownerNote ? ownerNote + " " : "") + pilotSourceNote;
+
+  return {
+    key, label,
+    value: total, ownerShare, pilotShare,
+    sampleSize: sample, tier,
+    confidence: confidenceFromTier(tier, sample),
+    note: baseNote + normalizedNote + communityNote,
+  };
 }
 
+/** Weekly First-Arrival bonus — value = base airport component × 2 per eligible endpoint. */
+function weeklyPart(
+  role: "dep" | "arr",
+  icao: string,
+  code: string,
+  ev: MissionEvidence,
+  airportComp: ComponentEstimate,
+): WeeklyBonusPart {
+  const up = icao.toUpperCase();
+  if (!code) {
+    return { role, icao: up, eligible: false, ownedByMe: ev.ownedIcaos.has(up),
+      value: 0, sampleSize: 0, tier: "none",
+      reason: "No licence selected.", source: "no-licence" };
+  }
+  const ownedByMe = ev.ownedIcaos.has(up);
+  if (ownedByMe) {
+    return { role, icao: up, eligible: false, ownedByMe: true,
+      value: 0, sampleSize: 0, tier: "none",
+      reason: `${up} is your airport — bonus not applicable.`, source: "owned" };
+  }
+  const { startMs, endMs } = ev.weeklyWindow;
+  const usedThisWeek = ev.ledger.myFlights.some((f) => {
+    if ((f.licence || "").toUpperCase() !== code) return false;
+    const hit = role === "dep" ? f.originIcao === up : f.destIcao === up;
+    if (!hit) return false;
+    const t = Date.parse(f.ts);
+    return Number.isFinite(t) && t >= startMs && t <= endMs;
+  });
+  if (usedThisWeek) {
+    return { role, icao: up, eligible: false, ownedByMe: false,
+      value: 0, sampleSize: 0, tier: "none",
+      reason: `Licence ${code} already flew through ${up} this weekly cycle.`,
+      source: "not-eligible" };
+  }
+  if (airportComp.sampleSize > 0 && airportComp.value > 0) {
+    return { role, icao: up, eligible: true, ownedByMe: false,
+      value: airportComp.value * WEEKLY_BONUS_MULTIPLIER,
+      sampleSize: airportComp.sampleSize,
+      tier: airportComp.tier,
+      reason: `Base ${airportComp.value.toFixed(2)} × ${WEEKLY_BONUS_MULTIPLIER} from ${airportComp.sampleSize} historical flights.`,
+      source: "historical" };
+  }
+  return { role, icao: up, eligible: true, ownedByMe: false,
+    value: WEEKLY_BONUS_FLAT_FALLBACK,
+    sampleSize: 0, tier: "formula",
+    reason: `Flat fallback — no historical evidence at ${up}.`,
+    source: "fallback" };
+}
 
-
+function assembleWeeklyBonus(
+  inputs: MissionInputs,
+  ev: MissionEvidence,
+  depComp: ComponentEstimate,
+  arrComp: ComponentEstimate,
+): WeeklyBonus {
+  const code = (inputs.licence || "").trim().toUpperCase();
+  const dep = weeklyPart("dep", inputs.departure.icao, code, ev, depComp);
+  const arr = weeklyPart("arr", inputs.arrival.icao, code, ev, arrComp);
+  const available = dep.eligible || arr.eligible;
+  const extraPax = dep.value + arr.value;
+  const reason = !code
+    ? "No licence selected — bonus not applicable."
+    : available
+      ? `Weekly bonus eligible at ${[dep.eligible ? dep.icao : null, arr.eligible ? arr.icao : null].filter(Boolean).join(" & ")}.`
+      : "Weekly bonus not available for this movement.";
+  return {
+    available,
+    multiplier: WEEKLY_BONUS_MULTIPLIER,
+    extraPax,
+    reason,
+    departure: dep,
+    arrival: arr,
+  };
+}
 
 /** Licence component — full historical baseline (real historical averages already
- * encode landing quality). */
+ *  encode landing quality). */
 function estimateLicenceComponent(
- inputs: MissionInputs,
- baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
+  inputs: MissionInputs,
+  baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
 ): ComponentEstimate {
- const code = (inputs.licence || "").trim().toUpperCase();
- if (!code) {
- return { key: "licence", label: "Licence income",
- value: 0, ownerShare: 0, pilotShare: 0,
- sampleSize: 0, tier: "none", confidence: 20,
- note: "No licence selected." };
- }
- // Zmieniamy przypisanie na pełną wartość baseline, bez dzielenia przez 2
- const value = baseline.value;
- return { key: "licence", label: "Licence income",
- value, ownerShare: 0, pilotShare: value,
- sampleSize: baseline.sampleSize,
- tier: baseline.tier,
- confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
- note: baseline.sampleSize > 0
-  ? `Historical median: ${value.toFixed(2)} PAX across ${baseline.sampleSize} flights on ${code}.`
- : `No history on ${code} yet.` };
+  const code = (inputs.licence || "").trim().toUpperCase();
+  if (!code) {
+    return { key: "licence", label: "Licence income",
+      value: 0, ownerShare: 0, pilotShare: 0,
+      sampleSize: 0, tier: "none", confidence: 20,
+      note: "No licence selected." };
+  }
+  const value = baseline.value;
+  return { key: "licence", label: "Licence income",
+    value, ownerShare: 0, pilotShare: value,
+    sampleSize: baseline.sampleSize,
+    tier: baseline.tier,
+    confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
+    note: baseline.sampleSize > 0
+      ? `Historical median: ${value.toFixed(2)} PAX across ${baseline.sampleSize} flights on ${code}.`
+      : `No history on ${code} yet.` };
 }
 
-/** Weekly first-arrival ×3 detection.
- * Zmienione: bonus liczony od sumy pilot share z lotniska odlotu i przylotu. 
- * DODANO: Bonus jest pomijany, jeśli gracz posiada lotnisko odlotu lub przylotu. */
-function estimateWeeklyBonus(
- inputs: MissionInputs,
- ev: MissionEvidence,
- depPilotShare: number,
- arrPilotShare: number,
-): WeeklyBonus {
- const code = (inputs.licence || "").trim().toUpperCase();
- const dep = inputs.departure.icao.toUpperCase(); // Pobieramy ICAO odlotu
- const arr = inputs.arrival.icao.toUpperCase();
- 
- if (!code) {
- return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
- reason: "No licence selected — bonus not applicable." };
- }
-
- // WARUNEK WŁASNOŚCI: Pomijamy bonus, jeśli jesteś właścicielem dep LUB arr
- const ownsDeparture = ev.ownedIcaos.has(dep);
- const ownsArrival = ev.ownedIcaos.has(arr);
- if (ownsDeparture || ownsArrival) {
- return { 
- available: false, 
- multiplier: WEEKLY_BONUS_MULTIPLIER, 
- extraPax: 0,
- reason: `Bonus skipped: You own ${ownsDeparture && ownsArrival ? "both hubs" : ownsDeparture ? `departure hub (${dep})` : `arrival hub (${arr})`}.` 
- };
- }
-
- const { startMs, endMs } = ev.weeklyWindow;
- const usedThisWeek = ev.ledger.myFlights.some((f) => {
- if ((f.licence || "").toUpperCase() !== code) return false;
- if (f.destIcao !== arr) return false;
- const t = Date.parse(f.ts);
- return Number.isFinite(t) && t >= startMs && t <= endMs;
- });
- if (usedThisWeek) {
- return { available: false, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax: 0,
- reason: `Licence ${code} already landed at ${arr} this weekly cycle.` };
- }
- 
- // Obliczanie bonusu (mnożnik WEEKLY_BONUS_MULTIPLIER wynosi 3.0, czyli dorzuca +200%)
- const baseForBonus = depPilotShare + arrPilotShare;
- const extraPax = Math.max(0, baseForBonus * (WEEKLY_BONUS_MULTIPLIER - 1));
- 
- return { available: true, multiplier: WEEKLY_BONUS_MULTIPLIER, extraPax,
- reason: `First weekly flight for ${code} to ${arr} — +200% bonus (×3) applied to eligible non-owned airport pilot shares.` };
-}
+// (Legacy estimateWeeklyBonus removed — see weeklyPart/assembleWeeklyBonus above.)
 
 // ---------- Assembler ----------
 
@@ -466,37 +597,17 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
     if (eta) { flightTimeMs = eta.durationMs; cruiseKt = eta.cruiseKt; }
   }
 
- const aircraftTier = spec?.category ?? inputs.aircraftTier ?? 1;
-
- const baseline = licenceBaseline(inputs, ev);
- const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
- 
- // 1. Pobieramy oryginalny komponent samolotu Lovable
- const rawAircraftComponent = estimateAircraftComponent(inputs, ev);
- 
- // 2. KOREKTA X2: Sprostowanie zawyżenia — dzielimy przychód samolotu przez 2, dając idealne 0.59 PAX
- const aircraft: ComponentEstimate = {
-   ...rawAircraftComponent,
-   value: parseFloat((rawAircraftComponent.value * 0.5).toFixed(2)),
-   ownerShare: parseFloat((rawAircraftComponent.ownerShare * 0.5).toFixed(2)),
-   pilotShare: parseFloat((rawAircraftComponent.pilotShare * 0.5).toFixed(2))
- };
-
- // 3. FABRYCZNE WYWOŁANIA (Sygnatury bezbłędne, rygorystycznie zgodne z kompilatorem!)
- const dep = estimateAirportEndpoint("dep", depUp, inputs, ev, licenceMedianByCode);
- const arr = estimateAirportEndpoint("arr", arrUp, inputs, ev, licenceMedianByCode);
-
- const licence = estimateLicenceComponent(inputs, baseline);
- const components = [aircraft, dep, arr, licence];
-
-
-
-
+  const baseline = licenceBaseline(inputs, ev);
+  const licenceMedianByCode = buildLicenceMedianMap(ev.ledger);
+  const aircraft = estimateAircraftComponent(inputs, ev);
+  const dep = estimateAirportEndpoint("dep", depUp, inputs, ev, licenceMedianByCode);
+  const arr = estimateAirportEndpoint("arr", arrUp, inputs, ev, licenceMedianByCode);
+  const licence = estimateLicenceComponent(inputs, baseline);
+  const components = [aircraft, dep, arr, licence];
 
   const totalPax = components.reduce((s, c) => s + c.value, 0);
- // Przekazujemy dep.pilotShare oraz arr.pilotShare zamiast licence.value
- const weeklyBonus = estimateWeeklyBonus(inputs, ev, dep.pilotShare, arr.pilotShare);
- const projectedPax = totalPax + (weeklyBonus.available ? weeklyBonus.extraPax : 0);
+  const weeklyBonus = assembleWeeklyBonus(inputs, ev, dep, arr);
+  const projectedPax = totalPax + (weeklyBonus.available ? weeklyBonus.extraPax : 0);
   const flightTimeHours = flightTimeMs ? flightTimeMs / 3_600_000 : 0;
   const paxPerHour = flightTimeHours > 0 ? projectedPax / flightTimeHours : null;
 
@@ -512,7 +623,7 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
       hint: `${spec.model} typical range is ${spec.rangeNm} NM.` });
   }
   if (paxPerHour !== null) {
-     signals.push({ key: "pph", label: "PAX / hour", value: paxPerHour.toFixed(2), tone: "neutral" });
+    signals.push({ key: "pph", label: "PAX / hour", value: paxPerHour.toFixed(2), tone: "neutral" });
   }
   const visitFreq = ev.frequentVisitorsAt.get(arrUp) ?? 0;
   if (visitFreq > 0) {
@@ -542,16 +653,121 @@ export function predictMission(inputs: MissionInputs, ev: MissionEvidence): Miss
   };
 }
 
+// ---------- Matrix builders (Iteration 5) ----------
+
+const MATRIX_MIN_SAMPLE = 3;
+
+function matrixKey(aircraftCat: number, airportCat: number): string {
+  return `${aircraftCat}:${airportCat}`;
+}
+
+function reduceToCell(values: number[]): MatrixCell {
+  if (values.length === 0) return { avgPax: 0, count: 0 };
+  return { avgPax: median(values), count: values.length };
+}
+
+function buildMatrices(args: {
+  ledger: IncomeLedger;
+  aircraftCatById: Map<string, number>;
+  airportCatByIcao: Map<string, number>;
+  ownedIcaos: Set<string>;
+  licenceMedianByCode: Map<string, number>;
+}): {
+  airportOwnerMatrix: { dep: TierMatrix; arr: TierMatrix };
+  airportPilotMatrix: { dep: TierMatrix; arr: TierMatrix };
+  aircraftOwnerMatrix: TierMatrix;
+} {
+  const ownerDep = new Map<string, number[]>();
+  const ownerArr = new Map<string, number[]>();
+  const pilotDep = new Map<string, number[]>();
+  const pilotArr = new Map<string, number[]>();
+  const aircraftBuckets = new Map<string, number[]>();
+
+  const push = (m: Map<string, number[]>, k: string, v: number) => {
+    let a = m.get(k);
+    if (!a) { a = []; m.set(k, a); }
+    a.push(v);
+  };
+
+  for (const f of args.ledger.myFlights) {
+    if (!f.aircraftId) continue;
+    const acCat = args.aircraftCatById.get(f.aircraftId);
+    if (acCat === undefined) continue;
+
+    const depCat = args.airportCatByIcao.get(f.originIcao?.toUpperCase() ?? "");
+    const arrCat = args.airportCatByIcao.get(f.destIcao?.toUpperCase() ?? "");
+
+    // Aircraft-owner matrix — only when I owned the plane
+    if (f.ownAircraft && f.paxAircraftOwn > 0) {
+      // Bucket by any endpoint tier available (dep preferred, else arr).
+      const endpointCat = depCat ?? arrCat;
+      if (endpointCat !== undefined) {
+        push(aircraftBuckets, matrixKey(acCat, endpointCat), f.paxAircraftOwn);
+      }
+    }
+
+    // Airport OWNER matrices — only when I own the endpoint
+    if (depCat !== undefined && f.ownOrigin && f.paxAirportOwn > 0) {
+      push(ownerDep, matrixKey(acCat, depCat), f.paxAirportOwn);
+    }
+    if (arrCat !== undefined && f.ownDest && f.paxAirportOwn > 0) {
+      push(ownerArr, matrixKey(acCat, arrCat), f.paxAirportOwn);
+    }
+
+    // Airport PILOT matrices — per-flight residual, split /2 across endpoints.
+    const licCode = (f.licence || "").toUpperCase();
+    const licRow = licCode ? (args.licenceMedianByCode.get(licCode) ?? 0) : 0;
+    const airportPortion = Math.max(0, f.paxOther - licRow);
+    const halfPilot = airportPortion / 2;
+    if (halfPilot > 0) {
+      if (depCat !== undefined) push(pilotDep, matrixKey(acCat, depCat), halfPilot);
+      if (arrCat !== undefined) push(pilotArr, matrixKey(acCat, arrCat), halfPilot);
+    }
+  }
+
+  const toMatrix = (m: Map<string, number[]>): TierMatrix => {
+    const out: TierMatrix = new Map();
+    for (const [k, xs] of m) out.set(k, reduceToCell(xs));
+    return out;
+  };
+
+  return {
+    airportOwnerMatrix: { dep: toMatrix(ownerDep), arr: toMatrix(ownerArr) },
+    airportPilotMatrix: { dep: toMatrix(pilotDep), arr: toMatrix(pilotArr) },
+    aircraftOwnerMatrix: toMatrix(aircraftBuckets),
+  };
+}
+
 // ---------- Evidence builder ----------
 
 export function buildEvidence(args: {
   ledger: IncomeLedger;
   aircraftIcaoById: Record<string, string>;
+  aircraftCatById?: Record<string, number>;
+  airportCatByIcao?: Record<string, number>;
   currentAirportPilotPct?: Record<string, number>;
 }): MissionEvidence {
   const ownedIcaos = new Set(args.ledger.ownedAirports.map((a) => a.icao.toUpperCase()));
   const ownedAircraftIds = new Set(args.ledger.ownedAircraft.map((a) => a.aircraftId));
   const aircraftIcaoById = new Map<string, string>(Object.entries(args.aircraftIcaoById));
+
+  // Derive aircraft category from ICAO when not explicitly provided.
+  const aircraftCatById = new Map<string, number>();
+  for (const [id, cat] of Object.entries(args.aircraftCatById ?? {})) {
+    if (Number.isFinite(cat)) aircraftCatById.set(id, cat);
+  }
+  for (const [id, icao] of aircraftIcaoById) {
+    if (aircraftCatById.has(id)) continue;
+    const spec = lookupAircraftSpec(icao)?.spec;
+    if (spec && Number.isFinite(spec.category)) aircraftCatById.set(id, spec.category);
+  }
+
+  const airportCatByIcao = new Map<string, number>(
+    Object.entries(args.airportCatByIcao ?? {})
+      .filter(([, v]) => Number.isFinite(v))
+      .map(([k, v]) => [k.toUpperCase(), v]),
+  );
+
   const currentAirportPilotPct = new Map<string, number>(
     Object.entries(args.currentAirportPilotPct ?? {}).map(([k, v]) => [k.toUpperCase(), v]),
   );
@@ -575,9 +791,39 @@ export function buildEvidence(args: {
     }
   }
 
+  const licenceMedianByCode = buildLicenceMedianMap(args.ledger);
+  const matrices = buildMatrices({
+    ledger: args.ledger,
+    aircraftCatById,
+    airportCatByIcao,
+    ownedIcaos,
+    licenceMedianByCode,
+  });
+
   return {
-    ledger: args.ledger, ownedIcaos, ownedAircraftIds, aircraftIcaoById,
-    frequentVisitorsAt, weeklyWindow: weeklyWindow(),
+    ledger: args.ledger,
+    ownedIcaos,
+    ownedAircraftIds,
+    aircraftIcaoById,
+    aircraftCatById,
+    airportCatByIcao,
+    airportOwnerMatrix: matrices.airportOwnerMatrix,
+    airportPilotMatrix: matrices.airportPilotMatrix,
+    aircraftOwnerMatrix: matrices.aircraftOwnerMatrix,
+    frequentVisitorsAt,
+    weeklyWindow: weeklyWindow(),
     currentAirportPilotPct,
   };
+}
+
+/** Look up a matrix cell for aircraftCat × airportCat with sample-size floor. */
+export function matrixLookup(
+  matrix: TierMatrix,
+  aircraftCat: number | undefined,
+  airportCat: number | undefined,
+): MatrixCell | null {
+  if (aircraftCat === undefined || airportCat === undefined) return null;
+  const cell = matrix.get(matrixKey(aircraftCat, airportCat));
+  if (!cell || cell.count < MATRIX_MIN_SAMPLE) return null;
+  return cell;
 }
