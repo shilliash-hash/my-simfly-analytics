@@ -245,11 +245,16 @@ function estimateAircraftComponent(
   // Ownership-anchored predicate: if the aircraftId is currently owned, every
   // historical row on that aircraftId is by definition ours — do not depend on
   // the row-level `ownAircraft` flag alone, which may be missing on older rows.
-  const ownRows = ev.ledger.myFlights.filter(
-    (f) => f.aircraftId === acId && (f.ownAircraft || ev.ownedAircraftIds.has(acId!)),
-  );
+ const ownRows = ev.ledger.myFlights.filter((f) => {
+  const rowAircraftId = f.aircraftId || (f as any).aircraft_id;
+  const isOwnAircraft = f.ownAircraft || (f as any).own_aircraft || false;
+  return rowAircraftId === acId && (isOwnAircraft || ev.ownedAircraftIds.has(acId!));
+});
 
-  const paxAircraftHas = ownRows.some((r) => r.paxAircraftOwn > 0);
+const paxAircraftHas = ownRows.some((r) => {
+  const val = r.paxAircraftOwn ?? (r as any).pax_aircraft_own ?? 0;
+  return Number(val) > 0;
+});
 
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
