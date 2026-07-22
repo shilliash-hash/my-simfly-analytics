@@ -8,8 +8,7 @@ import { lookupAircraftSpec } from "./aircraft-specs";
 export function buildAircraftIcaoMap(payload: SimflyPayload): Record<string, string> {
   const map: Record<string, string> = {};
   for (const p of payload.airplanes) {
-    const id = p.aircraftId || (p as any).aircraft_id;
-    if (id && p.icao) map[id] = p.icao;
+    if (p.aircraftId && p.icao) map[p.aircraftId] = p.icao;
   }
   return map;
 }
@@ -17,12 +16,10 @@ export function buildAircraftIcaoMap(payload: SimflyPayload): Record<string, str
 export function buildAircraftCatMap(payload: SimflyPayload): Record<string, number> {
   const map: Record<string, number> = {};
   for (const p of payload.airplanes) {
-    const id = p.aircraftId || (p as any).aircraft_id;
-    if (id && Number.isFinite(p.category)) map[id] = p.category;
+    if (p.aircraftId && Number.isFinite(p.category)) map[p.aircraftId] = p.category;
   }
   return map;
 }
-
 
 export function buildAirportCatMap(payload: SimflyPayload): Record<string, number> {
   const map: Record<string, number> = {};
