@@ -3,6 +3,7 @@
 
 import type { SimflyPayload } from "./types";
 import { buildEvidence, type MissionEvidence, type TierMatrix, type MatrixCell } from "./mission-engine";
+import { buildPredictionLedger } from "./prediction-ledger";
 import { lookupAircraftSpec } from "./aircraft-specs";
 
 export function buildAircraftIcaoMap(payload: SimflyPayload): Record<string, string> {
@@ -53,12 +54,14 @@ export function evidenceFromPayload(
       if (Number.isFinite(v) && !(up in airportCat)) airportCat[up] = v;
     }
   }
+  const predictionLedger = buildPredictionLedger(payload.incomeLedger);
   return buildEvidence({
     ledger: payload.incomeLedger,
     aircraftIcaoById: buildAircraftIcaoMap(payload),
     aircraftCatById: buildAircraftCatMap(payload),
     airportCatByIcao: airportCat,
     currentAirportPilotPct: buildCurrentAirportPilotPct(payload),
+    predictionLedger,
   });
 }
 
