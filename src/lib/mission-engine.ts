@@ -264,7 +264,7 @@ function estimateAircraftComponent(
 
   // Near: same aircraft, any corridor.
   if (ownRows.length >= MIN_NEAR) {
-    const v = median(ownRows.map((r) => r.paxAircraftOwn));
+    const v = median(ownRows.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: ownRows.length, tier: "near",
