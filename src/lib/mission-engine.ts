@@ -242,11 +242,8 @@ const paxAircraftHas = ownRows.length > 0;
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
   if (direct.length >= MIN_DIRECT) {
-    const v = median(direct.map((r) => {
-  const airplaneObj = (r as any).airplane || r;
-  const val = airplaneObj?.pax ?? airplaneObj?.earnedPax ?? 0;
-  return Number(val);
-}));
+  const v = median(direct.map((r) => Number((r as any).airplane?.pax ?? (r as any).airplane?.earnedPax ?? 0)));
+
 
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
@@ -257,11 +254,8 @@ const paxAircraftHas = ownRows.length > 0;
 
   // Near: same aircraft, any corridor.
   if (ownRows.length >= MIN_NEAR) {
-    const v = median(ownRows.map((r) => {
-  const airplaneObj = (r as any).airplane || r;
-  const val = airplaneObj?.pax ?? airplaneObj?.earnedPax ?? 0;
-  return Number(val);
-}));
+  const v = median(ownRows.map((r) => Number((r as any).airplane?.pax ?? (r as any).airplane?.earnedPax ?? 0)));
+
 
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
