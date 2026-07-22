@@ -1,103 +1,92 @@
 // Mission Intelligence — thin server functions.
 // Reuses the shared income ledger from getSimflyPayload. Adds NO accounting.
+
 import { createServerFn } from "@tanstack/react-start";
-import { predictMission, type MissionInputs, type MissionPrediction } from "./mission-engine";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import {
+  predictMission,
+  GENERIC_AIRCRAFT_ID,
+  GENERIC_TIERS,
+  genericTierId,
+  genericTierFromId,
+  isGenericAircraftId,
+  type MissionInputs,
+  type MissionPrediction,
+} from "./mission-engine";
+
+export type MissionAircraftMode = "owned" | "rental" | "generic";
+
+export type MissionAircraftOption = {
+  aircraftId: string;
+  label: string;
+  icao: string;
+  tailNumber?: string;
+  mode: MissionAircraftMode;
+  tier?: number; // for generic-tier options
+};
 
 export type MissionCatalog = {
- owned: { icao: string; name: string; lat?: number; lon?: number }[];
- myAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
- otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
- genericAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[];
- licences: { code: string; name: string }[];
+  owned: { icao: string; name: string; lat?: number; lon?: number }[];
+  aircraft: MissionAircraftOption[];
+  licences: { code: string; name: string }[];
 };
 
 export const getMissionCatalog = createServerFn({ method: "GET" })
- .inputValidator((d?: { username?: string }) => d ?? {})
- .handler(async ({ data }): Promise<MissionCatalog> => {
- try {
- const { getSimflyPayload, getAirportGeo } = await import("./simfly.functions");
- const payload = await getSimflyPayload({
- data: data.username ? { username: data.username } : undefined,
- });
- const icaos = payload.airports.map((a) => a.icao);
- const geo = icaos.length > 0 ? await getAirportGeo({ data: { icaos } }) : [];
- const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
+  .inputValidator((d?: { username?: string }) => d ?? {})
+  .handler(async ({ data }): Promise<MissionCatalog> => {
+    const { getSimflyPayload, getAirportGeo } = await import("./simfly.functions");
+    const payload = await getSimflyPayload({
+      data: data.username ? { username: data.username } : undefined,
+    });
+    const icaos = payload.airports.map((a) => a.icao);
+    const geo = icaos.length > 0 ? await getAirportGeo({ data: { icaos } }) : [];
+    const geoMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
 
- // 1. Mapujemy własne samoloty zalogowanego pilota
- const myAirframes = (payload.airplanes || [])
- .filter((p) => p.aircraftId)
- .map((p) => ({
- aircraftId: p.aircraftId,
- label: p.name || p.tailNumber || p.icao || p.aircraftId,
- icao: p.icao,
- tailNumber: p.tailNumber,
- }));
+    const owned: MissionAircraftOption[] = payload.airplanes
+      .filter((p) => p.aircraftId)
+      .map((p) => ({
+        aircraftId: p.aircraftId,
+        label: p.name || p.tailNumber || p.icao || p.aircraftId,
+        icao: p.icao,
+        tailNumber: p.tailNumber,
+        mode: "owned" as const,
+      }));
 
- const myOwnedIds = new Set(myAirframes.map((a) => a.aircraftId));
- const otherAirframes: { aircraftId: string; label: string; icao: string; tailNumber?: string }[] = [];
- const uniquePlanes = new Map<string, any>(); // Deklaracja na wyższym poziomie, aby uniknąć błędów zasięgu zmiennej
+    // Rentals — historical aircraft the pilot flew but doesn't own, derived from ledger.
+    const rentalMap = new Map<string, MissionAircraftOption>();
+    if (payload.incomeLedger) {
+      const ownedIds = new Set(payload.incomeLedger.ownedAircraft.map((a) => a.aircraftId));
+      for (const f of payload.incomeLedger.myFlights) {
+        if (!f.aircraftId || ownedIds.has(f.aircraftId)) continue;
+        if (rentalMap.has(f.aircraftId)) continue;
+        rentalMap.set(f.aircraftId, {
+          aircraftId: f.aircraftId,
+          label: f.aircraftLabel || f.aircraftId,
+          icao: "",
+          mode: "rental",
+        });
+      }
+    }
+    const rentals = Array.from(rentalMap.values()).sort((a, b) =>
+      a.label.localeCompare(b.label),
+    );
 
- // 2. POBIERANIE WYŁĄCZNIE SAMOLOTÓW INNYCH GRACZY (Z NUMEREM REJESTRACYJNYM)
- try {
- if (icaos.length > 0) {
- // Odpytujemy bazę o loty na naszych hubach, odrzucając systemowe NULL-e już w SQL
- const { data: rows } = await supabaseAdmin
- .from("simfly_flights")
- .select("aircraft_id, aircraft, aircraft_icao, aircraft_tail_number")
- .not("aircraft_id", "is", null)
- .not("aircraft_tail_number", "is", null)
- .or(`departure_icao.in.(${icaos.join(",")}),destination_icao.in.(${icaos.join(",")})`);
+    const generics: MissionAircraftOption[] = GENERIC_TIERS.map((t) => ({
+      aircraftId: genericTierId(t),
+      label: `Generic Tier ${t}`,
+      icao: "",
+      mode: "generic" as const,
+      tier: t,
+    }));
 
- if (rows && rows.length > 0) {
- for (const r of rows) {
- // Pomijamy maszyny, które są własnością zalogowanego pilota
- if (myOwnedIds.has(r.aircraft_id)) continue;
- // Zapisujemy unikalny samolot gracza (wiemy, że ma tail number dzięki filtrowi SQL)
- if (!uniquePlanes.has(r.aircraft_id)) {
- uniquePlanes.set(r.aircraft_id, {
- aircraftId: r.aircraft_id,
- label: `${r.aircraft || "Unknown"} — ${r.aircraft_tail_number}`,
- icao: r.aircraft_icao || "ICAO",
- tailNumber: r.aircraft_tail_number,
- });
- }
- }
- }
- }
- } catch (dbErr) {
- console.error("[CATALOG DATABASE FETCH ERROR]", dbErr);
- }
-
- // DEFINICJA GENERIC: Deklarujemy ją TUTAJ - całkowicie poza blokami bazodanowymi.
- // Dzięki temu te 7 linii wygeneruje się ZAWSZE, nawet przy zerowej historii w bazie.
- const genericAirframes = [
- { aircraftId: "generic-t1-single-piston", label: "T1: GENERIC SINGLE PISTON (C172 / P28A)", icao: "C172", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t2-single-turboprop", label: "T2: GENERIC SINGLE TURBOPROP (C208 / PC12)", icao: "C208", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t3-twin-turboprop", label: "T3: GENERIC TWIN TURBOPROP (TBM9 / AT76 / B350)", icao: "TBM9", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t4-twin-piston", label: "T4: GENERIC TWIN PISTON (BARO / DA42 / C310)", icao: "DA42", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t5-regional-jet", label: "T5: GENERIC REGIONAL JET (CRJ9 / E190 / C510)", icao: "CRJ9", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t6-narrowbody", label: "T6: GENERIC NARROWBODY (A320 / B738 / MD82)", icao: "A320", tailNumber: "SYSTEM" },
- { aircraftId: "generic-t7-widebody", label: "T7: GENERIC WIDEBODY (A359 / B77W / B744)", icao: "A359", tailNumber: "SYSTEM" },
- ];
-
- return {
- owned: (payload.airports || []).map((a) => {
- const g = geoMap.get(a.icao.toUpperCase());
- return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
- }),
- myAirframes,
- otherAirframes: Array.from(uniquePlanes.values()),
- genericAirframes,
- licences: (payload.licenses || []).map((l) => ({ code: l.code, name: l.name })),
- };
- } catch (globalCrash) {
- console.error("[CRITICAL CATALOG CRASH]", globalCrash);
- return { owned: [], myAirframes: [], otherAirframes: [], genericAirframes: [], licences: [] };
- }
- });
-
-
+    return {
+      owned: payload.airports.map((a) => {
+        const g = geoMap.get(a.icao.toUpperCase());
+        return { icao: a.icao, name: a.name, lat: g?.lat, lon: g?.lon };
+      }),
+      aircraft: [...owned, ...rentals, ...generics],
+      licences: payload.licenses.map((l) => ({ code: l.code, name: l.name })),
+    };
+  });
 
 export type PredictMissionInput = {
   username?: string;
@@ -105,13 +94,50 @@ export type PredictMissionInput = {
   arrival: string;
   aircraftId?: string;
   licence?: string;
+  useCommunity?: boolean;
 };
+
+async function resolveAircraftInputs(
+  payload: Awaited<ReturnType<typeof import("./simfly.functions").getSimflyPayload>>,
+  aircraftId: string | undefined,
+): Promise<{
+  aircraftId?: string;
+  aircraftIcao?: string;
+  aircraftLabel?: string;
+  aircraftTier?: number;
+}> {
+  if (!aircraftId) return {};
+  if (isGenericAircraftId(aircraftId)) {
+    const tier = genericTierFromId(aircraftId);
+    return {
+      aircraftId,
+      aircraftLabel: tier ? `Generic Tier ${tier}` : "Generic plane",
+      aircraftTier: tier,
+    };
+  }
+  const owned = payload.airplanes.find((p) => p.aircraftId === aircraftId);
+  if (owned) {
+    return {
+      aircraftId,
+      aircraftIcao: owned.icao,
+      aircraftLabel: owned.name,
+      aircraftTier: Number.isFinite(owned.category) ? owned.category : undefined,
+    };
+  }
+  // Rental — look up from ledger.
+  const rental = payload.incomeLedger?.myFlights.find((f) => f.aircraftId === aircraftId);
+  return {
+    aircraftId,
+    aircraftIcao: undefined,
+    aircraftLabel: rental?.aircraftLabel || aircraftId,
+  };
+}
 
 export const predictMissionFn = createServerFn({ method: "GET" })
   .inputValidator((d: PredictMissionInput) => d)
   .handler(async ({ data }): Promise<MissionPrediction> => {
-    const { getSimflyPayload, getAirportGeo } = await import("./simfly.functions");
-    const { evidenceFromPayload } = await import("./mission-evidence.server");
+    const { getSimflyPayload, getAirportGeo, getAirportsMeta } = await import("./simfly.functions");
+    const { evidenceFromPayload, buildCommunityMatrices } = await import("./mission-evidence.server");
     const payload = await getSimflyPayload({
       data: data.username ? { username: data.username } : undefined,
     });
@@ -119,74 +145,56 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     const gMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
     const gDep = gMap.get(data.departure.toUpperCase());
     const gArr = gMap.get(data.arrival.toUpperCase());
-      const ac = data.aircraftId
-    ? payload.airplanes.find((p) => p.aircraftId === data.aircraftId)
-    : undefined;
 
-     // 1. UNIWERSALNY SKANER PAYLOADU: Przeszukujemy wszystkie potencjalne tablice z API simfly.io,
-  // aby bezbłędnie namierzyć kontrakt misji rynkowej powiązany z przesyłanym ID samolotu.
-  let marketMission: any = undefined;
-  
-  // Sprawdzamy standardową tablicę misji
-  if (payload.missions?.length) {
-    marketMission = payload.missions.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
-  }
-  
-  // Skan alternatywny: Często w API simfly.io misje rynkowe przychodzą w dedykowanej tablicy marketMissions
-  if (!marketMission && (payload as any).marketMissions?.length) {
-    marketMission = (payload as any).marketMissions.find((m: any) => m.aircraftId === data.aircraftId || m.id === data.aircraftId || m.aircraft_id === data.aircraftId);
-  }
+    const meta = await getAirportsMeta({ data: { icaos: [data.departure, data.arrival] } });
+    const extra: Record<string, number> = {};
+    for (const m of meta) extra[m.icao.toUpperCase()] = m.category;
 
-  // Skan floty globalnej: Sprawdzamy czy kod ICAO nie jest zaszyty bezpośrednio w ogólnodostępnej flocie (rentals/market)
-  let marketAircraftIcao: string | undefined = undefined;
-  if ((payload as any).marketAirplanes?.length) {
-    const marketAc = (payload as any).marketAirplanes.find((p: any) => p.aircraftId === data.aircraftId || p.id === data.aircraftId);
-    if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
-  }
-  if (!marketAircraftIcao && (payload as any).rentals?.length) {
-    const marketAc = (payload as any).rentals.find((p: any) => p.aircraftId === data.aircraftId || p.id === data.aircraftId);
-    if (marketAc?.icao) marketAircraftIcao = marketAc.icao;
-  }
+    const ac = await resolveAircraftInputs(payload, data.aircraftId);
+    const inputs: MissionInputs = {
+      departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
+      arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
+      aircraftId: ac.aircraftId,
+      aircraftIcao: ac.aircraftIcao,
+      aircraftLabel: ac.aircraftLabel,
+      aircraftTier: ac.aircraftTier,
+      licence: data.licence,
+    };
 
-  // 2. DEFENSYWNE, PRODUKCYJNE SKANOWANIE GLOBALNEGO PAYLOADU (Odporne na puste stany formularza)
- // Bezpiecznie wyciągamy kody ICAO, sprawdzając czy formularz nie przesłał wartości undefined/null
- const rawDep = (data.departure || "").toUpperCase().trim();
- const rawArr = (data.arrival || "").toUpperCase().trim();
+    const evidence = evidenceFromPayload(payload, extra);
+    if (data.useCommunity) {
+      const community = await buildCommunityMatrices({
+        aircraftTier: ac.aircraftTier,
+        depIcao: inputs.departure.icao,
+        arrIcao: inputs.arrival.icao,
+        depTier: extra[inputs.departure.icao],
+        arrTier: extra[inputs.arrival.icao],
+        ownUsername: payload.me?.handle,
+      });
+      evidence.communityAirportMatrix = community;
+      evidence.useCommunity = true;
+    }
+    return predictMission(inputs, evidence);
+  });
 
- // Szukamy lotnisk w globalnym payloadzie tylko wtedy, gdy kody mają poprawną długość
- const depAirport = rawDep.length === 4 ? payload.airports?.find((a: any) => a.icao?.toUpperCase() === rawDep) : undefined;
- const arrAirport = rawArr.length === 4 ? payload.airports?.find((a: any) => a.icao?.toUpperCase() === rawArr) : undefined;
+export type RankMissionsInput = {
+  username?: string;
+  departure: string;
+  aircraftId?: string;
+  licence?: string;
+  sort?: "total" | "pph" | "confidence";
+};
 
- // Mapujemy kolumny 'tier' oraz 'level' dokładnie tak, jak robi to sprawna podstrona airports
- const finalDepTier = depAirport?.tier || depAirport?.category || 1;
- const finalDepLevel = depAirport?.level || 1;
- const finalArrTier = arrAirport?.tier || arrAirport?.category || 1;
- const finalArrLevel = arrAirport?.level || 1;
-
-  // 3. Budujemy czysty, w 100% fabryczny obiekt inputs (Rozwiązuje konflikt typów na frontendzie)
- const inputs: MissionInputs = {
- departure: { icao: data.departure.toUpperCase().trim(), lat: gDep?.lat, lon: gDep?.lon },
- arrival: { icao: data.arrival.toUpperCase().trim(), lat: gArr?.lat, lon: gArr?.lon },
- aircraftId: data.aircraftId,
- 
- aircraftIcao: (() => {
- if (ac?.icao) return ac.icao;
- if (marketMission?.aircraft_icao) return marketMission.aircraft_icao;
- if (marketMission?.aircraft?.icao) return marketMission.aircraft.icao;
- if (marketMission?.aircraftIcao) return marketMission.aircraftIcao;
- if (marketAircraftIcao) return marketAircraftIcao;
- 
- return (data as any).aircraftIcao;
- })(),
- aircraftLabel: ac?.name || marketMission?.aircraft_name || "Rental Aircraft",
- licence: data.licence,
- };
-
- // 4. Przekazujemy czysty inputs do silnika predykcji
- return predictMission(inputs, evidenceFromPayload(payload));
-});
-
-
+export type RankedMission = {
+  arrival: string;
+  arrivalName: string;
+  distanceNm: number | null;
+  flightTimeMs: number | null;
+  totalPax: number;
+  paxPerHour: number | null;
+  confidence: number;
+  components: { key: string; value: number }[];
+};
 
 export const rankMissionsFn = createServerFn({ method: "GET" })
   .inputValidator((d: RankMissionsInput) => d)
@@ -204,9 +212,7 @@ export const rankMissionsFn = createServerFn({ method: "GET" })
     const gMap = new Map(geo.map((g) => [g.icao.toUpperCase(), g]));
     const gDep = gMap.get(depUp);
 
-    const ac = data.aircraftId
-      ? payload.airplanes.find((p) => p.aircraftId === data.aircraftId)
-      : undefined;
+    const ac = await resolveAircraftInputs(payload, data.aircraftId);
     const evidence = evidenceFromPayload(payload);
 
     const results: RankedMission[] = [];
@@ -215,8 +221,8 @@ export const rankMissionsFn = createServerFn({ method: "GET" })
       const inputs: MissionInputs = {
         departure: { icao: depUp, lat: gDep?.lat, lon: gDep?.lon },
         arrival: { icao: arr, lat: gArr?.lat, lon: gArr?.lon },
-        aircraftId: data.aircraftId,
-        aircraftIcao: ac?.icao,
+        aircraftId: ac.aircraftId,
+        aircraftIcao: ac.aircraftIcao,
         licence: data.licence,
       };
       const p = predictMission(inputs, evidence);
