@@ -213,12 +213,11 @@ function estimateAircraftComponent(
   const acId = inputs.aircraftId;
   const acIcao = (inputs.aircraftIcao || "").toUpperCase();
 
-  // Generic Plane (legacy sentinel or tiered) — planning only, aircraft income forced to zero.
+  // 1. Generic Plane — zawsze zero (tylko do planowania)
   if (isGenericAircraftId(acId)) {
     const tier = genericTierFromId(acId);
     return {
-      key: "aircraft",
-      label: "Aircraft owner income",
+      key: "aircraft", label: "Aircraft owner income",
       value: 0, ownerShare: 0, pilotShare: 0,
       sampleSize: 0, tier: "none", confidence: 100,
       note: tier
@@ -227,12 +226,13 @@ function estimateAircraftComponent(
     };
   }
 
+  // 2. Sprawdzenie własności samolotu (zabezpieczone przed undefined)
   const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
 
+  // 3. RESTRYKCJA RENTALU: Jeśli pilot NIE JEST właścicielem, to czysty zysk właściciela (owner income) wynosi dla niego 0
   if (!ownAircraft) {
     return {
-      key: "aircraft",
-      label: "Aircraft owner income",
+      key: "aircraft", label: "Aircraft owner income",
       value: 0, ownerShare: 0, pilotShare: 0,
       sampleSize: 0, tier: "none", confidence: 100,
       note: "Rental — aircraft-owner share credited to the pilot who owns this aircraft.",
@@ -242,62 +242,69 @@ function estimateAircraftComponent(
   const dep = inputs.departure.icao.toUpperCase();
   const arr = inputs.arrival.icao.toUpperCase();
 
-  // Ownership-anchored predicate: if the aircraftId is currently owned, every
-  // historical row on that aircraftId is by definition ours — do not depend on
-  // the row-level `ownAircraft` flag alone, which may be missing on older rows.
- const ownRows = ev.ledger.myFlights.filter((f) => {
-  const rowAircraftId = f.aircraftId || (f as any).aircraft_id;
-  const isOwnAircraft = f.ownAircraft || (f as any).own_aircraft || false;
-  return rowAircraftId === acId && (isOwnAircraft || ev.ownedAircraftIds.has(acId!));
-});
+  // 4. Filtrowanie historii lotów dla TEGO KONKRETNEGO samolotu (pancerne dopasowanie kluczy)
+  const ownRows = ev.ledger.myFlights.filter((f) => {
+    const rowAircraftId = f.aircraftId || (f as any).aircraft_id;
+    const isOwnAircraft = f.ownAircraft || (f as any).own_aircraft || false;
+    return rowAircraftId === acId && (isOwnAircraft || ev.ownedAircraftIds.has(acId!));
+  });
 
-const paxAircraftHas = ownRows.some((r) => {
-  const val = r.paxAircraftOwn ?? (r as any).pax_aircraft_own ?? 0;
-  return Number(val) > 0;
-});
+  // 5. Bezpieczna walidacja czy w historii są realne zarobki (naprawiony błąd snake_case)
+  const paxAircraftHas = ownRows.some((r) => {
+    const val = r.paxAircraftOwn ?? (r as any).pax_aircraft_own ?? 0;
+    return Number(val) > 0;
+  });
 
-  // Direct: same aircraft × same corridor.
+  // --- OBLIChENIA ŚCIEŻKI: DIRECT (Ten sam samolot x Ten sam korytarz) ---
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
   if (direct.length >= MIN_DIRECT) {
     const v = median(direct.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0));
-    return { key: "aircraft", label: "Aircraft owner income",
-      value: v, ownerShare: v, pilotShare: 0,
+    return { 
+      key: "aircraft", label: "Aircraft owner income",
+      value: v, ownerShare: v, pilotShare: 0, // Dla właściciela pilotShare w tym komponencie to 0, bo zysk z maszyny to czysty ownerShare
       sampleSize: direct.length, tier: "direct",
       confidence: confidenceFromTier("direct", direct.length),
-      note: `Median of ${direct.length} flights on this aircraft × this corridor.` };
+      note: `Median of ${direct.length} flights on this aircraft × this corridor.` 
+    };
   }
 
-  // Near: same aircraft, any corridor.
+  // --- OBLIChENIA ŚCIEŻKI: NEAR (Ten sam samolot, dowolny korytarz) ---
   if (ownRows.length >= MIN_NEAR) {
     const v = median(ownRows.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0));
-    return { key: "aircraft", label: "Aircraft owner income",
+    return { 
+      key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: ownRows.length, tier: "near",
       confidence: confidenceFromTier("near", ownRows.length),
       note: v === 0 && ownRows.length > 0 && !paxAircraftHas
         ? `Diagnostic: ${ownRows.length} flights on this aircraft but ledger reports no owner attribution. Classifier may be crediting it elsewhere.`
-        : `Median across ${ownRows.length} flights on this aircraft.` };
+        : `Median across ${ownRows.length} flights on this aircraft.` 
+    };
   }
 
-  // Class: any of my owned aircraft with same ICAO type.
+  // --- OBLIChENIA ŚCIEŻKI: CLASS (Dowolny samolot tego samego typu ICAO) ---
   const cls = ev.ledger.myFlights.filter((f) => {
-    if (!f.aircraftId) return false;
-    if (!f.ownAircraft && !ev.ownedAircraftIds.has(f.aircraftId)) return false;
-    const t = ev.aircraftIcaoById.get(f.aircraftId);
+    const fId = f.aircraftId || (f as any).aircraft_id;
+    if (!fId) return false;
+    const isOwn = f.ownAircraft || (f as any).own_aircraft || ev.ownedAircraftIds.has(fId);
+    if (!isOwn) return false;
+    const t = ev.aircraftIcaoById.get(fId);
     return t && t.toUpperCase() === acIcao;
   });
+
   if (cls.length >= MIN_CLASS) {
-    const v = median(cls.map((r) => r.paxAircraftOwn));
-    return { key: "aircraft", label: "Aircraft owner income",
+    const v = median(cls.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0));
+    return { 
+      key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: cls.length, tier: "class",
       confidence: confidenceFromTier("class", cls.length),
-      note: `Median across ${cls.length} flights on aircraft type ${acIcao || "same type"}.` };
+      note: `Median across ${cls.length} flights on aircraft type ${acIcao || "same type"}.` 
+    };
   }
 
-  // Reference matrix — aircraftCat × airportCat (endpoint-agnostic).
-  const acCat = acId ? ev.aircraftCatById.get(acId)
-    : (lookupAircraftSpec(acIcao)?.spec?.category);
+  // --- MATRYCA AWARYJNA (Gdy brak jakiejkolwiek historii) ---
+  const acCat = acId ? ev.aircraftCatById.get(acId) : (lookupAircraftSpec(acIcao)?.spec?.category);
   const depCat = ev.airportCatByIcao.get(dep);
   const arrCat = ev.airportCatByIcao.get(arr);
   const cellDep = matrixLookup(ev.aircraftOwnerMatrix, acCat, depCat);
@@ -305,27 +312,38 @@ const paxAircraftHas = ownRows.some((r) => {
   const matrixCell = cellDep && cellArr
     ? { avgPax: (cellDep.avgPax + cellArr.avgPax) / 2, count: cellDep.count + cellArr.count }
     : (cellDep ?? cellArr);
+
   if (matrixCell) {
-    return { key: "aircraft", label: "Aircraft owner income",
+    return { 
+      key: "aircraft", label: "Aircraft owner income",
       value: matrixCell.avgPax, ownerShare: matrixCell.avgPax, pilotShare: 0,
       sampleSize: matrixCell.count, tier: "class",
       confidence: confidenceFromTier("class", matrixCell.count),
-      note: `Reference matrix: aircraft tier ${acCat} × airport tier ${(depCat ?? arrCat)} (${matrixCell.count} historical flights).` };
+      note: `Reference matrix: aircraft tier ${acCat} × airport tier ${(depCat ?? arrCat)} (${matrixCell.count} historical flights).` 
+    };
   }
 
-  const anyOwn = ev.ledger.myFlights.filter(
-    (f) => (f.ownAircraft || (f.aircraftId && ev.ownedAircraftIds.has(f.aircraftId))) && f.paxAircraftOwn > 0,
-  );
-  const v = anyOwn.length > 0 ? mean(anyOwn.map((r) => r.paxAircraftOwn)) : 0;
-  return { key: "aircraft", label: "Aircraft owner income",
-    value: v, ownerShare: v, pilotShare: 0,
+  // --- OSTATECzNY FALLBACK ---
+  const anyOwn = ev.ledger.myFlights.filter((f) => {
+    const fId = f.aircraftId || (f as any).aircraft_id;
+    const isOwn = f.ownAircraft || (f as any).own_aircraft || (fId ? ev.ownedAircraftIds.has(fId) : false);
+    const val = f.paxAircraftOwn || (f as any).pax_aircraft_own || 0;
+    return isOwn && val > 0;
+  });
+
+  const fallbackV = anyOwn.length > 0 ? mean(anyOwn.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0)) : 0;
+  return { 
+    key: "aircraft", label: "Aircraft owner income",
+    value: fallbackV, ownerShare: fallbackV, pilotShare: 0,
     sampleSize: anyOwn.length,
     tier: anyOwn.length > 0 ? "formula" : "none",
     confidence: confidenceFromTier(anyOwn.length > 0 ? "formula" : "none", anyOwn.length),
     note: anyOwn.length > 0
       ? `Fallback: mean aircraft-owner PAX across ${anyOwn.length} of my owner flights.`
-      : "No aircraft-owner attribution found in ledger for this aircraft." };
+      : "No aircraft-owner attribution found in ledger for this aircraft." 
+  };
 }
+
 
 /** Licence baseline — median paxOther across my flights on this licence. */
 function licenceBaseline(inputs: MissionInputs, ev: MissionEvidence): {
