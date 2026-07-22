@@ -95,6 +95,8 @@ export type PredictMissionInput = {
   aircraftId?: string;
   licence?: string;
   useCommunity?: boolean;
+  disableDepIncome?: boolean;
+  disableArrIncome?: boolean;
 };
 
 async function resolveAircraftInputs(
@@ -159,6 +161,8 @@ export const predictMissionFn = createServerFn({ method: "GET" })
       aircraftLabel: ac.aircraftLabel,
       aircraftTier: ac.aircraftTier,
       licence: data.licence,
+      disableDepIncome: data.disableDepIncome,
+      disableArrIncome: data.disableArrIncome,
     };
 
     const evidence = evidenceFromPayload(payload, extra);
