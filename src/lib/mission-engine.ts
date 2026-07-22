@@ -157,28 +157,12 @@ function mean(xs: number[]): number {
   return s / xs.length;
 }
 
-function median(values: number[]): number {
-  // Odrzucamy ewentualne puste rekordy lub NaN
-  const cleanValues = values
-    .map(v => Number(v))
-    .filter(v => !isNaN(v) && v !== null && v !== undefined);
-
-  if (cleanValues.length === 0) return 0;
-
-  // Krytyczna poprawka: sortujemy liczby numerycznie (a - b) zamiast alfabetycznie!
-  const sorted = [...cleanValues].sort((a, b) => a - b);
-  
-  const mid = Math.floor(sorted.length / 2);
-
-  // Wyciągamy środek dla nieparzystej liczby (np. Twoich 133 lotów)
-  if (sorted.length % 2 !== 0) {
-    return sorted[mid];
-  }
-  
-  // Jeśli liczba lotów byłaby parzysta, wyciągamy średnią z dwóch środkowych
-  return (sorted[mid - 1] + sorted[mid]) / 2;
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
 }
-
 
 function confidenceFromTier(tier: ConfidenceTier, n: number): number {
   switch (tier) {
@@ -261,21 +245,16 @@ function estimateAircraftComponent(
   // Ownership-anchored predicate: if the aircraftId is currently owned, every
   // historical row on that aircraftId is by definition ours — do not depend on
   // the row-level `ownAircraft` flag alone, which may be missing on older rows.
- const ownRows = ev.ledger.myFlights.filter((f) => {
-  const rowAircraftId = f.aircraftId || (f as any).aircraft_id;
-  const isOwnAircraft = f.ownAircraft || (f as any).own_aircraft || false;
-  return rowAircraftId === acId && (isOwnAircraft || ev.ownedAircraftIds.has(acId!));
-});
+  const ownRows = ev.ledger.myFlights.filter(
+    (f) => f.aircraftId === acId && (f.ownAircraft || ev.ownedAircraftIds.has(acId!)),
+  );
 
-const paxAircraftHas = ownRows.some((r) => {
-  const val = r.paxAircraftOwn ?? (r as any).pax_aircraft_own ?? 0;
-  return Number(val) > 0;
-});
+  const paxAircraftHas = ownRows.some((r) => r.paxAircraftOwn > 0);
 
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
   if (direct.length >= MIN_DIRECT) {
-  const v = median(direct.map((r) => Number(r.pax || 0)));
+    const v = median(direct.map((r) => r.paxAircraftOwn));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: direct.length, tier: "direct",
@@ -285,7 +264,7 @@ const paxAircraftHas = ownRows.some((r) => {
 
   // Near: same aircraft, any corridor.
   if (ownRows.length >= MIN_NEAR) {
-    const v = median(ownRows.map((r) => Number(r.pax || 0)));
+    const v = median(ownRows.map((r) => r.paxAircraftOwn));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: ownRows.length, tier: "near",
