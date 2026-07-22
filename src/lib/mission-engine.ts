@@ -232,6 +232,32 @@ function estimateAircraftComponent(
   const dep = inputs.departure.icao.toUpperCase();
   const arr = inputs.arrival.icao.toUpperCase();
 
+  // --- TYMCZASOWY TEST DIAGNOSTYCZNY STRUKTURY W LOCIE ---
+  if (ownRows && ownRows.length > 0) {
+    const sample = ownRows[0]; // Pobieramy pierwszy lot z brzegu
+    const keys = Object.keys(sample).join(', ');
+    
+    // Sprawdzamy czy istnieje tam pod-obiekt airplane i jakie ma klucze
+    const hasAirplane = !!(sample as any).airplane;
+    const airplaneKeys = hasAirplane ? Object.keys((sample as any).airplane).join(', ') : 'brak obiektu airplane';
+    
+    // Sprawdzamy surowe wartosci, które mogą zawierać nasz PAX
+    const rawPax = (sample as any).pax ?? 'brak';
+    const rawAircraftPax = (sample as any).paxAircraftOwn ?? (sample as any).pax_aircraft_own ?? 'brak';
+
+    return {
+      key: "aircraft",
+      label: "Aircraft owner income",
+      value: 0,
+      ownerShare: 0,
+      pilotShare: 0,
+      sampleSize: ownRows.length,
+      tier: "near",
+      confidence: 100,
+      note: `LotKlucze: [${keys}] | AC_Klucze: [${airplaneKeys}] | PaxLotu: ${rawPax} | AcOwnPax: ${rawAircraftPax}`
+    };
+  }
+  
   // Flaga bezpieczeństwa dla diagnostyki Lovable
   const paxAircraftHas = true;
 
