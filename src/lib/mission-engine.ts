@@ -157,23 +157,35 @@ function mean(xs: number[]): number {
   return s / xs.length;
 }
 
-function median(values: number[]): number {
-  const cleanValues = values
-    .map(v => Number(v))
-    .filter(v => !isNaN(v) && v !== null && v !== undefined);
-
-  if (cleanValues.length === 0) return 0;
-
-  // POPRAWNE SORTOWANIE NUMERYCZNE (a - b)
-  const sorted = [...cleanValues].sort((a, b) => a - b);
-  const mid = Math.floor(sorted.length / 2);
-
-  if (sorted.length % 2 !== 0) {
-    return sorted[mid];
-  }
-  return (sorted[mid - 1] + sorted[mid]) / 2;
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  return s.length % 2 === 0 ? (s[mid - 1] + s[mid]) / 2 : s[mid];
 }
 
+function confidenceFromTier(tier: ConfidenceTier, n: number): number {
+  switch (tier) {
+    case "direct": return Math.min(100, 85 + Math.min(15, n));
+    case "near":   return Math.min(89, 65 + Math.min(20, n * 2));
+    case "class":  return Math.min(69, 45 + Math.min(20, n * 2));
+    case "formula": return 30;
+    case "none":
+    default:       return 10;
+  }
+}
+
+function weeklyWindow(nowMs = Date.now()): { startMs: number; endMs: number } {
+  // SimFly weekly cycle resets Monday 00:00 UTC.
+  const d = new Date(nowMs);
+  const dow = d.getUTCDay(); // 0 Sun..6 Sat
+  const daysSinceMon = (dow + 6) % 7;
+  const start = Date.UTC(
+    d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - daysSinceMon,
+    0, 0, 0, 0,
+  );
+  return { startMs: start, endMs: nowMs };
+}
 
 /** Median paxOther per licence code across my flights — used for per-row licence attribution. */
 function buildLicenceMedianMap(ledger: IncomeLedger): Map<string, number> {
@@ -237,14 +249,12 @@ function estimateAircraftComponent(
     (f) => f.aircraftId === acId && (f.ownAircraft || ev.ownedAircraftIds.has(acId!)),
   );
 
-const paxAircraftHas = ownRows.length > 0;
+  const paxAircraftHas = ownRows.some((r) => r.paxAircraftOwn > 0);
 
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
   if (direct.length >= MIN_DIRECT) {
-  const v = median(direct.map((r) => Number((r as any).airplane?.pax ?? (r as any).airplane?.earnedPax ?? 0)));
-
-
+    const v = median(direct.map((r) => r.paxAircraftOwn));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: direct.length, tier: "direct",
@@ -254,9 +264,7 @@ const paxAircraftHas = ownRows.length > 0;
 
   // Near: same aircraft, any corridor.
   if (ownRows.length >= MIN_NEAR) {
-  const v = median(ownRows.map((r) => Number((r as any).airplane?.pax ?? (r as any).airplane?.earnedPax ?? 0)));
-
-
+    const v = median(ownRows.map((r) => r.paxAircraftOwn));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: ownRows.length, tier: "near",
