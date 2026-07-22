@@ -259,7 +259,7 @@ const paxAircraftHas = ownRows.some((r) => {
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
   if (direct.length >= MIN_DIRECT) {
-    const v = median(direct.map((r) => r.paxAircraftOwn));
+    cconst v = median(direct.map((r) => r.paxAircraftOwn || (r as any).pax_aircraft_own || 0));
     return { key: "aircraft", label: "Aircraft owner income",
       value: v, ownerShare: v, pilotShare: 0,
       sampleSize: direct.length, tier: "direct",
