@@ -136,7 +136,7 @@ async function resolveAircraftInputs(
 export const predictMissionFn = createServerFn({ method: "GET" })
   .inputValidator((d: PredictMissionInput) => d)
   .handler(async ({ data }): Promise<MissionPrediction> => {
-    const { getSimflyPayload, getAirportGeo, getAirportsMeta } = await import("./simfly.functions");
+    const { getSimflyPayload, getAirportGeo, /*getAirportsMeta*/ } = await import("./simfly.functions");
     const { evidenceFromPayload, buildCommunityMatrices } = await import("./mission-evidence.server");
     const payload = await getSimflyPayload({
       data: data.username ? { username: data.username } : undefined,
@@ -146,9 +146,13 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     const gDep = gMap.get(data.departure.toUpperCase());
     const gArr = gMap.get(data.arrival.toUpperCase());
 
-    const meta = await getAirportsMeta({ data: { icaos: [data.departure, data.arrival] } });
+    // const meta = await getAirportsMeta({ data: { icaos: [data.departure, data.arrival] } });
     const extra: Record<string, number> = {};
-    for (const m of meta) extra[m.icao.toUpperCase()] = m.category;
+    const payloadDep = payload.airports.find(a => a.icao.toUpperCase() === data.departure.toUpperCase());
+    if (payloadDep) extra[data.departure.toUpperCase()] = payloadDep.category;
+
+    const payloadArr = payload.airports.find(a => a.icao.toUpperCase() === data.arrival.toUpperCase());
+    if (payloadArr) extra[data.arrival.toUpperCase()] = payloadArr.category;
 
     const ac = await resolveAircraftInputs(payload, data.aircraftId);
     const inputs: MissionInputs = {
