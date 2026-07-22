@@ -41,6 +41,10 @@ export type MissionInputs = {
   aircraftLevel?: number;
   licence?: string;
   dateIso?: string;
+  /** Manually zero the departure airport component + weekly bonus (system/non-income airport). */
+  disableDepIncome?: boolean;
+  /** Manually zero the arrival airport component + weekly bonus (system/non-income airport). */
+  disableArrIncome?: boolean;
 };
 
 export type ConfidenceTier = "direct" | "near" | "class" | "formula" | "none";
@@ -394,6 +398,17 @@ function estimateAirportEndpoint(
   const up = icao.toUpperCase();
   const own = ev.ownedIcaos.has(up);
 
+  const manuallyDisabled = role === "dep" ? !!inputs.disableDepIncome : !!inputs.disableArrIncome;
+  if (manuallyDisabled) {
+    return {
+      key, label,
+      value: 0, ownerShare: 0, pilotShare: 0,
+      sampleSize: 0, tier: "none", confidence: 100,
+      note: `Manually disabled — ${up} treated as system/non-income airport.`,
+    };
+  }
+
+
   // Aircraft category for matrix lookups (generic tiered aircraft supply their own tier).
   const acId = inputs.aircraftId;
   const genericTier = genericTierFromId(acId);
@@ -519,8 +534,15 @@ function weeklyPart(
   code: string,
   ev: MissionEvidence,
   airportComp: ComponentEstimate,
+  manuallyDisabled: boolean,
 ): WeeklyBonusPart {
   const up = icao.toUpperCase();
+  if (manuallyDisabled) {
+    return { role, icao: up, eligible: false, ownedByMe: ev.ownedIcaos.has(up),
+      value: 0, sampleSize: 0, tier: "none",
+      reason: `Manually disabled for ${up} — bonus not applicable.`,
+      source: "not-eligible" };
+  }
   if (!code) {
     return { role, icao: up, eligible: false, ownedByMe: ev.ownedIcaos.has(up),
       value: 0, sampleSize: 0, tier: "none",
@@ -568,8 +590,8 @@ function assembleWeeklyBonus(
   arrComp: ComponentEstimate,
 ): WeeklyBonus {
   const code = (inputs.licence || "").trim().toUpperCase();
-  const dep = weeklyPart("dep", inputs.departure.icao, code, ev, depComp);
-  const arr = weeklyPart("arr", inputs.arrival.icao, code, ev, arrComp);
+  const dep = weeklyPart("dep", inputs.departure.icao, code, ev, depComp, !!inputs.disableDepIncome);
+  const arr = weeklyPart("arr", inputs.arrival.icao, code, ev, arrComp, !!inputs.disableArrIncome);
   const available = dep.eligible || arr.eligible;
   const extraPax = dep.value + arr.value;
   const reason = !code
