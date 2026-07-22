@@ -227,7 +227,11 @@ function estimateAircraftComponent(
     };
   }
 
-  const ownAircraft = !!acId && ev.ownedAircraftIds.has(acId);
+  const ownAircraft = !!acId && (
+  ev.ownedAircraftIds.has(acId) || 
+  Array.from(ev.ownedAircraftIds).some(id => id.toLowerCase() === acId.toLowerCase())
+  );
+
 
   if (!ownAircraft) {
     return {
