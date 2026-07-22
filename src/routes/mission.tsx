@@ -78,10 +78,13 @@ function MissionPlanner() {
   const [aircraftId, setAircraftId] = useState<string>("");
   const [licence, setLicence] = useState<string>("");
   const [useCommunity, setUseCommunity] = useState<boolean>(false);
+  const [disableDepIncome, setDisableDepIncome] = useState<boolean>(false);
+  const [disableArrIncome, setDisableArrIncome] = useState<boolean>(false);
   const [runToken, setRunToken] = useState<number>(0);
   const [runSnapshot, setRunSnapshot] = useState<{
     departure: string; arrival: string; aircraftId: string;
     licence: string; useCommunity: boolean;
+    disableDepIncome: boolean; disableArrIncome: boolean;
   } | null>(null);
 
   const canRun =
@@ -98,6 +101,8 @@ function MissionPlanner() {
           aircraftId: runSnapshot!.aircraftId,
           licence: runSnapshot!.licence || undefined,
           useCommunity: runSnapshot!.useCommunity,
+          disableDepIncome: runSnapshot!.disableDepIncome,
+          disableArrIncome: runSnapshot!.disableArrIncome,
           ...(username ? { username } : {}),
         },
       }),
@@ -109,12 +114,14 @@ function MissionPlanner() {
     runSnapshot.arrival !== arrival ||
     runSnapshot.aircraftId !== aircraftId ||
     runSnapshot.licence !== licence ||
-    runSnapshot.useCommunity !== useCommunity
+    runSnapshot.useCommunity !== useCommunity ||
+    runSnapshot.disableDepIncome !== disableDepIncome ||
+    runSnapshot.disableArrIncome !== disableArrIncome
   );
 
   const beginDataMining = () => {
     if (!canRun) return;
-    setRunSnapshot({ departure, arrival, aircraftId, licence, useCommunity });
+    setRunSnapshot({ departure, arrival, aircraftId, licence, useCommunity, disableDepIncome, disableArrIncome });
     setRunToken((t) => t + 1);
   };
 
@@ -134,11 +141,15 @@ function MissionPlanner() {
         aircraftId={aircraftId}
         licence={licence}
         useCommunity={useCommunity}
+        disableDepIncome={disableDepIncome}
+        disableArrIncome={disableArrIncome}
         onDeparture={setDeparture}
         onArrival={setArrival}
         onAircraftId={setAircraftId}
         onLicence={setLicence}
         onUseCommunity={setUseCommunity}
+        onDisableDepIncome={setDisableDepIncome}
+        onDisableArrIncome={setDisableArrIncome}
       />
 
       <section className="panel mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl p-4">
@@ -177,11 +188,15 @@ function MissionForm(props: {
   aircraftId: string;
   licence: string;
   useCommunity: boolean;
+  disableDepIncome: boolean;
+  disableArrIncome: boolean;
   onDeparture: (v: string) => void;
   onArrival: (v: string) => void;
   onAircraftId: (v: string) => void;
   onLicence: (v: string) => void;
   onUseCommunity: (v: boolean) => void;
+  onDisableDepIncome: (v: boolean) => void;
+  onDisableArrIncome: (v: boolean) => void;
 }) {
   const { catalog } = props;
   const aircraftOptions =
@@ -191,6 +206,11 @@ function MissionForm(props: {
       const icao = a.icao ? ` (${a.icao})` : "";
       return { value: a.aircraftId, label: `[${modeTag}] ${a.label}${tail}${icao}` };
     }) ?? [];
+  const ownedSet = new Set((catalog?.owned ?? []).map((o) => o.icao.toUpperCase()));
+  const depUp = props.departure.toUpperCase();
+  const arrUp = props.arrival.toUpperCase();
+  const depOwned = depUp.length >= 3 && ownedSet.has(depUp);
+  const arrOwned = arrUp.length >= 3 && ownedSet.has(arrUp);
   return (
     <section className="panel mb-4 grid gap-4 rounded-xl p-5 sm:grid-cols-2 lg:grid-cols-4">
       <FieldSelect
@@ -226,9 +246,62 @@ function MissionForm(props: {
         />
         <span>Use Community Intelligence (supplementary global medians; influence decreases as personal history grows)</span>
       </label>
+      <div className="sm:col-span-2 lg:col-span-4 grid gap-3 rounded-md border border-border/30 bg-secondary/20 p-3 sm:grid-cols-2">
+        <EndpointDisableToggle
+          role="Departure"
+          icao={depUp}
+          owned={depOwned}
+          checked={props.disableDepIncome}
+          onChange={props.onDisableDepIncome}
+        />
+        <EndpointDisableToggle
+          role="Arrival"
+          icao={arrUp}
+          owned={arrOwned}
+          checked={props.disableArrIncome}
+          onChange={props.onDisableArrIncome}
+        />
+      </div>
     </section>
   );
 }
+
+function EndpointDisableToggle({
+  role,
+  icao,
+  owned,
+  checked,
+  onChange,
+}: {
+  role: "Departure" | "Arrival";
+  icao: string;
+  owned: boolean;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+}) {
+  const status = !icao || icao.length < 3
+    ? "—"
+    : owned
+      ? "owned"
+      : "Ownership status check";
+  return (
+    <label className="flex items-start gap-2 text-xs text-muted-foreground">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-border/40 bg-secondary/40"
+      />
+      <span className="leading-tight">
+        <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{role}</span>{" "}
+        <span className="mono text-foreground">{icao || "—"}</span>{" "}
+        <span className={owned ? "text-runway" : "text-instrument"}>({status})</span>
+        <span className="block text-[11px]">When checked: no basic nor bonus income will be calculated by prediction engine (Bank owned/non-player airport).</span>
+      </span>
+    </label>
+  );
+}
+
 
 
 function FieldIcao({
