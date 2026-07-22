@@ -136,7 +136,7 @@ async function resolveAircraftInputs(
 export const predictMissionFn = createServerFn({ method: "GET" })
   .inputValidator((d: PredictMissionInput) => d)
   .handler(async ({ data }): Promise<MissionPrediction> => {
-    const { getSimflyPayload, getAirportGeo, getAirportMeta } = await import("./simfly.functions");
+    const { getSimflyPayload, getAirportGeo, getAirportsMeta } = await import("./simfly.functions");
     const { evidenceFromPayload, buildCommunityMatrices } = await import("./mission-evidence.server");
     const payload = await getSimflyPayload({
       data: data.username ? { username: data.username } : undefined,
