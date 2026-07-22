@@ -115,7 +115,10 @@ async function resolveAircraftInputs(
       aircraftTier: tier,
     };
   }
-  const owned = payload.airplanes.find((p) => p.aircraftId === aircraftId);
+  const owned = payload.airplanes.find((p) => {
+  const id = p.aircraftId || (p as any).aircraft_id;
+  return id === aircraftId;
+});
   if (owned) {
     return {
       aircraftId,
