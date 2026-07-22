@@ -211,9 +211,8 @@ function estimateAircraftComponent(
   ev: MissionEvidence,
 ): ComponentEstimate {
   const acId = inputs.aircraftId;
-  const acIcao = (inputs.aircraftIcao || "").toUpperCase();
 
-  // 1. Zabezpieczenie dla Generic Plane (makieta planistyczna) — zawsze zero
+  // 1. Zabezpieczenie dla Generic Plane
   if (isGenericAircraftId(acId)) {
     return {
       key: "aircraft", label: "Aircraft owner income",
@@ -223,7 +222,7 @@ function estimateAircraftComponent(
     };
   }
 
-  // 2. Filtrujemy historię lotów w tym odizolowanym module wyłącznie dla tej maszyny
+  // 2. Filtrujemy historię lotów dla tego unikalnego samolotu
   const ownRows = ev.ledger.myFlights.filter((f) => {
     const rowAircraftId = f.aircraftId || (f as any).aircraft_id;
     return rowAircraftId === acId;
@@ -232,99 +231,38 @@ function estimateAircraftComponent(
   const dep = inputs.departure.icao.toUpperCase();
   const arr = inputs.arrival.icao.toUpperCase();
 
-  // --- TYMCZASOWY TEST DIAGNOSTYCZNY STRUKTURY W LOCIE ---
-  if (ownRows && ownRows.length > 0) {
-    const sample = ownRows[0]; // Pobieramy pierwszy lot z brzegu
-    const keys = Object.keys(sample).join(', ');
-    
-    // Sprawdzamy czy istnieje tam pod-obiekt airplane i jakie ma klucze
-    const hasAirplane = !!(sample as any).airplane;
-    const airplaneKeys = hasAirplane ? Object.keys((sample as any).airplane).join(', ') : 'brak obiektu airplane';
-    
-    // Sprawdzamy surowe wartosci, które mogą zawierać nasz PAX
-    const rawPax = (sample as any).pax ?? 'brak';
-    const rawAircraftPax = (sample as any).paxAircraftOwn ?? (sample as any).pax_aircraft_own ?? 'brak';
-
-    return {
-      key: "aircraft",
-      label: "Aircraft owner income",
-      value: 0,
-      ownerShare: 0,
-      pilotShare: 0,
-      sampleSize: ownRows.length,
-      tier: "near",
-      confidence: 100,
-      note: `LotKlucze: [${keys}] | AC_Klucze: [${airplaneKeys}] | PaxLotu: ${rawPax} | AcOwnPax: ${rawAircraftPax}`
-    };
-  }
-  
-  // Flaga bezpieczeństwa dla diagnostyki Lovable
-  const paxAircraftHas = true;
-
-  // Bezpieczna funkcja wyciągająca PAX bezpośrednio z obiektu 'airplane' (tak jak w Activity!)
-  const getHistoricalAircraftPax = (f: any) => {
-    const airplaneObj = f.airplane || (f as any).airplane;
-    if (!airplaneObj) return 0;
-    // Czytamy pole pax lub earnedPax bezpośrednio z zagnieżdżonej struktury
-    return Number(airplaneObj.pax ?? airplaneObj.earnedPax ?? airplaneObj.earned_pax ?? 0);
+  // --- PARSOWANIE ORYGINALNEGO JSONA Z BAZY (Kolumna raw) ---
+  // W ten sposób wyciągamy czystą, historyczną wartość 0.34 dla samej Cessny!
+  const getTrueAircraftPax = (f: any) => {
+    try {
+      const rawString = f.raw || (f as any).raw;
+      if (!rawString) return 0;
+      
+      // Jeśli to jest string, parsujemy do obiektu. Jeśli już obiekt, bierzemy bezpośrednio.
+      const parsed = typeof rawString === 'string' ? JSON.parse(rawString) : rawString;
+      
+      // Dobieramy się do struktury dokładnie tak, jak zapisało to SimFly:
+      return Number(parsed?.airplane?.pax ?? parsed?.airplane?.earnedPax ?? 0);
+    } catch {
+      return 0;
+    }
   };
 
-  // --- OBLIChENIA ŚCIEŻKI: DIRECT (Ten sam samolot x Ten sam korytarz) ---
-  const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
-  if (direct.length >= MIN_DIRECT) {
-    const v = median(direct.map(getHistoricalAircraftPax));
-    
-    // Dynamiczny odczyt statusu rental z historii lotu
-    const sampleFlight = direct[0];
-    const isRented = sampleFlight?.airplane?.rented || (sampleFlight as any).missionType === "airplane-rental";
-    const ownerRatio = isRented ? 0.85 : 1; // Jeśli to był rental, podział właściciela to 85% (według Twojego frontu)
+  // --- OBLIChENIA ŚCIEŻKI: NEAR (Dowolny korytarz dla tego samolotu) ---
+  const values = ownRows.map(getTrueAircraftPax).filter(v => v > 0);
+
+  if (values.length > 0) {
+    const calculatedMed = median(values);
     
     return { 
       key: "aircraft", label: "Aircraft owner income",
-      value: v, 
-      ownerShare: v * ownerRatio, 
-      pilotShare: v * (1 - ownerRatio),
-      sampleSize: direct.length, tier: "direct",
-      confidence: confidenceFromTier("direct", direct.length),
-      note: `Median of ${direct.length} flights on this aircraft × this corridor.` 
-    };
-  }
-
-  // --- OBLIChENIA ŚCIEŻKI: NEAR (Ten sam samolot, dowolny korytarz) ---
-  if (ownRows.length >= MIN_NEAR) {
-    const v = median(ownRows.map(getHistoricalAircraftPax));
-    
-    const sampleFlight = ownRows[0];
-    const isRented = sampleFlight?.airplane?.rented || (sampleFlight as any).missionType === "airplane-rental";
-    const ownerRatio = isRented ? 0.85 : 1; 
-
-    return { 
-      key: "aircraft", label: "Aircraft owner income",
-      value: v, 
-      ownerShare: v * ownerRatio, 
-      pilotShare: v * (1 - ownerRatio),
-      sampleSize: ownRows.length, tier: "near",
-      confidence: confidenceFromTier("near", ownRows.length),
-      note: `Median across ${ownRows.length} flights on this aircraft.` 
-    };
-  }
-
-  // --- OBLIChENIA ŚCIEŻKI: CLASS (Dla tego samego typu maszyny) ---
-  const cls = ev.ledger.myFlights.filter((f) => {
-    const fId = f.aircraftId || (f as any).aircraft_id;
-    if (!fId) return false;
-    const t = ev.aircraftIcaoById.get(fId);
-    return t && t.toUpperCase() === acIcao;
-  });
-
-  if (cls.length >= MIN_CLASS) {
-    const v = median(cls.map(getHistoricalAircraftPax));
-    return { 
-      key: "aircraft", label: "Aircraft owner income",
-      value: v, ownerShare: v, pilotShare: 0,
-      sampleSize: cls.length, tier: "class",
-      confidence: confidenceFromTier("class", cls.length),
-      note: `Median across ${cls.length} flights on type ${acIcao}.` 
+      value: calculatedMed, 
+      ownerShare: calculatedMed, // Wymuszamy przypisanie zysku właściciela, by filtr go nie skasował
+      pilotShare: 0,
+      sampleSize: values.length, 
+      tier: "near",
+      confidence: 100,
+      note: `Median across ${values.length} flights directly from raw SimFly telemetry.` 
     };
   }
 
@@ -332,7 +270,7 @@ function estimateAircraftComponent(
     key: "aircraft", label: "Aircraft owner income",
     value: 0, ownerShare: 0, pilotShare: 0,
     sampleSize: 0, tier: "none", confidence: 0,
-    note: "No aircraft history found." 
+    note: "No historical flights with raw telemetry found for this aircraft." 
   };
 }
 
