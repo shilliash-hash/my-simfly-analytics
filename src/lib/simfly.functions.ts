@@ -2480,6 +2480,50 @@ export const getAirportSummary = createServerFn({ method: "GET" })
     return mapAirport(raw, []);
   });
 
+/** Batched airport-tier lookup for Mission Intelligence. Returns
+ *  { icao, category } for every ICAO SimFly recognises. Per-ICAO memoised. */
+export const getAirportsMeta = createServerFn({ method: "GET" })
+  .inputValidator((d: { icaos: string[] }) => d)
+  .handler(async ({ data }): Promise<{ icao: string; category: number }[]> => {
+    const seen = new Set<string>();
+    const targets: string[] = [];
+    for (const raw of data.icaos) {
+      const k = (raw || "").trim().toUpperCase();
+      if (!/^[A-Z0-9]{4}$/.test(k) || seen.has(k)) continue;
+      seen.add(k);
+      targets.push(k);
+    }
+    const results: { icao: string; category: number }[] = [];
+    const CONCURRENCY = 8;
+    let idx = 0;
+    async function worker() {
+      while (idx < targets.length) {
+        const icao = targets[idx++];
+        try {
+          const cat = await memo(`airport-meta:${icao}`, 6 * 60 * 60_000, async () => {
+            const url = `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`;
+            const res = await fetch(url, { headers: { Accept: "application/json" } });
+            if (!res.ok) return null;
+            const text = await res.text();
+            try {
+              const raw = JSON.parse(text) as RawAssetAirport;
+              if (!raw || raw.type !== "Airport" || !raw.icao) return null;
+              return typeof raw.category === "number" ? raw.category : null;
+            } catch {
+              return null;
+            }
+          });
+          if (cat !== null) results.push({ icao, category: cat });
+        } catch {
+          // skip
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, targets.length) }, worker));
+    return results;
+  });
+
+
 // ---- Weekly License Route Checker ------------------------------------------
 // SimFly weekly cycle is Monday 00:00 UTC → Sunday 23:59:59 UTC.
 export function currentSimflyWeekRangeUtc(now: Date = new Date()): { startIso: string; endIso: string } {
