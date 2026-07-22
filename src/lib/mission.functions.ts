@@ -1,4 +1,4 @@
-getAirportMeta// Mission Intelligence — thin server functions.
+// Mission Intelligence — thin server functions.
 // Reuses the shared income ledger from getSimflyPayload. Adds NO accounting.
 
 import { createServerFn } from "@tanstack/react-start";
