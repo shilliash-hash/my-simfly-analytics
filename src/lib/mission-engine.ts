@@ -237,12 +237,7 @@ function estimateAircraftComponent(
     (f) => f.aircraftId === acId && (f.ownAircraft || ev.ownedAircraftIds.has(acId!)),
   );
 
-  const paxAircraftHas = ownRows.some((r) => {
-  const airplaneObj = (r as any).airplane || r;
-  const val = airplaneObj?.pax ?? airplaneObj?.earnedPax ?? 0;
-  return Number(val) > 0;
-});
-
+const paxAircraftHas = ownRows.length > 0;
 
   // Direct: same aircraft × same corridor.
   const direct = ownRows.filter((f) => f.originIcao === dep && f.destIcao === arr);
