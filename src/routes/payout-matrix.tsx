@@ -2,11 +2,17 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { getSimflyPayload, getAirportPayoutMatrix } from "@/lib/simfly.functions";
+import { getSimflyPayload, getAirportPayoutMatrix, getAllAirportPayoutMatrices } from "@/lib/simfly.functions";
 import type { AirportPayoutMatrix, PayoutMatrixCell } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
+import { airportUpgradeCost } from "@/lib/airport-upgrade-costs";
+function formatUpgradeCost(pax: number): string {
+  if (pax >= 1000) return `${(pax / 1000).toFixed(pax >= 10000 ? 0 : 1)}k`;
+  if (pax >= 100) return Math.round(pax).toString();
+  return pax.toFixed(pax >= 10 ? 0 : 2);
+}
 import {
   Dialog,
   DialogContent,
@@ -81,7 +87,181 @@ function PayoutMatrixPage() {
       {icao ? <MatrixCard icao={icao} pages={pages} /> : (
         <p className="text-foreground/70 text-sm">No airports available for this pilot.</p>
       )}
+       <div className="mt-10">
+        <CompareCard airports={airports} pages={pages} />
+      </div>
     </AppShell>
+  );
+}
+type AirportMeta = { icao: string; name: string; category: number; level: number };
+function CompareCard({
+  airports,
+  pages,
+}: {
+  airports: AirportMeta[];
+  pages: number;
+}) {
+  const fn = useServerFn(getAllAirportPayoutMatrices);
+  const { keyTag, payload } = useSimflyArgs();
+  const adminToken = useAdminToken();
+  const [tier, setTier] = useState<number>(1);
+  const { data, isFetching, isError, error, refetch } = useQuery({
+    queryKey: ["payout-matrix", "compare-v1", keyTag, pages, adminToken ? "admin" : "user"],
+    queryFn: () =>
+      fn({
+        data: {
+          pages,
+          username: payload?.username,
+          ...(adminToken ? { adminToken } : {}),
+        },
+      }),
+    staleTime: 15 * 60_000,
+    retry: (_n, e) => !(e instanceof Error && e.message.includes("HUB_SUPPORT_REQUIRED")),
+  });
+  if (isError) {
+    if (error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
+      return <HubSupportGate featureName="The cross-airport comparison table" />;
+    }
+    return (
+      <div className="rounded-lg border border-border bg-card p-6">
+        <p className="text-sm text-destructive">Failed to load cross-airport comparison.</p>
+        <button onClick={() => refetch()} className="mt-3 text-xs underline">Retry</button>
+      </div>
+    );
+  }
+  // Sort columns: highest airport tier/level first, then ICAO.
+  const columns = useMemo(
+    () =>
+      [...airports].sort(
+        (a, b) =>
+          b.category - a.category ||
+          b.level - a.level ||
+          a.icao.localeCompare(b.icao),
+      ),
+    [airports],
+  );
+  const matrixByIcao = useMemo(() => {
+    const m = new Map<string, AirportPayoutMatrix>();
+    for (const mx of data?.matrices ?? []) m.set(mx.icao.toUpperCase(), mx);
+    return m;
+  }, [data]);
+  // Build lookup for the selected tier: [icao][level] => cell
+  const cellFor = (icao: string, level: number): PayoutMatrixCell | undefined => {
+    const mx = matrixByIcao.get(icao.toUpperCase());
+    if (!mx) return undefined;
+    return mx.cells.find((c) => c.tier === tier && c.level === level);
+  };
+  // Determine which levels appear anywhere for this tier (fallback to 1..10).
+  const levels = useMemo(() => {
+    const set = new Set<number>();
+    for (const mx of data?.matrices ?? []) {
+      for (const c of mx.cells) if (c.tier === tier) set.add(c.level);
+    }
+    if (set.size === 0) return [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    return [...set].sort((a, b) => a - b);
+  }, [data, tier]);
+  const maxAvg = useMemo(() => {
+    let m = 0;
+    for (const mx of data?.matrices ?? []) {
+      for (const c of mx.cells) if (c.tier === tier && c.avgPax > m) m = c.avgPax;
+    }
+    return m || 1;
+  }, [data, tier]);
+  const [selected, setSelected] = useState<{ icao: string; cell: PayoutMatrixCell } | null>(null);
+  return (
+    <section className="rounded-lg border border-border bg-card overflow-hidden">
+      <header className="flex flex-wrap items-baseline justify-between gap-3 px-5 py-4 border-b border-border">
+        <div>
+          <h2 className="text-lg font-semibold text-foreground">
+            Cross-airport comparison · Aircraft Tier {tier}
+          </h2>
+          <p className="text-xs text-foreground/60 mt-1">
+            Same 250-flight sample as the table above. Pick an aircraft tier; each
+            column is one of your airports (highest tier/level first) and each row
+            is that tier's aircraft level. Click any cell to inspect its flights.
+            {isFetching ? " · refreshing…" : ""}
+          </p>
+        </div>
+        <label className="text-xs uppercase tracking-wider text-foreground/60">
+          Aircraft Tier
+          <select
+            value={tier}
+            onChange={(e) => setTier(Number(e.target.value))}
+            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground min-w-[10rem]"
+          >
+            {[1, 2, 3, 4, 5, 6, 7].map((t) => (
+              <option key={t} value={t}>Tier {t}</option>
+            ))}
+          </select>
+        </label>
+      </header>
+      {!data ? (
+        <div className="p-6 text-sm text-foreground/60">
+          Sampling flight history for all {airports.length} airport{airports.length === 1 ? "" : "s"}…
+        </div>
+      ) : columns.length === 0 ? (
+        <div className="p-6 text-sm text-foreground/60">No airports available for this pilot.</div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wider text-foreground/60">
+                <th className="text-left px-4 py-2 sticky left-0 bg-card z-10">Level</th>
+                  {columns.map((a) => {
+                  const nextLevel = a.level + 1;
+                  const canUpgrade = a.level < 10 && a.category >= 1 && a.category <= 6;
+                  const cost = canUpgrade ? airportUpgradeCost(a.category, nextLevel) : null;
+                  return (
+                    <th key={a.icao} className="px-3 py-2 text-right whitespace-nowrap align-bottom">
+                      <div className="text-[10px] font-normal text-instrument mb-1">
+                        {cost !== null
+                          ? <>↑L{nextLevel}: <span className="font-semibold">{formatUpgradeCost(cost)}</span> PAX</>
+                          : a.level >= 10 ? "Max level" : "—"}
+                      </div>
+                      <div className="font-semibold text-foreground/80">{a.icao}</div>
+                      <div className="text-[10px] font-normal text-foreground/50">
+                        T{a.category} · L{a.level}
+                      </div>
+                    </th>
+                  );
+                })}
+              </tr>
+            </thead>
+            <tbody>
+              {levels.map((l) => (
+                <tr key={l} className="border-t border-border/60">
+                  <th className="text-left px-4 py-2 font-medium text-foreground/80 sticky left-0 bg-card z-10">
+                    L{l}
+                  </th>
+                  {columns.map((a) => {
+                    const cell = cellFor(a.icao, l);
+                    return (
+                      <MatrixCellTd
+                        key={a.icao}
+                        cell={cell}
+                        maxAvg={maxAvg}
+                        onOpen={() => cell && setSelected({ icao: a.icao, cell })}
+                      />
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <footer className="px-5 py-3 border-t border-border text-[11px] text-foreground/50">
+        Same data source and popup as the per-airport matrix above — this view just
+        transposes it so you can compare the same aircraft tier/level across all your
+        airports. Useful when deciding whether it's more profitable to upgrade a
+        mid-tier airport with strong traffic than a higher-tier airport with less flow.
+      </footer>
+      <CellDetailsDialog
+        icao={selected?.icao ?? ""}
+        cell={selected?.cell ?? null}
+        onClose={() => setSelected(null)}
+      />
+    </section>
   );
 }
 
