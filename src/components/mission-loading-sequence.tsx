@@ -21,26 +21,22 @@ type Phase = {
 
 const PHASES: Phase[] = [
   {
-    label: "Loading accounting ledger",
-    subtext: "Math Goblins are opening the accounting vault...",
+    label: "Math Goblins are opening the accounting vault...",
     icon: Database,
     accent: "runway",
   },
   {
-    label: "Analysing historical flights",
-    subtext: "Searching thousands of completed flights.",
+    label: "Searching thousands of completed flights.",
     icon: History,
     accent: "runway",
   },
   {
-    label: "Calculating aircraft contribution",
-    subtext: "Negotiating with aircraft-owner goblins...",
+    label: "Negotiating with aircraft-owner goblins...",
     icon: Plane,
     accent: "runway",
   },
   {
-    label: "Calculating airport contribution",
-    subtext: "Comparing airport performance across your network.",
+    label: "Comparing airport performance across your network.",
     icon: Building2,
     accent: "runway",
   },
@@ -51,26 +47,23 @@ const PHASES: Phase[] = [
     accent: "instrument",
   },
   {
-    label: "Detecting weekly bonuses",
-    subtext: "Looking for eligible airport movements.",
+    label: "Looking for eligible airport movements.",
     icon: Sparkles,
     accent: "instrument",
   },
   {
-    label: "Building prediction",
-    subtext: "Math Goblins are arguing over the final numbers...",
+    label: "Math Goblins are arguing over the final numbers...",
     icon: Rocket,
     accent: "runway",
   },
   {
-    label: "Finalising analytics",
-    subtext: "Prediction engine unanimous. Preparing your briefing.",
+    label: "Prediction engine unanimous. Preparing your briefing.",
     icon: LineChart,
     accent: "runway",
   },
 ];
 
-const CADENCE_MS = 1600;
+const CADENCE_MS = 1900;
 
 function usePhaseIndex() {
   const [idx, setIdx] = useState(0);
