@@ -2523,6 +2523,84 @@ export const getAirportsMeta = createServerFn({ method: "GET" })
     return results;
   });
 
+// airport - aircraft - upgrade relation (comparison matrix) 
+
+export type AirportPayoutMatricesBundle = {
+  matrices: AirportPayoutMatrix[];
+  fetchedAt: string;
+};
+export const getAllAirportPayoutMatrices = createServerFn({ method: "GET" })
+  .inputValidator((d?: { pages?: number; username?: string; adminToken?: string }) => d ?? {})
+  .handler(async ({ data }): Promise<AirportPayoutMatricesBundle> => {
+    const { username, nonce } = await resolveIdentity({ username: data.username });
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    if (!(await hasWeeklyHubSupport(username, { adminToken: data.adminToken }))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
+    const assets = await fetchJSON<RawAssetsAll>(
+      `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
+    );
+    const icaos = (assets?.items ?? [])
+      .filter((it): it is RawAssetAirport => it.type === "Airport")
+      .map((it) => it.icao);
+    const maxPages = Math.min(Math.max(data.pages ?? 63, 1), 120);
+    const matrices = await Promise.all(
+      icaos.map(async (icao): Promise<AirportPayoutMatrix> => {
+        const { rows, pagesFetched, sampled, excluded } =
+          await collectAirportHistoryFlights(icao, username, nonce, { maxPages });
+        type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
+        const buckets = new Map<string, Bucket>();
+        const tierSet = new Set<number>();
+        const levelSet = new Set<number>();
+        for (const row of rows) {
+          const tier = row.aircraftTier!;
+          const level = row.aircraftLevel!;
+          tierSet.add(tier);
+          levelSet.add(level);
+          const key = `${tier}:${level}`;
+          const b = buckets.get(key) ?? { sum: 0, n: 0, samples: [] };
+          b.sum += row.basePax;
+          b.n += 1;
+          b.samples.push({
+            flightId: row.flightId,
+            ts: row.ts,
+            role: row.role,
+            otherIcao: row.otherIcao,
+            distanceNm: row.distanceNm,
+            aircraftName: row.aircraftName,
+            tailNumber: row.tailNumber,
+            pilot: row.pilot,
+            basePax: row.basePax,
+            bonusPax: row.bonusPax,
+            totalPax: row.ownerCredit,
+          });
+          buckets.set(key, b);
+        }
+        const cells: PayoutMatrixCell[] = [];
+        for (const [key, b] of buckets) {
+          const [tier, level] = key.split(":").map(Number);
+          const samples = b.samples
+            .sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0))
+            .slice(0, 200);
+          cells.push({ tier, level, avgPax: b.sum / b.n, flights: b.n, samples });
+        }
+        return {
+          icao,
+          pagesFetched,
+          flightsSampled: sampled,
+          flightsUsed: rows.length,
+          flightsExcluded: excluded,
+          tiers: [...tierSet].sort((a, b) => a - b),
+          levels: [...levelSet].sort((a, b) => a - b),
+          cells,
+          fetchedAt: new Date().toISOString(),
+        };
+      }),
+    );
+    return { matrices, fetchedAt: new Date().toISOString() };
+  });
+
+
 
 // ---- Weekly License Route Checker ------------------------------------------
 // SimFly weekly cycle is Monday 00:00 UTC → Sunday 23:59:59 UTC.
