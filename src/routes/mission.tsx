@@ -404,7 +404,7 @@ function PlannerResult({
   if (!hasRun) {
     return (
       <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to get some estiamtions.
+        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to get flight income estimations.
       </div>
     );
   }
