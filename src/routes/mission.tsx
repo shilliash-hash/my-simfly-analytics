@@ -157,7 +157,7 @@ function MissionPlanner() {
           {canRun
             ? inputsChanged && runToken > 0
               ? "Inputs changed — press Spool Prediction Engine to refresh."
-              : "Ready. Press Spool Prediction Engine so engine roar wakes up math guru."
+              : "Ready. Press Spool Prediction Engine so engine roar wakes up math goblins."
             : "Pick aircraft, licence, departure and arrival to unlock Engine Spooling."}
         </div>
         <button
@@ -172,7 +172,7 @@ function MissionPlanner() {
           )}
         >
           <Wind className="h-4 w-4" />
-          {prediction.isFetching ? "Spooling..." : "Spooling Predcition Engine"}
+          {prediction.isFetching ? "Spooling..." : "Spool Predcition Engine"}
         </button>
       </section>
 
