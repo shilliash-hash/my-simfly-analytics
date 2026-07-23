@@ -690,6 +690,7 @@ function snapshotFromLive(f: MyLiveFlight): FlightSnapshot {
     licence: f.licenceCode,
     sim: f.sim,
     etaMs: f.etaMs,
+    departureMs: f.departureMs,
     distanceNm: f.distanceNm,
   };
 }
