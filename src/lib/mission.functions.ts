@@ -153,6 +153,11 @@ export const predictMissionFn = createServerFn({ method: "GET" })
     for (const m of meta) extra[m.icao.toUpperCase()] = m.category;
 
     const ac = await resolveAircraftInputs(payload, data.aircraftId);
+    const licCode = (data.licence || "").trim().toUpperCase();
+    const licRec = licCode ? payload.licenses.find((l) => (l.code || "").toUpperCase() === licCode) : undefined;
+    const licenceTimers = licRec?.timers?.map((t) => ({
+      kind: t.kind, minutesAvailable: t.minutesAvailable, minutesCap: t.minutesCap,
+    }));
     const inputs: MissionInputs = {
       departure: { icao: data.departure.toUpperCase(), lat: gDep?.lat, lon: gDep?.lon },
       arrival: { icao: data.arrival.toUpperCase(), lat: gArr?.lat, lon: gArr?.lon },
@@ -163,6 +168,7 @@ export const predictMissionFn = createServerFn({ method: "GET" })
       licence: data.licence,
       disableDepIncome: data.disableDepIncome,
       disableArrIncome: data.disableArrIncome,
+      licenceTimers,
     };
 
     const evidence = evidenceFromPayload(payload, extra);
@@ -219,6 +225,12 @@ export const rankMissionsFn = createServerFn({ method: "GET" })
     const ac = await resolveAircraftInputs(payload, data.aircraftId);
     const evidence = evidenceFromPayload(payload);
 
+    const licCode = (data.licence || "").trim().toUpperCase();
+    const licRec = licCode ? payload.licenses.find((l) => (l.code || "").toUpperCase() === licCode) : undefined;
+    const licenceTimers = licRec?.timers?.map((t) => ({
+      kind: t.kind, minutesAvailable: t.minutesAvailable, minutesCap: t.minutesCap,
+    }));
+
     const results: RankedMission[] = [];
     for (const arr of candidates) {
       const gArr = gMap.get(arr);
@@ -228,6 +240,7 @@ export const rankMissionsFn = createServerFn({ method: "GET" })
         aircraftId: ac.aircraftId,
         aircraftIcao: ac.aircraftIcao,
         licence: data.licence,
+        licenceTimers,
       };
       const p = predictMission(inputs, evidence);
       results.push({
