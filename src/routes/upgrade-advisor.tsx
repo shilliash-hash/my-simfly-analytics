@@ -14,7 +14,8 @@ import { useSimflyArgs } from "@/lib/viewed-user";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { HubSupportGate } from "@/components/hub-support";
 import { cn } from "@/lib/utils";
-import { RefreshCw, Star } from "lucide-react";
+import { RefreshCw } from "lucide-react";
+import { UpgradeAdvisorLegend, TowerRating } from "@/components/upgrade-advisor-legend";
 
 export const Route = createFileRoute("/upgrade-advisor")({
   component: UpgradeAdvisorPage,
@@ -273,6 +274,8 @@ function UpgradeAdvisorPage() {
         )}
       </details>
 
+      {!gated && <UpgradeAdvisorLegend />}
+
       {!gated && isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
           Failed to compute advisor.{" "}
@@ -481,17 +484,15 @@ function Field({
 }
 
 function Stars({ stars }: { stars: 1 | 2 | 3 | 4 | 5 }) {
-  return (
-    <div className="flex gap-0.5" aria-label={`${stars} of 5 stars`}>
-      {[1, 2, 3, 4, 5].map((i) => (
-        <Star
-          key={i}
-          className={cn(
-            "h-4 w-4",
-            i <= stars ? "fill-instrument text-instrument" : "text-foreground/20",
-          )}
-        />
-      ))}
-    </div>
-  );
+  const tone =
+    stars === 5
+      ? "text-instrument"
+      : stars === 4
+        ? "text-runway"
+        : stars === 3
+          ? "text-tier-gold"
+          : stars === 2
+            ? "text-tier-silver"
+            : "text-muted-foreground";
+  return <TowerRating count={stars} toneClass={tone} />;
 }
