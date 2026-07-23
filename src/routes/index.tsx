@@ -676,6 +676,7 @@ type FlightSnapshot = {
   licence?: string;
   sim?: string;
   etaMs?: number;
+  departureMs?: number;   //dynamic status widget
   distanceNm?: number;
 };
 
@@ -846,73 +847,150 @@ function CurrentFlightHero({
 
 function ExpandedBanner({ snap, status }: { snap: FlightSnapshot; status: "enroute" | "arrived" }) {
   const isLive = status === "enroute";
-  // Tick once a minute so "remaining" stays fresh while en route.
+   // Tick every 10s while live so the plane pictogram glides along the route;
+  // slow to 60s after arrival so remaining/ETA text still refreshes cheaply.
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (!isLive || !snap.etaMs) return;
-    const t = setInterval(() => setTick((n) => n + 1), 60_000);
+    const interval = isLive ? 10_000 : 60_000;
+    const t = setInterval(() => setTick((n) => n + 1), interval);
     return () => clearInterval(t);
-  }, [isLive, snap.etaMs]);
+  }, [isLive]);
+  const now = Date.now();
+  let progress = isLive ? 0.5 : 1;
+  if (isLive && snap.departureMs && snap.etaMs && snap.etaMs > snap.departureMs) {
+    const raw = (now - snap.departureMs) / (snap.etaMs - snap.departureMs);
+    progress = Math.max(0.02, Math.min(1, raw));
+  }
+  const pct = progress * 100;
+  const arriving = isLive && progress >= 0.98;
   const showEta = isLive && !!snap.etaMs;
   return (
-    <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3">
-      <div className="flex items-center justify-between gap-3">
-        <div className={`mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest ${isLive ? "text-runway" : "text-instrument"}`}>
-          <Plane className="h-3.5 w-3.5" />
-          {isLive ? "Current flight" : "Last flight"}
+    <section className="panel relative mb-4 overflow-hidden rounded-xl px-4 py-3.5">
+      {/* Ambient radar wash */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 opacity-60"
+        style={{
+          background: isLive
+            ? "radial-gradient(60% 100% at 0% 50%, color-mix(in oklab, var(--runway) 12%, transparent), transparent 55%), radial-gradient(60% 100% at 100% 50%, color-mix(in oklab, var(--instrument) 10%, transparent), transparent 55%)"
+            : "radial-gradient(70% 100% at 100% 50%, color-mix(in oklab, var(--instrument) 14%, transparent), transparent 60%)",
+        }}
+      />
+      <div className="relative">
+        <div className="flex items-center justify-between gap-3">
+          <div className={`mono inline-flex items-center gap-2 text-[11px] uppercase tracking-widest ${isLive ? "text-runway" : "text-instrument"}`}>
+            <Plane className="h-3.5 w-3.5 -rotate-45" />
+            {isLive ? "Current flight" : "Last flight"}
+          </div>
+          <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${
+                isLive
+                  ? "animate-pulse bg-runway shadow-[0_0_10px_var(--runway)]"
+                  : "bg-instrument shadow-[0_0_10px_var(--instrument)]"
+              }`}
+            />
+            <span className={isLive ? "text-runway" : "text-instrument"}>{isLive ? "Live" : "Arrived"}</span>
+          </div>
         </div>
-        <div className="mono inline-flex items-center gap-1.5 text-[10px] uppercase tracking-widest">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              isLive
-                ? "animate-pulse bg-runway shadow-[0_0_8px_var(--runway)]"
-                : "bg-instrument shadow-[0_0_8px_var(--instrument)]"
-            }`}
-          />
-          <span className={isLive ? "text-runway" : "text-instrument"}>{isLive ? "Live" : "Arrived"}</span>
+                {/* Route strip */}
+        <div className="mt-3 flex items-center gap-3">
+          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.origin}</div>
+          <div className="relative h-8 flex-1">
+            {/* Endpoint dots */}
+            <span
+              aria-hidden
+              className="absolute left-0 top-1/2 h-2 w-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-runway shadow-[0_0_8px_var(--runway)]"
+            />
+            <span
+              aria-hidden
+              className={`absolute right-0 top-1/2 h-2 w-2 translate-x-1/2 -translate-y-1/2 rounded-full ${
+                isLive
+                  ? "bg-instrument shadow-[0_0_8px_var(--instrument)]"
+                  : "bg-instrument shadow-[0_0_10px_var(--instrument)]"
+              }`}
+            />
+            {/* Dotted "ahead" line (full width, sits underneath) */}
+            <div
+              aria-hidden
+              className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2"
+              style={{
+                backgroundImage:
+                  "repeating-linear-gradient(to right, color-mix(in oklab, var(--runway) 45%, transparent) 0 4px, transparent 4px 10px)",
+              }}
+            />
+            {/* Solid "behind" line (from origin up to the plane) */}
+            <div
+              aria-hidden
+              className="absolute left-0 top-1/2 h-[2px] -translate-y-1/2 rounded-full transition-[width] duration-[1200ms] ease-out"
+              style={{
+                width: `${pct}%`,
+                background:
+                  "linear-gradient(90deg, var(--runway), color-mix(in oklab, var(--runway) 70%, var(--instrument)))",
+                boxShadow: "0 0 10px color-mix(in oklab, var(--runway) 55%, transparent)",
+              }}
+            />
+            {/* Moving plane pictogram */}
+            <div
+              className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-[left] duration-[1200ms] ease-out"
+              style={{ left: `${pct}%` }}
+            >
+              <div
+                className={`grid h-6 w-6 place-items-center rounded-full ${
+                  isLive ? "bg-deck-elevated" : "bg-deck-elevated"
+                }`}
+                style={{
+                  boxShadow: isLive
+                    ? "0 0 0 1px color-mix(in oklab, var(--runway) 55%, transparent), 0 0 14px color-mix(in oklab, var(--runway) 55%, transparent)"
+                    : "0 0 0 1px color-mix(in oklab, var(--instrument) 55%, transparent), 0 0 14px color-mix(in oklab, var(--instrument) 55%, transparent)",
+                }}
+              >
+                <Plane
+                  className={`h-3.5 w-3.5 -rotate-45 ${isLive ? "text-runway" : "text-instrument"}`}
+                />
+              </div>
+              {isLive && (
+                <span
+                  aria-hidden
+                  className="mono absolute left-1/2 top-full mt-1 -translate-x-1/2 whitespace-nowrap text-[9px] uppercase tracking-widest text-runway/80"
+                >
+                  {Math.round(pct)}%
+                </span>
+              )}
+            </div>
+          </div>
+          <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.destination}</div>
         </div>
-      </div>
+      
 
-      <div className="mt-2 flex items-center gap-3">
-        <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.origin}</div>
-        <div className="relative flex-1">
-          <div className={`h-px w-full ${isLive ? "bg-gradient-to-r from-runway/40 via-runway/30 to-instrument/40" : "bg-gradient-to-r from-instrument/30 via-instrument/20 to-instrument/30"}`} />
-          <Plane
-            className={`absolute top-1/2 h-4 w-4 ${isLive ? "text-runway" : "text-instrument"}`}
-            style={{ left: isLive ? "50%" : "100%", transform: "translate(-50%, -50%)" }}
-          />
-        </div>
-        <div className="font-display text-xl font-semibold tracking-tight md:text-2xl">{snap.destination}</div>
-      </div>
-
-      <div className="mono mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-muted-foreground">
-        <span className="text-foreground">{snap.aircraft}</span>
-        {snap.tail && <span>· {snap.tail}</span>}
-        {snap.licence && (
-          <span className="inline-flex items-center gap-1">
-            · <IdCard className="h-3 w-3" /> {snap.licence}
-          </span>
-        )}
-        {snap.sim && <span>· {snap.sim}</span>}
-        <span className={`ml-auto ${isLive ? "text-runway/80" : "text-instrument/80"}`}>
-          {isLive ? "En route" : "Arrived"}
-        </span>
-      </div>
-
-      {showEta && (
-        <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2 text-xs">
-          <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">ETA</span>
-          <span className="font-display text-sm font-semibold text-runway">{formatEtaUtc(snap.etaMs!)}</span>
-          <span className="mono text-[11px] uppercase tracking-widest text-foreground">
-            {formatRemainingFromNow(snap.etaMs!)}
-          </span>
-          {snap.distanceNm && (
-            <span className="mono ml-auto text-[10px] uppercase tracking-widest text-muted-foreground">
-              {Math.round(snap.distanceNm)} NM
+   <div className="mono mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-widest text-muted-foreground">
+          <span className="text-foreground">{snap.aircraft}</span>
+          {snap.tail && <span>· {snap.tail}</span>}
+          {snap.licence && (
+            <span className="inline-flex items-center gap-1">
+              · <IdCard className="h-3 w-3" /> {snap.licence}
             </span>
           )}
+     {snap.sim && <span>· {snap.sim}</span>}
+          <span className={`ml-auto ${isLive ? "text-runway/80" : "text-instrument/80"}`}>
+            {isLive ? (arriving ? "Arriving" : "En route") : "Arrived"}
+          </span>
         </div>
-      )}
+              {showEta && (
+          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-border pt-2 text-xs">
+            <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">ETA</span>
+            <span className="font-display text-sm font-semibold text-runway">{formatEtaUtc(snap.etaMs!)}</span>
+            <span className="mono text-[11px] uppercase tracking-widest text-foreground">
+              {formatRemainingFromNow(snap.etaMs!)}
+            </span>
+            {snap.distanceNm && (
+              <span className="mono ml-auto text-[10px] uppercase tracking-widest text-muted-foreground">
+                {Math.round(snap.distanceNm)} NM
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </section>
   );
 }
