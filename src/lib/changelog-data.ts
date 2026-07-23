@@ -8,6 +8,55 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
+ {
+  id: "1",
+  version: "v 0.92 EXPERIMENTAL 18.Jul.26",
+  type: ["FEATURE", "FIX"],
+  text: `• Brand new prediction engine for planned flights.
+• Predicts expected PAX before departure.
+• Full component-by-component income analysis.
+• Statistical confidence scoring.
+• Transparent prediction methodology.
+• Experimental self-learning prediction model.
+• Historical Intelligence - Prediction now uses your complete historical flight ledger.
+• Dynamic reference matrices built automatically from historical flights.
+• Aircraft Tier × Airport Tier intelligence.
+• Airport reference matrix.
+• Aircraft reference matrix.
+• Near-history and direct-history matching.
+• Community Intelligence - optional mode.
+• Supplements your own data with anonymized global statistics.
+• Community influence decreases automatically as your own history grows.
+• Community never replaces your own data.
+• Transparent contribution shown in prediction details.
+• Aircraft Intelligence - prediction for owned aircraft.
+• Generic aircraft support (Tier 1–7).
+• Dedicated Prediction Ledger for aircraft income.
+• Owner-income prediction separated from accounting.
+• Historical aircraft median prediction.
+• Improved aircraft confidence model.
+• Airport Intelligence - prediction based on airport tier.
+• Historical airport intelligence.
+• Weekly bonus prediction.
+• Independent departure and arrival analysis.
+• Improved handling of sparse historical data.
+• Licence Intelligence - historical licence median prediction.
+• Weekly eligibility verification.
+• Confidence-aware licence estimation.
+• Decision Support Workflow
+• Planner redesigned into an intentional decision-support workflow.
+• Added Begin Data Mining execution model.
+• Eliminated unnecessary live recalculations.
+• Resource-efficient prediction execution.
+• Prediction Accuracy Framework - now combines multiple evidence sources:
+• Direct historical evidence
+• Near historical evidence
+• Reference matrices
+• Community Intelligence
+• Statistical fallbacks
+• Each prediction displays confidence based on actual evidence quality.
+`
+},      
   {
   id: "1",
   version: "v 0.911 STABLE 18.Jul.26",
