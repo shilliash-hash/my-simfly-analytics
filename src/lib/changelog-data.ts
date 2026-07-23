@@ -10,7 +10,7 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
  {
   id: "1",
-  version: "v 0.92 EXPERIMENTAL 18.Jul.26",
+  version: "v 0.92 EXPERIMENTAL 23.Jul.26",
   type: ["FEATURE", "FIX"],
   text: `• Brand new prediction engine for planned flights.
 • Predicts expected PAX before departure.
