@@ -11,6 +11,7 @@ import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
 } from "@/components/app-shell";
 import { HubSupportCard } from "@/components/hub-support";
+import { ReadyStatusBadge } from "@/components/ready-status-badge";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, runFleetActivityBackfill } from "@/lib/simfly.functions";
@@ -153,30 +154,11 @@ const { data: income30d } = useQuery({
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-3">
               <PilotSwitcher current={viewedUser} />
-              
-             {/* DYSKRETNY MINI-GUZICZEK DEBUGGINGU / NAPRAWY FLOTY OBOK AWATARA */}
-              <button
-                type="button"
-                title="Execute Fleet Reconciliation Repair (Dev Tool)"
-                onClick={async () => {
-                  try {
-                    const res = await triggerFleetRepair();
-                    if (res && (res as any).error) {
-                      alert(`Error: ${(res as any).error}`);
-                    } else {
-                      alert(`Fleet Sync Success!\n\nProcessed logs: ${res?.processed || 0}\nFixed missing gaps: ${res?.inserted || 0}`);
-                      qc.invalidateQueries({ queryKey: ["simfly"] });
-                    }
-                  } catch (err) {
-                    alert("Failed to execute server backfill repair.");
-                  }
-                }}
-                className="mono flex h-9 w-9 cursor-pointer items-center justify-center rounded-md border border-border/40 bg-secondary/20 text-muted-foreground transition-all hover:bg-amber-500/10 hover:text-amber-400 hover:border-amber-500/30"
-              >
-                <History className="h-3.5 w-3.5" />
-              </button>
-              
-              {/* twój awatar */}
+             <ReadyStatusBadge
+              airplanes={data.airplanes}
+              licenses={data.licenses}
+              liveFlights={myFlights}
+            />
               {data.me.avatarUrl ? (
                 <img
                   src={data.me.avatarUrl}
