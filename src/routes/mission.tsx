@@ -156,13 +156,13 @@ function MissionPlanner() {
         <div className="text-xs text-muted-foreground">
           {canRun
             ? inputsChanged && runToken > 0
-              ? "Inputs changed — press Spool Prediction Engine to refresh."
-              : "Ready. Press Spool Prediction Engine to unleash mathematical genius."
-            : "Pick aircraft, licence, departure and arrival to unlock Spooling Prediction Engine."}
+              ? "Inputs changed — press Begin Data Mining to refresh."
+              : "Ready. Press Begin Data Mining to run the prediction."
+            : "Pick aircraft, licence, departure and arrival to unlock Data Mining."}
         </div>
         <button
           type="button"
-          onClick={SpoolPredictionEngine}
+          onClick={beginDataMining}
           disabled={!canRun || prediction.isFetching}
           className={cn(
             "mono inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs uppercase tracking-widest transition",
@@ -172,7 +172,7 @@ function MissionPlanner() {
           )}
         >
           <Pickaxe className="h-4 w-4" />
-          {prediction.isFetching ? "Spooling…" : "Begin Prediction Engine Spooling"}
+          {prediction.isFetching ? "Mining…" : "Begin Data Mining"}
         </button>
       </section>
 
@@ -283,7 +283,7 @@ function EndpointDisableToggle({
     ? "—"
     : owned
       ? "owned"
-      : "Ownership status check";
+      : "not-owned / system?";
   return (
     <label className="flex items-start gap-2 text-xs text-muted-foreground">
       <input
@@ -296,7 +296,7 @@ function EndpointDisableToggle({
         <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{role}</span>{" "}
         <span className="mono text-foreground">{icao || "—"}</span>{" "}
         <span className={owned ? "text-runway" : "text-instrument"}>({status})</span>
-        <span className="block text-[11px]">When checked: no basic nor bonus income will be calculated by prediction engine (Bank owned/non-player airport).</span>
+        <span className="block text-[11px]">Treat as system / non-income airport (zero airport component and weekly bonus for this endpoint).</span>
       </span>
     </label>
   );
@@ -404,7 +404,7 @@ function PlannerResult({
   if (!hasRun) {
     return (
       <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to run a prediction.
+        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Begin Data Mining</span> to run a prediction.
       </div>
     );
   }
@@ -657,4 +657,3 @@ function Tile({ label, value, icon }: { label: string; value: string; icon?: Rea
     </div>
   );
 }
-
