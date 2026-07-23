@@ -156,13 +156,13 @@ function MissionPlanner() {
         <div className="text-xs text-muted-foreground">
           {canRun
             ? inputsChanged && runToken > 0
-              ? "Inputs changed — press Begin Data Mining to refresh."
-              : "Ready. Press Begin Data Mining to run the prediction."
-            : "Pick aircraft, licence, departure and arrival to unlock Data Mining."}
+              ? "Inputs changed — press Spool Prediction Engine to refresh."
+              : "Ready. Press Spool Prediction Engine to unleash mathematical genius."
+            : "Pick aircraft, licence, departure and arrival to unlock Spooling Prediction Engine."}
         </div>
         <button
           type="button"
-          onClick={beginDataMining}
+          onClick={SpoolPredictionEngine}
           disabled={!canRun || prediction.isFetching}
           className={cn(
             "mono inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs uppercase tracking-widest transition",
@@ -172,7 +172,7 @@ function MissionPlanner() {
           )}
         >
           <Pickaxe className="h-4 w-4" />
-          {prediction.isFetching ? "Mining…" : "Begin Data Mining"}
+          {prediction.isFetching ? "Spooling…" : "Begin Prediction Engine Spooling"}
         </button>
       </section>
 
@@ -404,7 +404,7 @@ function PlannerResult({
   if (!hasRun) {
     return (
       <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Begin Data Mining</span> to run a prediction.
+        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to run a prediction.
       </div>
     );
   }
@@ -473,6 +473,21 @@ function PlannerResult({
                   <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
                     {c.tier}
                   </span>
+                  {c.timer?.exhausted && (
+                    <span className="mono rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-destructive ring-1 ring-destructive/30">
+                      Timer exhausted
+                    </span>
+                  )}
+                  {c.timer && !c.timer.exhausted && c.timer.scale < 1 && (
+                    <span className="mono rounded bg-instrument/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-instrument ring-1 ring-instrument/30">
+                      Timer limited {Math.round(c.timer.scale * 100)}%
+                    </span>
+                  )}
+                  {c.timer && !c.timer.exhausted && c.timer.scale >= 1 && (
+                    <span className="mono rounded bg-runway/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-runway ring-1 ring-runway/30">
+                      Fits timer
+                    </span>
+                  )}
                 </div>
                 <span className="mono text-runway">{c.value.toFixed(2)} PAX</span>
               </div>
@@ -483,6 +498,15 @@ function PlannerResult({
                 </div>
               )}
               <div className="mt-1 text-xs text-muted-foreground">{c.note}</div>
+              {c.timer && (
+                <div className="mono mt-1 text-[11px] text-muted-foreground">
+                  Historical: {c.timer.historicalValue.toFixed(2)} PAX
+                  {c.timer.limiting && c.timer.minutesCap !== undefined && (
+                    <> · {c.timer.limiting}: {c.timer.minutesAvailable} / {c.timer.minutesCap} min</>
+                  )}
+                  {" · "}Effective today: <span className={c.timer.exhausted ? "text-destructive" : "text-runway"}>{c.value.toFixed(2)} PAX</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -633,3 +657,4 @@ function Tile({ label, value, icon }: { label: string; value: string; icon?: Rea
     </div>
   );
 }
+
