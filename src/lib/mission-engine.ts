@@ -45,6 +45,8 @@ export type MissionInputs = {
   disableDepIncome?: boolean;
   /** Manually zero the arrival airport component + weekly bonus (system/non-income airport). */
   disableArrIncome?: boolean;
+  /** Live licence timers (TIMER24 + TIMER84). Scales licence prediction to today's usable minutes. */
+  licenceTimers?: { kind: "TIMER24" | "TIMER84"; minutesAvailable: number; minutesCap: number }[];
 };
 
 export type ConfidenceTier = "direct" | "near" | "class" | "formula" | "none";
@@ -59,6 +61,16 @@ export type ComponentEstimate = {
   tier: ConfidenceTier;
   confidence: number;      // 0..100
   note: string;
+  /** Optional timer metadata surfaced to the UI (licence component only for now). */
+  timer?: {
+    historicalValue: number;
+    exhausted: boolean;
+    scale: number;                     // 0..1 applied to historicalValue
+    limiting?: "TIMER24" | "TIMER84";
+    minutesAvailable?: number;
+    minutesCap?: number;
+    reason: string;
+  };
 };
 
 export type WeeklyBonusPart = {
@@ -609,8 +621,12 @@ function assembleWeeklyBonus(
   };
 }
 
-/** Licence component — full historical baseline (real historical averages already
- *  encode landing quality). */
+/** Licence component — historical median scaled by the live 24h/84h timer state.
+ *  PAX is only earned while BOTH timers have available minutes. When active, the
+ *  effective share of the historical median equals min(avail24, avail84) / cap24.
+ *  Flight duration is irrelevant to the scale. The historical baseline (median,
+ *  sample size, tier, confidence) is never modified — scaling only affects
+ *  today's effective value. */
 function estimateLicenceComponent(
   inputs: MissionInputs,
   baseline: { value: number; sampleSize: number; tier: ConfidenceTier },
@@ -622,15 +638,73 @@ function estimateLicenceComponent(
       sampleSize: 0, tier: "none", confidence: 20,
       note: "No licence selected." };
   }
-  const value = baseline.value;
-  return { key: "licence", label: "Licence income",
+  const historicalValue = baseline.value;
+  const hasHistory = baseline.sampleSize > 0;
+  const timers = (inputs.licenceTimers ?? []).filter((t) => t.minutesCap > 0);
+  const hasTimers = timers.length > 0;
+  const t24 = timers.find((t) => t.kind === "TIMER24");
+  const t84 = timers.find((t) => t.kind === "TIMER84");
+  const exhausted = hasTimers && timers.some((t) => t.minutesAvailable <= 0);
+
+  let scale = 1;
+  let limiting: "TIMER24" | "TIMER84" | undefined;
+  let limitingTimer: { kind: "TIMER24" | "TIMER84"; minutesAvailable: number; minutesCap: number } | undefined;
+  let reason = "";
+
+  if (exhausted) {
+    const t = timers.find((x) => x.minutesAvailable <= 0)!;
+    limiting = t.kind;
+    limitingTimer = t;
+    scale = 0;
+    reason = `Licence timer exhausted (${limiting}: ${t.minutesAvailable} / ${t.minutesCap} min). Today's contribution: 0.00 PAX. Historical median unchanged.`;
+  } else if (hasTimers) {
+    const avail24 = t24?.minutesAvailable ?? Infinity;
+    const avail84 = t84?.minutesAvailable ?? Infinity;
+    const cap24 = t24?.minutesCap;
+    if (cap24 && cap24 > 0) {
+      // 24h cap defines "a full day"; 84h merely gates whether more can be spent.
+      const usable = Math.min(avail24, avail84);
+      scale = Math.min(1, Math.max(0, usable / cap24));
+      if (avail24 <= avail84) { limiting = "TIMER24"; limitingTimer = t24; }
+      else { limiting = "TIMER84"; limitingTimer = t84; }
+      if (scale >= 1) {
+        reason = `Both timers active (24h: ${t24?.minutesAvailable}/${t24?.minutesCap} min, 84h: ${t84?.minutesAvailable ?? "n/a"}/${t84?.minutesCap ?? "n/a"} min). Full historical median applies. Effective today: ${historicalValue.toFixed(2)} PAX.`;
+        limiting = undefined;
+        limitingTimer = undefined;
+      } else {
+        const kindLabel = limiting === "TIMER24" ? "24h" : "84h";
+        reason = `Limited by ${kindLabel} timer (${limitingTimer!.minutesAvailable} / ${cap24} min of daily cap usable). Scale ${(scale * 100).toFixed(0)}% of historical median. Effective today: ${(historicalValue * scale).toFixed(2)} PAX.`;
+      }
+    } else {
+      reason = `Timer state partial (no 24h cap); full historical contribution used while active.`;
+    }
+  }
+  const value = historicalValue * scale;
+
+  const histNote = hasHistory
+    ? `Historical median: ${historicalValue.toFixed(2)} PAX across ${baseline.sampleSize} flights on ${code} (unchanged by timer state).`
+    : `No history on ${code} yet.`;
+  const timerNote = hasTimers ? ` ${reason}` : "";
+
+  return {
+    key: "licence", label: "Licence income",
     value, ownerShare: 0, pilotShare: value,
     sampleSize: baseline.sampleSize,
     tier: baseline.tier,
     confidence: confidenceFromTier(baseline.tier, baseline.sampleSize),
-    note: baseline.sampleSize > 0
-      ? `Historical median: ${value.toFixed(2)} PAX across ${baseline.sampleSize} flights on ${code}.`
-      : `No history on ${code} yet.` };
+    note: histNote + timerNote,
+    timer: hasTimers
+      ? {
+          historicalValue,
+          exhausted,
+          scale,
+          limiting,
+          minutesAvailable: limitingTimer?.minutesAvailable,
+          minutesCap: limitingTimer?.minutesCap,
+          reason,
+        }
+      : undefined,
+  };
 }
 
 // (Legacy estimateWeeklyBonus removed — see weeklyPart/assembleWeeklyBonus above.)
