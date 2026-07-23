@@ -20,17 +20,57 @@ type Phase = {
 };
 
 const PHASES: Phase[] = [
-  { label: "Loading accounting ledger", icon: Database, accent: "runway" },
-  { label: "Analysing historical flights", icon: History, accent: "runway" },
-  { label: "Calculating aircraft contribution", icon: Plane, accent: "runway" },
-  { label: "Calculating airport contribution", icon: Building2, accent: "runway" },
-  { label: "Analysing licence history", icon: BadgeCheck, accent: "instrument" },
-  { label: "Detecting weekly bonuses", icon: Sparkles, accent: "instrument" },
-  { label: "Building prediction", icon: Rocket, accent: "runway" },
-  { label: "Finalising analytics", icon: LineChart, accent: "runway" },
+  {
+    label: "Loading accounting ledger",
+    subtext: "Math Goblins are opening the accounting vault...",
+    icon: Database,
+    accent: "runway",
+  },
+  {
+    label: "Analysing historical flights",
+    subtext: "Searching thousands of completed flights.",
+    icon: History,
+    accent: "runway",
+  },
+  {
+    label: "Calculating aircraft contribution",
+    subtext: "Negotiating with aircraft-owner goblins...",
+    icon: Plane,
+    accent: "runway",
+  },
+  {
+    label: "Calculating airport contribution",
+    subtext: "Comparing airport performance across your network.",
+    icon: Building2,
+    accent: "runway",
+  },
+  {
+    label: "Analysing licence history",
+    subtext: "Checking licence timers and historical payouts.",
+    icon: BadgeCheck,
+    accent: "instrument",
+  },
+  {
+    label: "Detecting weekly bonuses",
+    subtext: "Looking for eligible airport movements.",
+    icon: Sparkles,
+    accent: "instrument",
+  },
+  {
+    label: "Building prediction",
+    subtext: "Math Goblins are arguing over the final numbers...",
+    icon: Rocket,
+    accent: "runway",
+  },
+  {
+    label: "Finalising analytics",
+    subtext: "Prediction engine unanimous. Preparing your briefing.",
+    icon: LineChart,
+    accent: "runway",
+  },
 ];
 
-const CADENCE_MS = 650;
+const CADENCE_MS = 1600;
 
 function usePhaseIndex() {
   const [idx, setIdx] = useState(0);
