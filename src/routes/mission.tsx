@@ -156,9 +156,9 @@ function MissionPlanner() {
         <div className="text-xs text-muted-foreground">
           {canRun
             ? inputsChanged && runToken > 0
-              ? "Inputs changed — press Begin Data Mining to refresh."
-              : "Ready. Press Begin Data Mining to run the prediction."
-            : "Pick aircraft, licence, departure and arrival to unlock Data Mining."}
+              ? "Inputs changed — press Spool Prediction Engine to refresh."
+              : "Ready. Press Spool Prediction Engine so engine roar wakes up math guru."
+            : "Pick aircraft, licence, departure and arrival to unlock Engine Spooling."}
         </div>
         <button
           type="button"
@@ -172,7 +172,7 @@ function MissionPlanner() {
           )}
         >
           <Pickaxe className="h-4 w-4" />
-          {prediction.isFetching ? "Mining…" : "Begin Data Mining"}
+          {prediction.isFetching ? "Spooling..." : "Spooling Predcition Engine"}
         </button>
       </section>
 
@@ -296,7 +296,7 @@ function EndpointDisableToggle({
         <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{role}</span>{" "}
         <span className="mono text-foreground">{icao || "—"}</span>{" "}
         <span className={owned ? "text-runway" : "text-instrument"}>({status})</span>
-        <span className="block text-[11px]">Treat as system / non-income airport (zero airport component and weekly bonus for this endpoint).</span>
+        <span className="block text-[11px]">Check if its a system/bank airport - those airports generate no income (it will disable prediction).</span>
       </span>
     </label>
   );
