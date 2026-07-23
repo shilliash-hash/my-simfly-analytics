@@ -90,7 +90,7 @@ export function ReadyStatusBadge({
       </button>
 
       {open && (
-          <div className="panel absolute right-0 z-30 mt-2 w-80 rounded-xl p-4 shadow-xl bg-background/80 backdrop-blur-lg">div className="panel absolute right-0 z-30 mt-2 w-80 rounded-xl p-4 shadow-xl">
+          <div className="panel absolute right-0 z-30 mt-2 w-80 rounded-xl p-4 shadow-xl bg-background/80 backdrop-blur-lg"><div className="panel absolute right-0 z-30 mt-2 w-80 rounded-xl p-4 shadow-xl">
           <section>
             <div className="mb-2 flex items-center justify-between">
               <div className="mono text-[10px] uppercase tracking-widest text-runway">
