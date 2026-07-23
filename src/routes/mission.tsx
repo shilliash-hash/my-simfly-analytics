@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { Rocket, Gauge, ArrowRight, Sparkles, Zap, Pickaxe } from "lucide-react";
+import { Rocket, Gauge, ArrowRight, Sparkles, Zap, Pickaxe, Wind } from "lucide-react";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { HubSupportGate } from "@/components/hub-support";
@@ -171,7 +171,7 @@ function MissionPlanner() {
               : "bg-secondary text-muted-foreground cursor-not-allowed",
           )}
         >
-          <Pickaxe className="h-4 w-4" />
+          <Wind className="h-4 w-4" />
           {prediction.isFetching ? "Spooling..." : "Spooling Predcition Engine"}
         </button>
       </section>
@@ -404,7 +404,7 @@ function PlannerResult({
   if (!hasRun) {
     return (
       <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Begin Data Mining</span> to run a prediction.
+        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to get some estiamtions.
       </div>
     );
   }
