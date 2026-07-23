@@ -172,7 +172,7 @@ function MissionPlanner() {
           )}
         >
           <Wind className="h-4 w-4" />
-          {prediction.isFetching ? "Spooling..." : "Spool Predcition Engine"}
+          {prediction.isFetching ? "Spooling..." : "Spool Prediction Engine"}
         </button>
       </section>
 
