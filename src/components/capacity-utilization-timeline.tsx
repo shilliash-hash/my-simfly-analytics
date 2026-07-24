@@ -33,25 +33,30 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// Randomizer kolorow dla lotnisk
 function colorForIcao(icao: string): string {
   if (!icao) return "hsl(0, 0%, 50%)";
   
-  // Generujemy unikalną, dużą liczbę (hash) z liter ICAO lotniska
+  // 1. Agresywne haszowanie bitowe (każda mała zmiana litery całkowicie zmienia wynik)
   let hash = 0;
   for (let i = 0; i < icao.length; i++) {
-    hash = (hash * 31 + icao.charCodeAt(i)) >>> 0;
+    hash = (hash * 16777619) ^ icao.charCodeAt(i);
   }
   
-  // Mapujemy wynik na pełne koło barw (od 0 do 359 stopni)
+  // Dodatkowe przemieszanie bitów (Avalanche effect)
+  hash = Math.abs((hash ^ (hash >>> 16)) * 0x85ebca6b);
+  hash = Math.abs((hash ^ (hash >>> 13)) * 0xc2b2ae35);
+  hash = Math.abs(hash ^ (hash >>> 16));
+
+  // 2. Wyliczamy kąt barwy na pełnym kole 360 stopni
   const hue = hash % 360;
   
-  // Rozrzucamy nasycenie (75%-95%) i jasność (52%-62%), aby kolory były żywe na ciemnym tle
-  const saturation = 75 + (hash % 20); 
-  const lightness = 52 + (hash % 10);  
+  // 3. Dynamiczne, naprzemienne różnicowanie jasności i nasycenia dla jeszcze większego kontrastu
+  const saturation = 80 + (hash % 15); // Świecące nasycenie 80% - 95%
+  const lightness = 53 + (hash % 10);  // Czytelna jasność 53% - 63% (idealna pod dark mode)
   
   return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
+
 
 
 export function CapacityUtilizationTimeline({
