@@ -232,14 +232,9 @@ export function CapacityUtilizationTimeline({
 
       {totalWeeks > 0 && (
         <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="mono text-[10px] uppercase tracking-widest">
-            {chartData.length > 0
-              ? `Weeks ${chartData[0].week} – ${chartData[chartData.length - 1].week}`
-              : "—"}
-            <span className="ml-2 opacity-60">
-              ({start + 1}–{end} of {totalWeeks})
-            </span>
-          </div>
+       <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground/80">
+            COMPARISON for LAST 7 WEEKS for AIRPORTS SELECTED FROM PORTFOLIO
+        </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
