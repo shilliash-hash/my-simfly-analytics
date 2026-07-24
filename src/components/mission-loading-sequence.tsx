@@ -41,8 +41,7 @@ const PHASES: Phase[] = [
     accent: "runway",
   },
   {
-    label: "Analysing licence history",
-    subtext: "Checking licence timers and historical payouts.",
+    label: "Checking licence timers and historical payouts.",
     icon: BadgeCheck,
     accent: "instrument",
   },
@@ -63,7 +62,7 @@ const PHASES: Phase[] = [
   },
 ];
 
-const CADENCE_MS = 1900;
+const CADENCE_MS = 2000;
 
 function usePhaseIndex() {
   const [idx, setIdx] = useState(0);
