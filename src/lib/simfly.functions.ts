@@ -1247,7 +1247,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
                     ts: n.ts,
                   });
                 }
-                if (!n.isOwner) items.push({ ...n, airportIcao: ap.icao });
+                items.push({ ...n, airportIcao: ap.icao });
               }
             }
              return { items, support, myAirportSlots };
