@@ -11,24 +11,9 @@ import type { ActivityKind } from "@/lib/types";
 
 const PAGE_SIZE = 50;
 
-// 1. Detektory ruchu hubowego (Visitor), najmu (Rental) oraz lotów własnych (Own Route)
-const isOwnFlightEntry = (entry: { message: string }) => (entry.message || "").includes("my aircraft + my airport");
-
-const isVisitorEntry = (entry: { message: string }) => {
-  const msg = entry.message || "";
-  // Jeśli to lot własną flotą na własne lotnisko, to NIE JEST to obcy odwiedzający (Visitor)
-  if (isOwnFlightEntry(entry)) return false;
-  return msg.includes("my airport") || msg.startsWith("(Visitor)");
-};
-
-const isRentalEntry = (entry: { message: string }) => {
-  const msg = entry.message || "";
-  // Jeśli to lot własną flotą na własne lotnisko, to NIE JEST to leasing (Rental)
-  if (isOwnFlightEntry(entry)) return false;
-  return msg.includes("my aircraft") || msg.toLowerCase().includes("your aircraft");
-};
-
-
+// Detektory typów wpisów dla ruchu hubowego (Visitor) oraz leasingu maszyn (Rental)
+const isVisitorEntry = (entry: { message: string }) => entry.message.includes("my airport") || entry.message.startsWith("(Visitor)");
+const isRentalEntry = (entry: { message: string }) => entry.message.includes("my aircraft") || entry.message.toLowerCase().includes("your aircraft");
 
 export const Route = createFileRoute("/activity")({
   loader: ({ context }) =>
@@ -148,21 +133,16 @@ function ActivityFeed() {
       <ol className="panel divide-y divide-border rounded-xl">
         {!hydrated && <li className="p-6 text-center text-xs text-muted-foreground">Loading activity…</li>}
         {hydrated && visible.map((a) => {
-          
           const isVisitor = isVisitorEntry(a);
-            const isRental = isRentalEntry(a);
-              const isOwnFlight = isOwnFlightEntry(a);
- 
- // Przypisanie ikony i koloru tła z uwzględnieniem operacji własnych
- const Icon = isRental ? Plane : isVisitor ? ArrowUpRight : isOwnFlight ? RouteIcon : (ICONS[a.kind] || RouteIcon);
- const rowColorClass = isRental 
- ? "bg-purple-500/15 text-purple-400 border border-purple-500/20" 
- : isVisitor 
- ? "bg-instrument/15 text-instrument" 
- : isOwnFlight
- ? "bg-tier-silver/15 text-tier-silver" // Elegancki, srebrzysto-biały kolor dla Twojej własnej floty!
- : (COLORS[a.kind] || "bg-secondary text-muted-foreground");
-
+          const isRental = isRentalEntry(a);
+          
+          // Przypisanie ikony i koloru tła w zależności od typu operacji
+          const Icon = isRental ? Plane : isVisitor ? ArrowUpRight : (ICONS[a.kind] || RouteIcon);
+          const rowColorClass = isRental 
+            ? "bg-purple-500/15 text-purple-400 border border-purple-500/20" 
+            : isVisitor 
+            ? "bg-instrument/15 text-instrument" 
+            : (COLORS[a.kind] || "bg-secondary text-muted-foreground");
 
           let message = a.message || "";
           if (isVisitor) message = message.replace(/^\(Visitor\)\s*/, "");
@@ -174,20 +154,15 @@ function ActivityFeed() {
               </div>
               <div className="min-w-0 flex-1 text-left">
                 <div className="text-sm text-slate-200">
-                  {isOwnFlight ? (
- <span className="mono mr-2 rounded-sm bg-tier-silver/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-tier-silver border border-tier-silver/30 shadow-[0_0_10px_rgba(255,255,255,0.05)]">
- Own Route
- </span>
- ) : isRental ? (
- <span className="mono mr-2 rounded-sm bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-purple-300 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
- Rental
- </span>
- ) : isVisitor ? (
- <span className="mono mr-2 rounded-sm bg-instrument/15 px-1 py-px text-[9px] font-semibold uppercase tracking-widest text-instrument">
- Visitor
- </span>
- ) : null}
-
+                  {isRental ? (
+                    <span className="mono mr-2 rounded-sm bg-purple-500/20 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-purple-300 border border-purple-500/30 shadow-[0_0_10px_rgba(168,85,247,0.1)]">
+                      Rental
+                    </span>
+                  ) : isVisitor ? (
+                    <span className="mono mr-2 rounded-sm bg-instrument/15 px-1 py-px text-[9px] font-semibold uppercase tracking-widest text-instrument">
+                      Visitor
+                    </span>
+                  ) : null}
                   {message}
                 </div>
                 <div className="mono mt-1 flex flex-wrap items-center gap-x-3 text-[10px] uppercase tracking-widest text-muted-foreground">
