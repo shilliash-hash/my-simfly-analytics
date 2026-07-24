@@ -6,6 +6,7 @@ import { getSimflyPayload } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AirportExt } from "@/lib/types";
 import { AppShell, PageHeader, TierPill, RotationCell, formatNumber } from "@/components/app-shell";
+import { CapacityUtilizationTimeline } from "@/components/capacity-utilization-timeline";
 import { Search, MapPin } from "lucide-react";
 
 export const Route = createFileRoute("/airports")({
@@ -85,6 +86,8 @@ function AirportsPage() {
         </div>
       </div>
 
+     <CapacityUtilizationTimeline airports={data.airports} />
+      
       <div className="panel overflow-hidden rounded-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
