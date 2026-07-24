@@ -265,7 +265,7 @@ function Compare() {
                 render={(a) => (ownedByIcao.has(a.icao) ? formatNumber(Math.round(a.pax7d)) : "—")} />
               <Row label="Rotation" hubs={airports}
                 render={(a) => <RotationCell rotation={a.rotation} max={a.maxRotation} />} />
-              <Row label="Owner cut" hubs={airports} mono best={(a) => a.percToUser}
+              <Row label="Pilot cut" hubs={airports} mono best={(a) => a.percToUser}
                 render={(a) => `${a.percToUser}%`} />
               <Row label="Owner" hubs={airports} render={(a) => (ownedByIcao.has(a.icao) ? `@${data.me.handle}` : "—")} />
             </tbody>
