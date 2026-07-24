@@ -1407,13 +1407,15 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // f.pax (the flight report bundles license income), so we must NOT
     // emit a separate license entry with its own delta or it would
     // double-count the same PAX in the activity feed.
-   const flightActivity: ActivityEntry[] = myFlights
-    // Filtrujemy po actorHandle (lub username), bo ten typ na pewno istnieje w ActivityEntry / Logu
-    .filter((f: any) => {
-      const pilot = (f.actorHandle || f.player || f.visitor || "").toLowerCase();
+     const flightActivity: ActivityEntry[] = myflights
+    .filter((f) => {
+      // Jeśli pilot w logu (f.visitor lub f.player) to Ty, to przepuszczamy lot. 
+      // Jeśli to lot Luigiego, to odrzucamy, bo on ma wpaść wyłącznie jako RENTAL poniżej!
+      const pilot = (f.visitor || f.player || me.handle || "").toLowerCase();
       return pilot === username.toLowerCase();
     })
-    .map((f: any) => {
+    .map((f) => {
+
       // Bezpiecznie sprawdzamy licencję z fallbackiem na string / boolean
       const hasLicence = Boolean(f.licence || f.kind === "license");
       return {
