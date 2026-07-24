@@ -2480,6 +2480,94 @@ export const getAirportSummary = createServerFn({ method: "GET" })
     return mapAirport(raw, []);
   });
 
+// ===== Airport Capacity Utilization Timeline =====
+export type UtilizationWeekAirport = { icao: string; capacity: number; used: number };
+export type UtilizationWeek = {
+  weekNumber: number;
+  weekStartIso: string;
+  byAirport: UtilizationWeekAirport[];
+};
+export type UtilizationTimeline = {
+  weeks: UtilizationWeek[];
+  airportMeta: { icao: string; name: string; category: number; level: number; capacity: number }[];
+  fetchedAt: string;
+};
+// SimFly week epoch: Monday UTC 2022-08-15 => Week 1. Adjustable if the real
+// SimFly numbering diverges; the goal here is a stable monotonic label.
+const SIMFLY_WEEK_EPOCH_MS = Date.UTC(2022, 7, 15, 0, 0, 0);
+const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
+function weekStartUtcMs(tsMs: number): number {
+  const d = new Date(tsMs);
+  const day = d.getUTCDay();
+  const mondayOffset = (day + 6) % 7;
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - mondayOffset);
+}
+function simflyWeekNumber(weekStartMs: number): number {
+  return Math.max(1, Math.round((weekStartMs - SIMFLY_WEEK_EPOCH_MS) / MS_PER_WEEK) + 1);
+}
+export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
+  .inputValidator((d?: { icaos?: string[]; pages?: number; username?: string }) => d ?? {})
+  .handler(async ({ data }): Promise<UtilizationTimeline> => {
+    const { username, nonce } = await resolveIdentity({ username: data.username });
+    const maxPages = Math.min(Math.max(data.pages ?? 63, 1), 120);
+    const cacheKey = `util:${username}:${(data.icaos ?? []).slice().sort().join(",")}:${maxPages}`;
+    return memo(cacheKey, 15 * 60_000, async () => {
+      const assets = await fetchJSON<RawAssetsAll>(
+        `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
+      );
+      const ownedAirports = (assets?.items ?? []).filter(
+        (it): it is RawAssetAirport => it.type === "Airport",
+      );
+      const requested = new Set((data.icaos ?? []).map((s) => s.toUpperCase()));
+      const scope = requested.size
+        ? ownedAirports.filter((a) => requested.has(a.icao.toUpperCase()))
+        : ownedAirports;
+      const airportMeta = scope.map((a) => ({
+        icao: a.icao,
+        name: a.name ?? a.icao,
+        category: a.category ?? 0,
+        level: a.level ?? 0,
+        capacity: a.maxRotation ?? 0,
+      }));
+      const buckets = new Map<string, Map<number, number>>();
+      let earliestWeek = Number.POSITIVE_INFINITY;
+      let latestWeek = Number.NEGATIVE_INFINITY;
+      await Promise.all(
+        scope.map(async (a) => {
+          const { rows } = await collectAirportHistoryFlights(a.icao, username, nonce, {
+            maxPages,
+          });
+          const perWeek = new Map<number, number>();
+          for (const r of rows) {
+            if (r.role !== "landing") continue;
+            if (!r.tsMs) continue;
+            const ws = weekStartUtcMs(r.tsMs);
+            perWeek.set(ws, (perWeek.get(ws) ?? 0) + 1);
+            if (ws < earliestWeek) earliestWeek = ws;
+            if (ws > latestWeek) latestWeek = ws;
+          }
+          buckets.set(a.icao, perWeek);
+        }),
+      );
+      const weeks: UtilizationWeek[] = [];
+      if (Number.isFinite(earliestWeek) && Number.isFinite(latestWeek)) {
+        for (let ws = earliestWeek; ws <= latestWeek; ws += MS_PER_WEEK) {
+          weeks.push({
+            weekNumber: simflyWeekNumber(ws),
+            weekStartIso: new Date(ws).toISOString(),
+            byAirport: scope.map((a) => ({
+              icao: a.icao,
+              capacity: a.maxRotation ?? 0,
+              used: buckets.get(a.icao)?.get(ws) ?? 0,
+            })),
+          });
+        }
+      }
+      return { weeks, airportMeta, fetchedAt: new Date().toISOString() };
+    });
+  });
+
+
 /** Batched airport-tier lookup for Mission Intelligence. Returns
  *  { icao, category } for every ICAO SimFly recognises. Per-ICAO memoised. */
 export const getAirportsMeta = createServerFn({ method: "GET" })
