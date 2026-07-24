@@ -61,7 +61,7 @@ export function CapacityUtilizationTimeline({
   const fn = useServerFn(getAirportUtilizationTimeline);
   const { keyTag, payload } = useSimflyArgs();
   const allIcaos = useMemo(() => airports.map((a) => a.icao), [airports]);
-  const [selected, setSelected] = useState<string[]>(allIcaos);
+  const [selected, setSelected] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const WINDOW_SIZE = 7;
   // offset = number of weeks to shift back from the most recent window (0 = latest)
