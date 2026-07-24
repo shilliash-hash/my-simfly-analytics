@@ -393,7 +393,7 @@ function UtilizationTooltip({
                 {util.toFixed(1)}%
               </span>
               <span className="w-10 text-right tabular-nums text-muted-foreground">
-                −{unused}
+                {unused}
               </span>
             </div>
           );
