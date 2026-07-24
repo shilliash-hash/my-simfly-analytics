@@ -33,25 +33,26 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
-// Stable per-ICAO color palette drawn from the Flight Deck token set.
-const PALETTE = [
-  "hsl(189 94% 55%)", // runway cyan
-  "hsl(38 92% 55%)", // instrument amber
-  "hsl(150 65% 55%)", // mint
-  "hsl(280 70% 65%)", // violet
-  "hsl(0 75% 62%)", // coral
-  "hsl(210 90% 65%)", // azure
-  "hsl(48 95% 60%)", // sun
-  "hsl(170 60% 50%)", // teal
-  "hsl(320 65% 65%)", // magenta
-  "hsl(95 55% 55%)", // moss
-];
-
+// Randomizer kolorow dla lotnisk
 function colorForIcao(icao: string): string {
-  let h = 0;
-  for (let i = 0; i < icao.length; i++) h = (h * 31 + icao.charCodeAt(i)) >>> 0;
-  return PALETTE[h % PALETTE.length];
+  if (!icao) return "hsl(0, 0%, 50%)";
+  
+  // Generujemy unikalną, dużą liczbę (hash) z liter ICAO lotniska
+  let hash = 0;
+  for (let i = 0; i < icao.length; i++) {
+    hash = (hash * 31 + icao.charCodeAt(i)) >>> 0;
+  }
+  
+  // Mapujemy wynik na pełne koło barw (od 0 do 359 stopni)
+  const hue = hash % 360;
+  
+  // Rozrzucamy nasycenie (75%-95%) i jasność (52%-62%), aby kolory były żywe na ciemnym tle
+  const saturation = 75 + (hash % 20); 
+  const lightness = 52 + (hash % 10);  
+  
+  return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
+
 
 export function CapacityUtilizationTimeline({
   airports,
