@@ -2580,9 +2580,12 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
           });
         }
       }
-      return { weeks, airportMeta, fetchedAt: new Date().toISOString() };
-    });
-  });
+      // Zwracamy wyłącznie 56 najnowszych tygodni do wykresu, odrzucając archiwum
+ const limitedWeeks = weeks.slice(-56);
+ return { weeks: limitedWeeks, airportMeta, fetchedAt: new Date().toISOString() };
+ });
+});
+
 
 
 /** Batched airport-tier lookup for Mission Intelligence. Returns
