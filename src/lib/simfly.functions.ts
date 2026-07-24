@@ -2538,14 +2538,31 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
             maxPages,
           });
           const perWeek = new Map<number, number>();
-          for (const r of rows) {
-            if (r.role !== "landing") continue;
-            if (!r.tsMs) continue;
-            const ws = weekStartUtcMs(r.tsMs);
-            perWeek.set(ws, (perWeek.get(ws) ?? 0) + 1);
-            if (ws < earliestWeek) earliestWeek = ws;
-            if (ws > latestWeek) latestWeek = ws;
-          }
+          const flightsByWeekSet = new Map<number, Set<string>>();
+
+ for (const r of rows) {
+   // Akceptujemy ZARÓWNO lądowania (landing) jak i odloty (takeoff)
+   if (r.role !== "landing" && r.role !== "takeoff") continue;
+   if (!r.tsMs) continue;
+
+   const ws = weekStartUtcMs(r.tsMs);
+   
+   if (!flightsByWeekSet.has(ws)) {
+     flightsByWeekSet.set(ws, new Set<string>());
+   }
+   
+   // Unifikujemy po unikalnym ID lotu, aby zapobiec podwójnemu naliczaniu
+   const uniqueFlightId = r.flightId || r.id || `${r.tsMs}-${r.role}`;
+   flightsByWeekSet.get(ws)!.add(uniqueFlightId);
+
+   if (ws < earliestWeek) earliestWeek = ws;
+   if (ws > latestWeek) latestWeek = ws;
+ }
+
+ for (const [ws, flightSet] of flightsByWeekSet.entries()) {
+   perWeek.set(ws, flightSet.size);
+ }
+
           buckets.set(a.icao, perWeek);
         }),
       );
