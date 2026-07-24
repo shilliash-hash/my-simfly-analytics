@@ -36,26 +36,28 @@ import { cn } from "@/lib/utils";
 function colorForIcao(icao: string): string {
   if (!icao) return "hsl(0, 0%, 50%)";
   
-  // 1. Agresywne haszowanie bitowe (każda mała zmiana litery całkowicie zmienia wynik)
   let hash = 0;
   for (let i = 0; i < icao.length; i++) {
     hash = (hash * 16777619) ^ icao.charCodeAt(i);
   }
   
-  // Dodatkowe przemieszanie bitów (Avalanche effect)
+  // Efekt lawinowy (Avalanche Effect)
   hash = Math.abs((hash ^ (hash >>> 16)) * 0x85ebca6b);
   hash = Math.abs((hash ^ (hash >>> 13)) * 0xc2b2ae35);
   hash = Math.abs(hash ^ (hash >>> 16));
 
-  // 2. Wyliczamy kąt barwy na pełnym kole 360 stopni
-  const hue = hash % 360;
+  // GIGANTYCZNY ROZRZUT: Mnożymy przez liczbę pierwszą 139, aby drastycznie oddalić od siebie bliskie hashe
+  // Robimy modulo 360, żeby zmieścić się na kole barw
+  const hue = (hash * 139) % 360;
   
-  // 3. Dynamiczne, naprzemienne różnicowanie jasności i nasycenia dla jeszcze większego kontrastu
-  const saturation = 80 + (hash % 15); // Świecące nasycenie 80% - 95%
-  const lightness = 53 + (hash % 10);  // Czytelna jasność 53% - 63% (idealna pod dark mode)
+  // Blokujemy nasycenie i jasność na twardych, ostrych poziomach (czyste, neonowe barwy dla Dark Mode)
+  // Naprzemiennie sterujemy jasnością na podstawie parzystości hasha, żeby dwie linie obok siebie miały inny kontrast
+  const saturation = 90; // Twarde 90% nasycenia dla maksymalnego podbicia koloru
+  const lightness = (hash % 2 === 0) ? 52 : 60; // Naprzemiennie 52% lub 60% jasności
   
   return `hsl(${hue} ${saturation}% ${lightness}%)`;
 }
+
 
 
 
