@@ -304,11 +304,7 @@ export function CapacityUtilizationTimeline({
                 cursor={{ fill: "hsl(var(--muted) / 0.2)" }}
                 content={<UtilizationTooltip selected={selected} />}
               />
-              <Legend
-                wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
-                iconType="circle"
-              />
-              {selected.map((icao) => (
+                {selected.map((icao) => (
                 <Bar
                   key={`bar-${icao}`}
                   dataKey={`${icao}__cap`}
@@ -350,6 +346,20 @@ function EmptyState({ label }: { label: string }) {
   );
 }
 
+function formatWeekRangeIso(isoString: string): string {
+  if (!isoString) return "";
+  const start = new Date(isoString);
+  // Dodajemy 6 dni, aby wyznaczyć pełny tydzień SimFly (od poniedziałku do niedzieli)
+  const end = new Date(start.getTime() + 6 * 24 * 60 * 60 * 1000);
+  
+  const formatOptions = { weekday: 'short', day: '2-digit', month: 'short' } as const;
+  const startStr = start.toLocaleDateString('en-US', { ...formatOptions, timeZone: 'UTC' });
+  const endStr = end.toLocaleDateString('en-US', { ...formatOptions, timeZone: 'UTC' });
+  
+  return `${startStr.replace(',', '')} – ${endStr.replace(',', '')}`;
+}
+
+
 type TooltipPayloadItem = {
   dataKey?: string | number;
   payload?: Record<string, number | string>;
@@ -371,7 +381,7 @@ function UtilizationTooltip({
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
       <div className="mono mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-        {String(label)} · {typeof row.weekStartIso === "string" ? new Date(row.weekStartIso).toUTCString().slice(0, 16) : ""}
+        {typeof row.weekStartIso === "string" ? formatWeekRangeIso(row.weekStartIso) : String(label)}
       </div>
       <div className="space-y-1">
         {selected.map((icao) => {
