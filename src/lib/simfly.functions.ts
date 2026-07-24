@@ -1407,22 +1407,25 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // f.pax (the flight report bundles license income), so we must NOT
     // emit a separate license entry with its own delta or it would
     // double-count the same PAX in the activity feed.
-    const flightActivity: ActivityEntry[] = myFlights
-  // Przepuszczamy TYLKO te loty z dziennika floty, które pilotowałeś Ty osobiście
-  // Odrzucamy loty Luigiego i innych, zapobiegając powstawaniu fake wierszy na 0.53 PAX!
-  .filter((f) => {
-    const pilot = (f.visitor || f.player || f.actorHandle || "").toLowerCase();
-    return pilot === username.toLowerCase();
-  })
-  .map((f) => {
-{
-      id: f.id,
-      kind: f.licence ? ("license" as const) : ("route" as const),
-      actorHandle: me.handle,
-      message: `${f.departure_icao} → ${f.destination_icao} · ${f.aircraft}${f.licence ? ` · license ${f.licence}` : ""} · ${Math.round(f.total_distance)} nm`,
-      delta: f.pax,
-      at: f.mission_start_ts,
-    }));
+   const flightActivity: ActivityEntry[] = myFlights
+    // Filtrujemy po actorHandle (lub username), bo ten typ na pewno istnieje w ActivityEntry / Logu
+    .filter((f: any) => {
+      const pilot = (f.actorHandle || f.player || f.visitor || "").toLowerCase();
+      return pilot === username.toLowerCase();
+    })
+    .map((f: any) => {
+      // Bezpiecznie sprawdzamy licencję z fallbackiem na string / boolean
+      const hasLicence = Boolean(f.licence || f.kind === "license");
+      return {
+        id: f.id,
+        kind: hasLicence ? ("license" as const) : ("route" as const),
+        actorHandle: f.actorHandle || username,
+        message: `${f.departure_icao || f.origin || ""} → ${f.destination_icao || f.destination || ""} · ${f.aircraft || ""} · ${Math.round(f.total_distance || 0)} nm`,
+        delta: f.pax || f.delta || 0,
+        at: f.mission_start_ts || f.at || new Date().toISOString(),
+      };
+    });
+
 
     // Visitor flights as activity, marked clearly.
     const visitorActivity: ActivityEntry[] = uniqueVisitorFlights
