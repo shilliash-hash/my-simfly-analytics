@@ -1246,10 +1246,15 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
                     paxAirport: n.paxAirport,
                     ts: n.ts,
                   });
-                }
-                items.push({ ...n, airportIcao: ap.icao });
-              }
-            }
+               }
+    
+    // TWARDY BEZPIECZNIK: Twoje własne loty (isOwner) zostały już zebrane w myAirportSlots (linia 1243).
+    // Odrzucamy je przed items.push, aby nie dublowały przychodów i nie tworzyły fioletowych wierszy RENTAL!
+    if (n.isOwner) continue;
+
+    items.push({ ...n, airportIcao: ap.icao });
+  }
+}
              return { items, support, myAirportSlots };
           }),
         ),
@@ -1407,50 +1412,32 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // f.pax (the flight report bundles license income), so we must NOT
     // emit a separate license entry with its own delta or it would
     // double-count the same PAX in the activity feed.
-      const flightActivity: ActivityEntry[] = flights
-    // Przepuszczamy TYLKO loty, które pilotowałeś Ty osobiście (zalogowany użytkownik)
-    // Odrzucamy operacje Luigiego i innych pracowników, aby nie tworzyć fałszywych wpisów komercyjnych!
-    .filter((f) => {
-      const pilot = (f.visitor || f.player || f.actorHandle || "").toLowerCase();
-      return pilot === username.toLowerCase();
-    })
-    .map((f) => {
-
-
-      // Bezpiecznie sprawdzamy licencję z fallbackiem na string / boolean
-      const hasLicence = Boolean(f.licence || f.kind === "license");
-      return {
-        id: f.id,
-        kind: hasLicence ? ("license" as const) : ("route" as const),
-        actorHandle: f.actorHandle || username,
-        message: `${f.departure_icao || f.origin || ""} → ${f.destination_icao || f.destination || ""} · ${f.aircraft || ""} · ${Math.round(f.total_distance || 0)} nm`,
-        delta: f.pax || f.delta || 0,
-        at: f.mission_start_ts || f.at || new Date().toISOString(),
-      };
-    });
-
+    const flightActivity: ActivityEntry[] = flights.map((f) => ({
+      id: f.id,
+      kind: f.licence ? ("license" as const) : ("route" as const),
+      actorHandle: me.handle,
+      message: `${f.departure_icao} → ${f.destination_icao} · ${f.aircraft}${f.licence ? ` · license ${f.licence}` : ""} · ${Math.round(f.total_distance)} nm`,
+      delta: f.pax,
+      at: f.mission_start_ts,
+    }));
 
     // Visitor flights as activity, marked clearly.
-    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights
-   .filter((v) => !v.isOwner) // Blada dla własnych lotów — zostały już zliczone w flightActivity powyżej
-   .map((v) => {
-     const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
-     const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
-     const tags: string[] = [];
-     if (v.paxAircraft) tags.push("my aircraft");
-     if (v.paxAirport) tags.push("my airport");
-     return {
-       id: `visitor-${v.id}`,
-       kind: "route" as const,
-       actorHandle: v.visitor,
-       hubIcao: v.airportIcao,
-       message: `(Visitor) @${v.visitor} · ${orig} → ${dest} · ${v.aircraft}${tags.length ? ` · ${tags.join(" + ")}` : ""}`,
-       delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
-       at: v.ts,
-     };
-   });
-
-
+    const visitorActivity: ActivityEntry[] = uniqueVisitorFlights.map((v) => {
+      const orig = v._origin || (v.role === "takeoff" ? v.airportIcao : v.otherIcao);
+      const dest = v._destination || (v.role === "takeoff" ? v.otherIcao : v.airportIcao);
+      const tags: string[] = [];
+      if (v.paxAircraft) tags.push("my aircraft");
+      if (v.paxAirport) tags.push("my airport");
+      return {
+        id: `visitor-${v.id}`,
+        kind: "route" as const,
+        actorHandle: v.visitor,
+        hubIcao: v.airportIcao,
+        message: `(Visitor) @${v.visitor} · ${orig} → ${dest} · ${v.aircraft}${tags.length ? ` · ${tags.join(" + ")}` : ""}`,
+        delta: Math.round(((v.paxAirport || 0) + (v.paxAircraft || 0)) * 100) / 100,
+        at: v.ts,
+      };
+    });
 
 
     // Visitors: from logbook only my flights are visible, so this is empty for v1.
