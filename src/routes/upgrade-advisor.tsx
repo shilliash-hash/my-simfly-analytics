@@ -251,24 +251,19 @@ function UpgradeAdvisorPage() {
               onRefresh={() => forceRefresh([r.icao])}
             />
           ))}
-          {rows.length === 0 && (
-            <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
-              No owned airports.
-            </div>
-          )}
-        </div>
-      )}
+             {!gated && rows.length === 0 && (
+          <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
+            No owned airports.
+          </div>
+        )}
+      </div>
 
       <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-        Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX
-        credited to each airport across every flight touching the airport in the selected
-        window, sampled from the same public airport history as the Payout Matrix. Payback =
-        upgrade cost ÷ current daily income. Results are cached per airport / level / window;
-        cache invalidates automatically when a level change is detected during sync, or when an
-        administrator forces a refresh (once per 24 h per airport).
+        Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX credited to each airport across every flight touching the airport in the selected window, sampled from the same public airport history as the Payout Matrix. Payback = upgrade cost ÷ current daily income. Results are cached per airport / level / window; cache invalidates automatically when a level change is detected during sync, or when an administrator forces a refresh (once per 24 h per airport).
       </p>
-    </AppShell>
-  );
+    )}
+  </AppShell>
+);
 }
 
 function TtlEditor({
