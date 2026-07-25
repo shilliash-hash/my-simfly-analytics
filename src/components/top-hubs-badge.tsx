@@ -36,7 +36,7 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
     <>
       {open && (
         <div
-          className="fixed inset-0 z-20 bg-background/40 backdrop-blur-md transition-opacity"
+          className="fixed inset-0 z-20 bg-background/20 backdrop-blur-sm transition-opacity"
           aria-hidden
         />
       )}
@@ -59,53 +59,68 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
         </button>
 
         {open && (
-          /* WYRÓWNANY WIZUALNIE PANEL - Dokładnie taki sam styl jak ReadyStatusBadge (Strona 2) */
+          /* 
+            CHIRURGICZNE PRZENIESIENIE PREMIUM LOOKU Z TWOJEGO SCREENA:
+            Półprzezroczyste szkło, delikatna obwódka border-border/40 i brak wewnętrznych ramek.
+          */
           <div
-            className="panel absolute right-0 z-30 mt-2 w-[min(92vw,32rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-xl p-4 shadow-xl bg-background/80 backdrop-blur-lg border border-border"
+            className="panel absolute right-0 z-30 mt-2 w-[min(92vw,28rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-2xl p-4 shadow-2xl bg-slate-950/70 backdrop-blur-xl border border-border/40 shadow-black/50"
             role="dialog"
           >
-            <div className="mb-3 flex items-center justify-between">
-              <div className="mono text-[10px] uppercase tracking-widest text-runway">
+            {/* NAGŁÓWEK SEKCYJNY - Wzór z Twojego screenu */}
+            <div className="mb-3 flex items-center justify-between px-1">
+              <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway">
                 Your hubs ({count})
               </div>
               <Link
                 to="/airports"
-                className="mono text-[10px] uppercase tracking-widest text-runway hover:underline"
+                className="mono text-[10px] uppercase tracking-widest text-runway/80 hover:text-runway transition hover:underline"
                 onClick={() => setOpen(false)}
               >
-                All airports →
+                All →
               </Link>
             </div>
             
             {count === 0 ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[11px] text-muted-foreground/70 px-1 py-2">
                 No airports owned yet.
               </p>
             ) : (
-              <ul className="max-h-[calc(min(80vh,42rem)-4rem)] space-y-2 overflow-auto pr-1">
+              <ul className="max-h-[calc(min(80vh,42rem)-4rem)] space-y-1 overflow-auto pr-1 custom-scrollbar">
                 {sorted.map((a) => (
                   <li key={a.icao}>
+                    {/* 
+                      CZYSTE, BEZRAMKOWE WIERSZE NA SZKLE:
+                      Usunąłem klasy 'panel', 'bg-secondary/10' oraz twarde obramowania.
+                      Wiersz jest czysty, ma tylko delikatny hover rozjaśniający tło.
+                    */}
                     <Link
                       to="/airports/$id"
                       params={{ id: a.icao }}
                       onClick={() => setOpen(false)}
-                      className="panel group block rounded-lg p-3 transition-colors hover:bg-secondary/40 border border-border/40 bg-secondary/10"
+                      className="group block rounded-lg px-2.5 py-2.5 transition-all duration-200 hover:bg-white/[0.04]"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
-                          <div className="mono text-[10px] uppercase tracking-widest text-runway">
-                            {a.icao}
+                          <div className="flex items-center gap-2">
+                            <span className="mono text-xs font-bold uppercase tracking-wider text-runway bg-runway/10 px-1.5 py-0.5 rounded-sm border border-runway/20">
+                              {a.icao}
+                            </span>
+                            <span className="font-display truncate text-sm font-medium text-slate-200 group-hover:text-white transition-colors">
+                              {a.name}
+                            </span>
                           </div>
-                          <div className="font-display mt-0.5 truncate text-sm font-semibold">
-                            {a.name}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            {a.country} · L{a.level}
+                          <div className="text-[10px] mono uppercase tracking-widest text-muted-foreground/60 mt-1.5 pl-1">
+                            {a.country} · Level {a.level}
                           </div>
                         </div>
-                        <TierPill tier={a.tier} label={a.tierLabel} />
+                        <div className="scale-90 origin-top-right">
+                          <TierPill tier={a.tier} label={a.tierLabel} />
+                        </div>
                       </div>
-                      <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/60 pt-3 text-[11px]">
+
+                      {/* SIATKA STATYSTYK - Dopasowana jasnością do nowego, ciemnego tła */}
+                      <div className="mt-3 grid grid-cols-3 gap-3 border-t border-border/30 pt-2.5 text-[11px] px-1">
                         <MiniStat
                           label="Lifetime PAX"
                           value={formatNumber(Math.round(a.totalEarnedPax))}
@@ -117,7 +132,9 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
                         <MiniStat
                           label="Rotation"
                           custom={
-                            <RotationCell rotation={a.rotation} max={a.maxRotation} />
+                            <div className="scale-95 origin-left mt-0.5">
+                              <RotationCell rotation={a.rotation} max={a.maxRotation} />
+                            </div>
                           }
                         />
                       </div>
@@ -144,10 +161,10 @@ function MiniStat({
 }) {
   return (
     <div>
-      <div className="mono text-[9px] uppercase tracking-widest text-muted-foreground">
+      <div className="mono text-[8px] font-medium uppercase tracking-widest text-muted-foreground/50">
         {label}
       </div>
-      <div className="font-display mt-0.5 text-sm font-semibold">
+      <div className="font-display mt-0.5 text-xs font-semibold text-slate-300">
         {custom ?? value}
       </div>
     </div>
