@@ -2,7 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { addChangelogEntry, getChangelogEntries, deleteChangelogEntry } from "@/lib/simfly.functions";
+import { addChangelogEntry, getChangelogEntries, deleteChangelogEntry, getAdvisorSettings, setAdvisorSettings, getUpgradeAdvisor } from "@/lib/simfly.functions";
 import {
   adminBackfillAction,
   listBackfills,
@@ -94,9 +94,7 @@ function AdminPage() {
       />
       {mounted && token ? (
       <div className="space-y-8">
-        {/* WIDŻET ONLINE NA SAMEJ GÓRZE PANELU ADMINA */}
-        <AdminOnlineUsersWidget />
-
+        <AdminUpgradeAdvisor token={token} />
         <AdminTable token={token} />
         <HubSupportAdmin token={token} />
         <AdminChangelog adminToken={token} />
@@ -107,6 +105,121 @@ function AdminPage() {
         <TokenForm />
       )}
     </AppShell>
+  );
+}
+
+function AdminUpgradeAdvisor({ token }: { token: string }) {
+  const [msg, setMsg] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [ttlInput, setTtlInput] = useState("30");
+
+  const setSettingsFn = useServerFn(setAdvisorSettings);
+  const advisorFn = useServerFn(getUpgradeAdvisor);
+  const qc = useQueryClient();
+
+  const { data: settings } = useQuery({
+    queryKey: ["admin", "advisor-settings"],
+    queryFn: () => getAdvisorSettings(),
+    staleTime: 5 * 60_000,
+  });
+
+  async function forceGlobalRefresh() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await advisorFn({
+        data: {
+          windowDays: 60,
+          adminToken: token,
+          forceIcaos: ["ALL"],
+        },
+      });
+      setMsg("Global cache recalculation successfully triggered.");
+    } catch (e) {
+      setMsg((e as Error).message || "Global refresh failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function saveTtlSettings() {
+    const days = parseInt(ttlInput, 10);
+    if (isNaN(days) || days < 1) {
+      setMsg("Please enter a valid number of days (minimum 1).");
+      return;
+    }
+    setBusy(true);
+    setMsg(null);
+    try {
+      await setSettingsFn({ data: { adminToken: token, ttlDays: days } });
+      qc.invalidateQueries({ queryKey: ["admin", "advisor-settings"] });
+      setMsg(`Global Cache TTL successfully locked to ${days} days.`);
+    } catch (e) {
+      setMsg((e as Error).message || "Failed to save TTL.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h2 className="font-display text-xl font-semibold flex items-center gap-2">
+          <RefreshCw className="h-5 w-5 text-runway" />
+          <span>Upgrade Advisor Settings</span>
+        </h2>
+        <p className="text-xs text-muted-foreground">
+          Global cache rules and manual synchronization pipelines for the financial prediction core.
+        </p>
+      </div>
+
+      <div className="panel p-5 grid gap-4 grid-cols-1 sm:grid-cols-2 items-end rounded-xl border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
+        <div className="space-y-1.5">
+          <label className="mono text-[9px] uppercase tracking-widest text-muted-foreground/60 block pl-0.5">
+            Cache Validity (Current: {settings?.ttlDays ?? 30} days)
+          </label>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              min="1"
+              placeholder="TTL"
+              value={ttlInput}
+              onChange={(e) => setTtlInput(e.target.value)}
+              className="w-24 bg-card border border-border rounded-md px-3 py-1.5 text-sm text-foreground focus:border-runway outline-none transition-colors"
+            />
+            <button
+              type="button"
+              disabled={busy}
+              onClick={saveTtlSettings}
+              className="rounded-md border border-border bg-secondary/40 px-4 py-1.5 text-xs text-foreground hover:bg-secondary transition-colors"
+            >
+              Save TTL
+            </button>
+          </div>
+        </div>
+
+        <div className="space-y-1.5">
+          <div className="mono text-[9px] uppercase tracking-widest text-muted-foreground/60 pl-0.5">
+            Database Invalidation
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={forceGlobalRefresh}
+            className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-runway/50 bg-runway/10 px-4 py-2 text-xs text-runway hover:bg-runway/20 transition-all disabled:opacity-40 font-semibold uppercase tracking-wider h-[34px]"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} />
+            Force Global Recalculation
+          </button>
+        </div>
+
+        {msg && (
+          <div className="sm:col-span-2 mt-2 text-xs text-cyan-400 font-medium bg-cyan-950/20 border border-cyan-500/20 px-3 py-2 rounded-md mono">
+            {msg}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
