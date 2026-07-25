@@ -42,12 +42,13 @@ function PayoutMatrixPage() {
   const { keyTag, payload } = useSimflyArgs();
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v2-fresh"],
+    queryKey: ["simfly", keyTag, "v3-final-fix"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
   });
 
+  // KROK A: Jeśli serwer rzucił błędem braku supportera — od razu pokazujemy bramkę
   if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
     return (
       <AppShell>
@@ -61,21 +62,7 @@ function PayoutMatrixPage() {
     );
   }
 
-  if (isError) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="System Error"
-          title="Database Connection Failure"
-          description="The upstream server took too long to compute flight history matrices."
-        />
-        <div className="panel rounded-xl p-6 text-sm text-destructive bg-destructive/10 border border-destructive/20 mono">
-          Backend error: {error instanceof Error ? error.message : "Unknown error"}. Please refresh.
-        </div>
-      </AppShell>
-    );
-  }
-
+  // KROK B: Stan ładowania dla oczekujących na pobranie 1.77 MB danych lotnisk
   if (isLoading) {
     return (
       <AppShell>
@@ -86,9 +73,8 @@ function PayoutMatrixPage() {
     );
   }
 
-  const isSupporter = data?.status?.active || data?.hubSupport?.active || data?.hubSupportActive;
-
-  if (!data || !isSupporter) {
+  // KROK C: ZABEZPIECZENIE STRUKTURY — Jeśli zapytanie przeszło pomyślnie, użytkownik MA supportera!
+  if (!data || !data.airports) {
     return (
       <AppShell>
         <PageHeader
@@ -100,6 +86,7 @@ function PayoutMatrixPage() {
       </AppShell>
     );
   }
+
 
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
