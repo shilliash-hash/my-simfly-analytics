@@ -23,13 +23,16 @@ import {
 import { HubSupportGate } from "@/components/hub-support";
 import { useAdminToken } from "@/lib/admin-token";
 
-// 1. TRASA BEZ ŻADNYCH ERROR COMPONENTÓW (Czysty, fabryczny standard 1.0)
 export const Route = createFileRoute("/payout-matrix")({
   component: PayoutMatrixPage,
   head: () => ({
     meta: [
       { title: "Payout Matrix — SimFly Hub" },
-      { name: "robots", content: "noindex,nofollow" },
+      {
+        name: "description",
+        content:
+          "Estimated base PAX payout per aircraft Tier × Level for each of your airports, derived from real flight history with weekly bonuses excluded.",
+      },
     ],
   }),
 });
@@ -37,13 +40,12 @@ export const Route = createFileRoute("/payout-matrix")({
 function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
-
-  // 2. CZYSTE, SZYBKIE ZAPYTANIE ZAMRAŻAJĄCE CACHE NA 30 MINUT
-  const { data } = useSuspenseQuery(
+   const { data } = useSuspenseQuery(
     queryOptions({
-      queryKey: ["simfly", keyTag, "v1.0.0-unlocked"],
+      queryKey: ["simfly", keyTag, "v1.0.0-final-unlocked"],
       queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000, // Przełączanie podstron od teraz trwa 0ms!
+      staleTime: 30 * 60_000, // Zamrażamy cache na 30 minut dla odciążenia bazy!
+      retry: false, // Odcina pętlenie i crashowanie hooków błędem #300 dla darmowych kont!
     }),
   );
 
