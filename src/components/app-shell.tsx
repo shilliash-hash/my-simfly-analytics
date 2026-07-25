@@ -19,7 +19,7 @@ import {
   Mountain,
   Coins,
   Rocket,
-  ShieldKeyhole,
+  ShieldAlert,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
