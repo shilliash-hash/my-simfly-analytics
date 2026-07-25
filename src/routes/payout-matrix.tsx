@@ -59,20 +59,22 @@ function PayoutMatrixPage() {
     );
   }
 
-  // KROK B: TWARDY GATEWAY (Jeśli backend nie zwrócił danych lub flagi aktywności)
-  // Serwer został zablokowany na pierwszej linijce walidacji — baza danych jest bezpieczna!
-  if (!data || !data.hubSupportActive) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="Analytics"
-          title="Airport Flat PAX Payout Matrix"
-          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
-        />
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
-      </AppShell>
-    );
-  }
+  // KROK B: PANCERNE ODBLOKOWANIE — Sprawdzamy prawdziwy status użytkownika z Twojego API
+ const isSupporter = data?.status?.active || data?.hubSupport?.active || data?.hubSupportActive;
+
+ if (!data || !isSupporter) {
+ return (
+ <AppShell>
+ <PageHeader
+ eyebrow="Analytics"
+ title="Airport Flat PAX Payout Matrix"
+ description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
+ />
+ <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+ </AppShell>
+ );
+ }
+
 
   // KROK C: DOSTĘP PRZYZNANY — Mapujemy tablice (uruchomi się TYLKO gdy data i wsparcie istnieją)
   const airports = useMemo(
