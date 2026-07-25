@@ -2516,7 +2516,8 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
     const { username, nonce } = await resolveIdentity({ username: data.username });
     const maxPages = Math.min(Math.max(data.pages ?? 63, 1), 120);
     const cacheKey = `util:${username}:${(data.icaos ?? []).slice().sort().join(",")}:${maxPages}`;
-    return memo(cacheKey, 15 * 60_000, async () => {
+   return memo(cacheKey, 30_000, async () => {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
       const assets = await fetchJSON<RawAssetsAll>(
         `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
       );
@@ -2534,13 +2535,60 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         level: a.level ?? 0,
         capacity: a.maxRotation ?? 0,
       }));
-      const buckets = new Map<string, Map<number, number>>();
-      let earliestWeek = Number.POSITIVE_INFINITY;
-      let latestWeek = Number.NEGATIVE_INFINITY;
+if (scope.length === 0) {
+        return { weeks: [], airportMeta, fetchedAt: new Date().toISOString() };
+      }
+      const currentWeekStart = weekStartUtcMs(Date.now());
+      const icaos = scope.map((a) => a.icao);
+      // Load cached completed weeks for the scoped airports.
+      type CachedRow = {
+        icao: string;
+        week_start_utc: string;
+        capacity: number;
+        used: number;
+      };
+      const { data: cachedRowsRaw } = await supabaseAdmin
+        .from("airport_utilization_week")
+        .select("icao, week_start_utc, capacity, used")
+        .eq("username", username)
+        .in("icao", icaos);
+      const cachedRows = (cachedRowsRaw ?? []) as CachedRow[];
+      // Per-airport: cached week map + last cached week start.
+      const cachedByAirport = new Map<string, Map<number, { capacity: number; used: number }>>();
+      const lastCachedWeek = new Map<string, number>();
+      for (const icao of icaos) {
+        cachedByAirport.set(icao, new Map());
+        lastCachedWeek.set(icao, 0);
+      }
+      for (const row of cachedRows) {
+        const ws = Date.parse(row.week_start_utc);
+        if (!Number.isFinite(ws)) continue;
+        cachedByAirport.get(row.icao)?.set(ws, { capacity: row.capacity, used: row.used });
+        if (ws > (lastCachedWeek.get(row.icao) ?? 0)) lastCachedWeek.set(row.icao, ws);
+      }
+      // Per-airport live buckets (fetched only where needed).
+      const liveByAirport = new Map<string, Map<number, number>>();
+      type UpsertRow = {
+        username: string;
+        icao: string;
+        week_start_utc: string;
+        week_number: number;
+        capacity: number;
+        used: number;
+      };
+      const toInsert: UpsertRow[] = [];
       await Promise.all(
         scope.map(async (a) => {
+           const last = lastCachedWeek.get(a.icao) ?? 0;
+          // If we have cache coverage, we only need to fetch from the first
+          // uncached week onward (which at minimum is the current week).
+          // Otherwise, do a full historical scan.
+          const hasCache = last > 0;
+          const sinceMs = hasCache ? Math.min(currentWeekStart, last + MS_PER_WEEK) : 0;
+          const pages = hasCache ? Math.min(maxPages, 8) : maxPages;
           const { rows } = await collectAirportHistoryFlights(a.icao, username, nonce, {
-            maxPages,
+             maxPages: pages,
+            sinceMs,
           });
           const perWeek = new Map<number, number>();
           const flightsByWeekSet = new Map<number, Set<string>>();
@@ -2560,30 +2608,83 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
    const uniqueFlightId = r.flightId || r.id || `${r.tsMs}-${r.role}`;
    flightsByWeekSet.get(ws)!.add(uniqueFlightId);
 
-   if (ws < earliestWeek) earliestWeek = ws;
-   if (ws > latestWeek) latestWeek = ws;
- }
+  }
 
  for (const [ws, flightSet] of flightsByWeekSet.entries()) {
    perWeek.set(ws, flightSet.size);
  }
 
-          buckets.set(a.icao, perWeek);
+          liveByAirport.set(a.icao, perWeek);
+          // Every completed week we just observed AND that isn't already cached → upsert.
+          const cachedForIcao = cachedByAirport.get(a.icao)!;
+          const capacity = a.maxRotation ?? 0;
+          for (const [ws, used] of perWeek) {
+            if (ws >= currentWeekStart) continue; // current week stays live
+            if (cachedForIcao.has(ws)) continue;
+            toInsert.push({
+              username,
+              icao: a.icao,
+              week_start_utc: new Date(ws).toISOString(),
+              week_number: simflyWeekNumber(ws),
+              capacity,
+              used,
+            });
+          }
         }),
       );
+// Persist completed-week snapshots (immutable — first write wins).
+      if (toInsert.length > 0) {
+        const { error: upsertErr } = await supabaseAdmin
+          .from("airport_utilization_week")
+          .upsert(toInsert, { onConflict: "username,icao,week_start_utc", ignoreDuplicates: true });
+        if (upsertErr) {
+          console.warn("[util-cache] upsert failed", upsertErr.message);
+        } else {
+          // Reflect newly persisted rows into the in-memory cached view so this
+          // response includes them without re-reading the DB.
+          for (const r of toInsert) {
+            const ws = Date.parse(r.week_start_utc);
+            cachedByAirport.get(r.icao)?.set(ws, { capacity: r.capacity, used: r.used });
+          }
+        }
+      }
+      // Determine week range: earliest cached OR live week (excluding future) → current week.
+      let earliestWeek = currentWeekStart;
+      for (const icao of icaos) {
+        for (const ws of cachedByAirport.get(icao)!.keys()) {
+          if (ws < earliestWeek) earliestWeek = ws;
+        }
+        for (const ws of liveByAirport.get(icao)?.keys() ?? []) {
+          if (ws < earliestWeek) earliestWeek = ws;
+        }
+      }
+
+     
       const weeks: UtilizationWeek[] = [];
-      if (Number.isFinite(earliestWeek) && Number.isFinite(latestWeek)) {
-        for (let ws = earliestWeek; ws <= latestWeek; ws += MS_PER_WEEK) {
-          weeks.push({
-            weekNumber: simflyWeekNumber(ws),
-            weekStartIso: new Date(ws).toISOString(),
-            byAirport: scope.map((a) => ({
+    for (let ws = earliestWeek; ws <= currentWeekStart; ws += MS_PER_WEEK) {
+        weeks.push({
+          weekNumber: simflyWeekNumber(ws),
+          weekStartIso: new Date(ws).toISOString(),
+          byAirport: scope.map((a) => {
+            if (ws >= currentWeekStart) {
+              return {
+                icao: a.icao,
+                capacity: a.maxRotation ?? 0,
+                used: liveByAirport.get(a.icao)?.get(ws) ?? 0,
+              };
+            }
+            const hit = cachedByAirport.get(a.icao)?.get(ws);
+            if (hit) return { icao: a.icao, capacity: hit.capacity, used: hit.used };
+            // Fallback: no cached snapshot for this historical week (airport
+            // may not have existed / no landings). Use live maxRotation and
+            // whatever we observed live (if anything).
+            return {
               icao: a.icao,
               capacity: a.maxRotation ?? 0,
-              used: buckets.get(a.icao)?.get(ws) ?? 0,
-            })),
-          });
-        }
+              used: liveByAirport.get(a.icao)?.get(ws) ?? 0,
+            };
+          }),
+        });
       }
       // Zwracamy wyłącznie 56 najnowszych tygodni do wykresu, odrzucając archiwum
  const limitedWeeks = weeks.slice(-56);
