@@ -59,14 +59,10 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
         </button>
 
         {open && (
-          /* 
-            CHIRURGICZNE PRZENIESIENIE PREMIUM LOOKU Z TWOJEGO SCREENA:
-            Półprzezroczyste szkło, delikatna obwódka border-border/40 i brak wewnętrznych ramek.
-          */
           <div
-            className="panel absolute right-0 z-30 mt-2 w-[min(92vw,28rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-2xl p-4 shadow-2xl bg-slate-950/70 backdrop-blur-xl border border-border/40 shadow-black/50"
-            role="dialog"
-          >
+          className="panel absolute right-0 z-30 mt-2 w-[min(92vw,28rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-2xl p-4 shadow-2xl bg-slate-950/70 backdrop-blur-xl border border-border/40 shadow-black/50"
+          role="dialog"
+        >
             {/* NAGŁÓWEK SEKCYJNY - Wzór z Twojego screenu */}
             <div className="mb-3 flex items-center justify-between px-1">
               <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway">
