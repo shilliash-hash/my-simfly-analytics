@@ -41,12 +41,13 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v12-pancerny-final"],
+    const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["simfly", keyTag, "v12-final-shield"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
   });
+  const isGateError = isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED");
 
   if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
     return (
@@ -78,13 +79,25 @@ function PayoutMatrixPage() {
 
   return (
     <AppShell>
-      <PageHeader
+           <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
         description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded separately — the matrix average uses the standard Airport Profit Split as the base payout, while the drawer's Total column shows the actual airport-owner wallet credit after bonus and share adjustments."
       />
 
-      <div className="mb-6 flex flex-wrap gap-3 items-end">
+      {isGateError ? (
+        /* STAN 1: Jeśli serwer odrzucił dostęp dla darmowego konta — stawiamy luksusowy paywall */
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      ) : isLoading || !data ? (
+        /* STAN 2: Pasek ładowania widoczny dla Supporterów pobierających 1.77 MB danych */
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse mt-6">
+          Verifying console access and loading payload…
+        </div>
+      ) : (
+        /* STAN 3: DOSTĘP PRZYZNANY — Tutaj wskakuje Twój oryginalny div z linii 88! */
+        <>
+          <div className="mb-6 flex flex-wrap gap-3 items-end">
+
         <label className="text-xs uppercase tracking-wider text-foreground/60">
           Airport
           <select
@@ -110,9 +123,12 @@ function PayoutMatrixPage() {
        <div className="mt-10">
         <CompareCard airports={airports} pages={pages} />
       </div>
+      </>
+       )}
     </AppShell>
   );
 }
+      
 type AirportMeta = { icao: string; name: string; category: number; level: number };
 function CompareCard({
   airports,
