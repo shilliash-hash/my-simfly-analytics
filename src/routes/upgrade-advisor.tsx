@@ -172,10 +172,9 @@ function UpgradeAdvisorPage() {
       />
 
       {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
-
-            {!gated && (
+             
+      {!gated && (
         <>
-          {/* KONTENER FILTRÓW I SORTOWANIA */}
           <div className="mb-6 flex flex-wrap items-center gap-4">
             <div className="space-y-1">
               <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground block pl-0.5">
@@ -202,7 +201,6 @@ function UpgradeAdvisorPage() {
             </div>
           </div>
 
-          {/* LISTA KART LOTNISK I STANÓW ŁADOWANIA */}
           <div className="space-y-4">
             {isError && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -238,7 +236,6 @@ function UpgradeAdvisorPage() {
             )}
           </div>
 
-          {/* LEGENDA I METODOLOGIA URATOWANA POD LOCKIEM */}
           <UpgradeAdvisorLegend />
 
           <p className="mt-6 text-[11px] text-muted-foreground/50 max-w-3xl leading-relaxed">
@@ -249,6 +246,7 @@ function UpgradeAdvisorPage() {
     </AppShell>
   );
 }
+
 
 function TtlEditor({
   currentTtl,
