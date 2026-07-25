@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState } from "react";
 import { getSimflyPayload, getAirportPayoutMatrix, getAllAirportPayoutMatrices } from "@/lib/simfly.functions";
 import type { AirportPayoutMatrix, PayoutMatrixCell } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
@@ -41,94 +41,93 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-  // 1. BEZPIECZNE ZAPYTANIE (Wymuszamy retry: false, aby darmowy user nie mrugał ekranem)
-    const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v8-final-shield"],
+  // 1. PANCERNE ZAPYTANIE: retry: false natychmiast kończy pracę przy braku uprawnień
+  const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["simfly", keyTag, "v12-final-pancerny"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
-    
-    // PANCERNE WYŁĄCZENIE TŁA - To odetnie ciche zapytania i uratuje layout przed crashem!
-    refetchOnWindowFocus: false, // Nie szukaj zmian, gdy user klika po zakładkach
-    refetchOnReconnect: false,   // Nie odświeżaj sieci w tle
   });
 
+  // 2. TWARDY GATEWAY: Jeśli serwer odrzucił dostęp dla nie-supportera — od razu stawiamy paywall.
+  // Funkcja kończy działanie TUTAJ, nie pozwalając na wyciek żadnych danych ani lotnisk!
+  if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout for every Aircraft Tier × Level." />
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      </AppShell>
+    );
+  }
 
-  // 2. ORYGINALNE HOOKI Z WERSJI 1.0 (Wykonają się ZAWSZE w tej samej kolejności, co niszczy błędy #418 / #310!)
+  // 3. STAN ŁADOWANIA DLA SUPPORTERÓW:
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
+          Verifying console access and loading payload…
+        </div>
+      </AppShell>
+    );
+  }
+
+  // 4. BEZPIECZNIK STRUKTURY DANYCH:
+  if (!data || !data.airports || data.airports.length === 0) {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout for every Aircraft Tier × Level." />
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40">
+          No owned airports detected. Purchase an airport to unlock telemetry.
+        </div>
+      </AppShell>
+    );
+  }
+
   const airports = useMemo(
-    () => [...(data?.airports ?? [])].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
-    [data?.airports],
+    () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
+    [data.airports],
   );
 
-  const [icao, setIcao] = useState<string>("");
-  
-  // Automatyczne ustawienie pierwszego ICAO, gdy dane z bazy bezpiecznie dojadą na front
-  useEffect(() => {
-    if (airports[0]?.icao && !icao) {
-      setIcao(airports[0].icao);
-    }
-  }, [airports, icao]);
-
-  const pages = 63;
-
+  const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
+  const pages = 63; // fixed ~250-flight sample (covers ~2 months for most airports)
 
   return (
     <AppShell>
-          <PageHeader
+      <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
         description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded separately — the matrix average uses the standard Airport Profit Split as the base payout, while the drawer's Total column shows the actual airport-owner wallet credit after bonus and share adjustments."
       />
 
-      {/* STAN 1: Jeśli serwer odrzucił dostęp dla nie-supportera — renderujemy szklaną bramkę wewnątrz layoutu */}
-      {isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED") ? (
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
-      ) : isLoading ? (
-        /* STAN 2: Pasek ładowania widoczny dla Supporterów czekających na dane */
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse mt-6">
-          Verifying console access and loading payload…
+      <div className="mb-6 flex flex-wrap gap-3 items-end">
+        <label className="text-xs uppercase tracking-wider text-foreground/60">
+          Airport
+          <select
+            value={icao}
+            onChange={(e) => setIcao(e.target.value)}
+            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground min-w-[14rem]"
+          >
+            {airports.map((a) => (
+              <option key={a.icao} value={a.icao}>
+                {a.icao} · {a.name} (T{a.category} L{a.level})
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="text-[11px] text-foreground/50">
+          Sample depth: fixed ~250 flights (≈2 months of activity for most airports).
         </div>
-      ) : !data || airports.length === 0 ? (
-        /* STAN 3: Obsługa pustych kont bez zakupionych lotnisk */
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40 mt-6">
-          No owned airports detected. Purchase your first airport on SimFly.io to unlock telemetry.
-        </div>
-      ) : (
-        /* STAN 4: DOSTĘP PRZYZNANY — Renderujemy oryginalne tabele i selecty z wersji 1.0 */
-        <>
-          <div className="mb-6 flex flex-wrap gap-3 items-end mt-6">
-            <label className="text-xs uppercase tracking-wider text-foreground/60">
-              Airport
-              <select
-                value={icao}
-                onChange={(e) => setIcao(e.target.value)}
-                className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground min-w-[14rem]"
-              >
-                {airports.map((a) => (
-                  <option key={a.icao} value={a.icao}>
-                    {a.icao} · {a.name} (T{a.category} L{a.level})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="text-[11px] text-foreground/50">
-              Sample depth: fixed ~250 flights (≈2 months of activity for most airports).
-            </div>
-          </div>
+      </div>
 
-          {icao ? <MatrixCard icao={icao} pages={pages} /> : (
-            <p className="text-foreground/70 text-sm">No airports available for this pilot.</p>
-          )}
-
-          <div className="mt-10">
-            <CompareCard airports={airports} pages={pages} />
-          </div>
-        </>
+      {icao ? <MatrixCard icao={icao} pages={pages} /> : (
+        <p className="text-foreground/70 text-sm">No airports available for this pilot.</p>
       )}
+       <div className="mt-10">
+        <CompareCard airports={airports} pages={pages} />
+      </div>
     </AppShell>
   );
 }
-
 type AirportMeta = { icao: string; name: string; category: number; level: number };
 function CompareCard({
   airports,
