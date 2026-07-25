@@ -1,155 +1,127 @@
-export interface ChangelogItem {
-  id: string;
-  version: string;
-  // POPRAWKA: Zmiana na tablicę obsługującą wiele tagów pisanych dużymi literami
-  type: ("FEATURE" | "FIX" | "UPGRADE")[];
-  text: string;
-}
+import { useEffect, useRef, useState } from "react";
+import { History, Sparkles, Wrench, ShieldAlert } from "lucide-react";
+import { staticChangelogFeed } from "@/lib/changelog-data";
+import { cn } from "@/lib/utils";
 
-// TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
-export const staticChangelogFeed: ChangelogItem[] = [
- {
-  id: "1",
-  version: "v 0.92 EXPERIMENTAL 23.Jul.26",
-  type: ["FEATURE", "FIX"],
-  text: `• Brand new prediction engine for planned flights.
-• Predicts expected PAX before departure.
-• Full component-by-component income analysis.
-• Statistical confidence scoring.
-• Transparent prediction methodology.
-• Experimental self-learning prediction model.
-• Historical Intelligence - Prediction now uses your complete historical flight ledger.
-• Dynamic reference matrices built automatically from historical flights.
-• Aircraft Tier × Airport Tier intelligence.
-• Airport reference matrix.
-• Aircraft reference matrix.
-• Near-history and direct-history matching.
-• Community Intelligence - optional mode.
-• Supplements your own data with anonymized global statistics.
-• Community influence decreases automatically as your own history grows.
-• Community never replaces your own data.
-• Transparent contribution shown in prediction details.
-• Aircraft Intelligence - prediction for owned aircraft.
-• Generic aircraft support (Tier 1–7).
-• Dedicated Prediction Ledger for aircraft income.
-• Owner-income prediction separated from accounting.
-• Historical aircraft median prediction.
-• Improved aircraft confidence model.
-• Airport Intelligence - prediction based on airport tier.
-• Historical airport intelligence.
-• Weekly bonus prediction.
-• Independent departure and arrival analysis.
-• Improved handling of sparse historical data.
-• Licence Intelligence - historical licence median prediction.
-• Weekly eligibility verification.
-• Confidence-aware licence estimation.
-• Decision Support Workflow
-• Planner redesigned into an intentional decision-support workflow.
-• Added Begin Data Mining execution model.
-• Eliminated unnecessary live recalculations.
-• Resource-efficient prediction execution.
-• Prediction Accuracy Framework - now combines multiple evidence sources:
-• Direct historical evidence
-• Near historical evidence
-• Reference matrices
-• Community Intelligence
-• Statistical fallbacks
-• Each prediction displays confidence based on actual evidence quality.
-`
-},      
-  {
-  id: "1",
-  version: "v 0.911 STABLE 18.Jul.26",
-  type: ["FEATURE", "UPGRADE"],
-  text: `• SimBrief Quick Dispatch is live. Click any ICAO in an Alliance pilot card to instantly open SimBrief with the destination pre-filled.
-  • Updated table for airports upgrade cost to reflect real values with better accuracy.`
-},      
-  {
-  id: "1",
-  version: "v 0.910 STABLE 17.Jul.26",
-  type: ["FEATURE", "UPGRADE"],
-  text: `• New Income Intelligence analytics module.
-  • Active vs Passive income breakdown.
-  • Financial trends and historical analysis.
-  • Airport and aircraft income attribution.
-  • Dashboard Total Income now includes both Active and Passive income.
-  • Improved loading experience and accounting consistency.
-  • Resource-intensive analytics — now available for all HUB Supporters.`
-},    
-  {
-  id: "1",
-  version: "v 0.909 STABLE 13.Jul.26",
-  type: ["FEATURE", "UPGRADE", "FIX"],
-  text: `• Added the new Alliance Intelligence module.
-  • Interactive alliance visualization with pilot relationships and airport intelligence.
-  • Introduced session-based SimFly identity with per-pilot nonce resolution.
-  • Improved Alliance build pipeline with automatic resume after interrupted builds.
-  • Enhanced caching, reliability and overall performance of Alliance data generation.
-  • Alliance Intelligence is now available exclusively for Hub Supporters.`
-},  
-  {
-  id: "2",
-  version: "v 0.908 STABLE 10.Jul.26",
-  type: ["FEATURE", "FIX"],
-  text: `• Introduced the new My Team Activity module.
-  • Build your own team of up to 10 pilots.
-  • Follow live flights and parked aircraft on an interactive map.
-  • View real-time flight progress, aircraft details and estimated arrival times.
-  • Available exclusively for Hub Supporters.
-  • License page - revised UI and functionality for timers.`
-},  
-  {
-  id: "3",
-  version: "v 0.907 STABLE 08.Jul.26",
-  type: ["FEATURE"],
-  text: `• Introduced the Counter-Visit Finder widget for planning return flights.
-  • Added a dynamic "Hubs" search button to the View as Pilot panel.
-  • Pilots using SimFly Hub can now be discovered through the Hubs search.
-  • Search results display all owned airports with detailed hub information in a dedicated pop-up window.`
-},
-  {
-  id: "4",
-  version: "v 0.906 STABLE 08.Jul.26",
-  type: ["FEATURE", "UPGRADE", "FIX"],
-  text: `• Introduced Pilots Career - a new personal aviation history page.
-  • Discover your flying journey through visited airports, longest routes and global travel distance.
-  • Added aircraft Tier usage statistics and flight activity breakdown. 
-  • Added visited countries with visual flag display. 
-  • Career statistics are calculated from complete historical SimFly flight data. 
-  • Improved historical flight processing for more accurate achievements and records. 
-  • Enhanced layout and readability on all device sizes.`
-},
-    {
-    id: "5",
-    version: "v 0.905 STABLE 7.Jul.24",
-    type: ["UPGRADE", "FEATURE", "FIX"],
-    text: `• Improved visitor cards for better readability.
-• Added the Hub Analysis supporter page.
-• Improved the robustness of the weekly Hub Support logic.`
-  },
-  {
-    id: "6",
-    version: "v 0.904",
-    type: ["UPGRADE", "FIX"],
-    text: `•Single airport license checker option added. 
-    •DB traffic from server reduced.`
-  },
-  {
-    id: "7",
-    version: "v 0.903",
-    type: ["FEATURE"],
-    text: `•Dynamic database architecture optimized and cloud sweeps operational.`
-  },
-  {
-    id: "8",
-    version: "v 0.902",
-    type: ["FIX"],
-    text: `•Fixed hydration mismatches and stabilized dashboard components.`
-  },
-  {
-    id: "9",
-    version: "v 0.901",
-    type: ["UPGRADE"],
-    text: `•Upgraded edge server transport layers for smoother performance.`
-  }
-];
+export function ChangelogBadge() {
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (!wrapRef.current?.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const hasData = Array.isArray(staticChangelogFeed) && staticChangelogFeed.length > 0;
+  const latestBuild = hasData ? (staticChangelogFeed[0]?.version || "0.0.0") : "0.0.0";
+  const latestDate = hasData ? (staticChangelogFeed[0]?.date || "") : "";
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="mono inline-flex items-center gap-2 rounded-md border border-border bg-secondary/40 px-2.5 py-1.5 text-[11px] uppercase tracking-widest text-foreground transition hover:bg-secondary"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+      >
+        <History className="h-3.5 w-3.5 text-muted-foreground/80" />
+        <span className="font-medium">Changelog</span>
+        <span className="text-[10px] text-muted-foreground/40 font-normal">
+          v{latestBuild.split(" ")[1] || latestBuild}
+        </span>
+      </button>
+
+      {open && (
+        <div
+          className="panel absolute right-0 z-30 mt-2 w-[min(94vw,36rem)] max-h-[min(80vh,46rem)] overflow-hidden rounded-2xl p-5 shadow-2xl bg-background/60 backdrop-blur-xl border border-border/40 shadow-black/60 animate-in fade-in slide-in-from-top-1 duration-150"
+          role="dialog"
+        >
+          <div className="mb-4 flex items-center justify-between px-0.5 border-b border-border/20 pb-2">
+            <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway flex items-center gap-2">
+              <History className="h-3.5 w-3.5 text-runway" />
+              <span>System Update Logs</span>
+            </div>
+            <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/50">
+              Freshness: {latestDate || "Live"}
+            </span>
+          </div>
+          
+          <div className="max-h-[calc(min(80vh,46rem)-5rem)] space-y-5 overflow-auto pr-1 custom-scrollbar">
+            {hasData ? (
+              staticChangelogFeed.map((item: any) => {
+                // Sprawdzamy obecność tagów w tablicy z bazy danych
+                const tags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
+                const isFix = tags.includes("FIX");
+
+                return (
+                  <div key={item.id || item.version} className="space-y-2 px-0.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        
+                        {/* DYNAMICZNE RENDEROWANIE WIELU TAGÓW Z TABLICY DATA */}
+                        {tags.map((tag: string) => (
+                          <span
+                            key={tag}
+                            className={cn(
+                              "mono text-[8px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block tracking-wider uppercase",
+                              tag === "FEATURE" && "text-runway bg-runway/15 border-runway/30",
+                              tag === "FIX" && "text-instrument bg-instrument/15 border-instrument/30",
+                              tag === "UPGRADE" && "text-amber-400 bg-amber-400/10 border-amber-400/20"
+                            )}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        
+                        <span className="mono text-[10px] font-semibold text-muted-foreground/60 bg-secondary/30 px-1.5 py-0.5 rounded border border-border/40">
+                          {item.version}
+                        </span>
+                      </div>
+                      <span className="mono text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">
+                        {item.date || ""}
+                      </span>
+                    </div>
+
+                    {/* RENDROWANIE LINII NA SZKLE */}
+                    <div className="text-[12px] leading-relaxed text-slate-300 pl-3 border-l border-border/30 mt-2 whitespace-pre-line font-sans space-y-1">
+                      {String(item.text || "")
+                        .split("\n")
+                        .filter((line) => line.trim().length > 0)
+                        .map((line, i) => {
+                          const cleanLine = line.replace(/^[•\-\*\s]+/, "");
+                          return (
+                            <div key={i} className="flex items-start gap-2 py-0.5 group">
+                              {isFix ? (
+                                <Wrench className="h-3 w-3 shrink-0 text-instrument/60 mt-1" />
+                              ) : (
+                                <Sparkles className="h-3 w-3 shrink-0 text-runway/60 mt-1" />
+                              )}
+                              <span>{cleanLine}</span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-xs text-muted-foreground italic px-0.5">No recent updates available.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
