@@ -41,60 +41,31 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-  // 1. BEZPIECZNE ZAPYTANIE: Wyłączamy retry, aby darmowy user nie czekał 20 sekund na mruganie ekranu
+  // 1. BEZPIECZNE ZAPYTANIE (Wymuszamy retry: false, aby darmowy user nie mrugał ekranem)
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v5-stable-matrix"],
+    queryKey: ["simfly", keyTag, "v7-pancerna-hydracja"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
-    retry: false, // <-- KLUCZ: Kończymy zapytanie natychmiast przy braku uprawnień!
+    retry: false,
   });
 
-  // 2. TWARDY GATEWAY: Jeśli serwer zgłosi brak supportera — od razu wyrzucamy HubSupportGate
-  if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="Analytics"
-          title="Airport Flat PAX Payout Matrix"
-          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
-        />
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
-      </AppShell>
-    );
-  }
-
-  // 3. STAN ŁADOWANIA: Dla Supporterów pobierających 1.77 MB danych lotnisk
-  if (isLoading) {
-    return (
-      <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
-          Verifying console access and loading payload…
-        </div>
-      </AppShell>
-    );
-  }
-
-  // 4. ZABEZPIECZENIE: Jeśli zapytanie przeszło, ale struktura danych jest pusta
-  if (!data || !data.airports) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="Analytics"
-          title="Airport Flat PAX Payout Matrix"
-          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
-        />
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
-      </AppShell>
-    );
-  }
-
+  // 2. ORYGINALNE HOOKI Z WERSJI 1.0 (Wykonają się ZAWSZE w tej samej kolejności, co niszczy błędy #418 / #310!)
   const airports = useMemo(
-    () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
-    [data.airports],
+    () => [...(data?.airports ?? [])].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
+    [data?.airports],
   );
 
-  const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
-  const pages = 63; // fixed ~250-flight sample (covers ~2 months for most airports)
+  const [icao, setIcao] = useState<string>("");
+  
+  // Automatyczne ustawienie pierwszego ICAO, gdy dane z bazy bezpiecznie dojadą na front
+  useEffect(() => {
+    if (airports[0]?.icao && !icao) {
+      setIcao(airports[0].icao);
+    }
+  }, [airports, icao]);
+
+  const pages = 63;
+
 
   return (
     <AppShell>
