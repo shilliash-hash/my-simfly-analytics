@@ -42,12 +42,17 @@ function PayoutMatrixPage() {
   const { keyTag, payload } = useSimflyArgs();
 
   // 1. BEZPIECZNE ZAPYTANIE (Wymuszamy retry: false, aby darmowy user nie mrugał ekranem)
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v7-pancerna-hydracja"],
+    const { data, isLoading, isError, error } = useQuery({
+    queryKey: ["simfly", keyTag, "v8-final-shield"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
+    
+    // PANCERNE WYŁĄCZENIE TŁA - To odetnie ciche zapytania i uratuje layout przed crashem!
+    refetchOnWindowFocus: false, // Nie szukaj zmian, gdy user klika po zakładkach
+    refetchOnReconnect: false,   // Nie odświeżaj sieci w tle
   });
+
 
   // 2. ORYGINALNE HOOKI Z WERSJI 1.0 (Wykonają się ZAWSZE w tej samej kolejności, co niszczy błędy #418 / #310!)
   const airports = useMemo(
