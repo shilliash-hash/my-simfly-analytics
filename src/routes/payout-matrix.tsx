@@ -40,43 +40,13 @@ export const Route = createFileRoute("/payout-matrix")({
 function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
-
-  const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v4-stable-payout"],
-    queryFn: () => fn(payload ? { data: payload } : undefined),
-    staleTime: 30 * 60_000,
-    retry: false,
-  });
-
-  if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
-    return (
-      <AppShell>
-        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
-      </AppShell>
-    );
-  }
-
-  if (isLoading) {
-    return (
-      <AppShell>
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
-          Verifying console access and loading payload…
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!data || !data.airports || data.airports.length === 0) {
-    return (
-      <AppShell>
-        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40">
-          No owned airports detected. Purchase an airport to unlock telemetry.
-        </div>
-      </AppShell>
-    );
-  }
+  const { data } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ["simfly", keyTag],
+      queryFn: () => fn(payload ? { data: payload } : undefined),
+      staleTime: 30 * 60_000,
+    }),
+  );
 
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
@@ -84,7 +54,7 @@ function PayoutMatrixPage() {
   );
 
   const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
-  const pages = 63;
+  const pages = 63; // fixed ~250-flight sample (covers ~2 months for most airports)
 
   return (
     <AppShell>
