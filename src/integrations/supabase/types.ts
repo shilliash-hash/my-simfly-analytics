@@ -50,6 +50,36 @@ export type Database = {
         }
         Relationships: []
       }
+      airport_utilization_week: {
+        Row: {
+          capacity: number
+          created_at: string
+          icao: string
+          used: number
+          username: string
+          week_number: number
+          week_start_utc: string
+        }
+        Insert: {
+          capacity?: number
+          created_at?: string
+          icao: string
+          used?: number
+          username: string
+          week_number: number
+          week_start_utc: string
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          icao?: string
+          used?: number
+          username?: string
+          week_number?: number
+          week_start_utc?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
