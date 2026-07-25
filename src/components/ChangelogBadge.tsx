@@ -1,8 +1,3 @@
-import { useEffect, useRef, useState } from "react";
-import { History, Sparkles, Wrench, ShieldAlert } from "lucide-react";
-import { staticChangelogFeed } from "@/lib/changelog-data";
-import { cn } from "@/lib/utils";
-
 export function ChangelogBadge() {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -23,12 +18,18 @@ export function ChangelogBadge() {
     };
   }, [open]);
 
-  // Wyciągamy najnowszą wersję do wyświetlenia na przycisku
-  const latestBuild = CHANGELOG_DATA[0]?.version || "0.0.0";
+  // UNIKAMY BŁĘDU: Bezpiecznie sprawdzamy tablicę staticChangelogFeed z fallbackiem na puste dane
+  const latestBuild = Array.isArray(staticChangelogFeed) && staticChangelogFeed.length > 0
+    ? staticChangelogFeed[0].version
+    : "0.0.0";
+
+  const latestDate = Array.isArray(staticChangelogFeed) && staticChangelogFeed.length > 0
+    ? staticChangelogFeed[0].date
+    : "";
 
   return (
     <div ref={wrapRef} className="relative">
-      {/* PRZYCISK W BELCE - Z TEKSTEM I IKONĄ */}
+      {/* PRZYCISK W BELCE */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -53,51 +54,46 @@ export function ChangelogBadge() {
               <span>System Update Logs</span>
             </div>
             <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/50">
-              Freshness: {CHANGELOG_DATA[0]?.date}
+              Freshness: {latestDate}
             </span>
           </div>
           
           <div className="max-h-[calc(min(80vh,46rem)-5rem)] space-y-5 overflow-auto pr-1 custom-scrollbar">
-            {CHANGELOG_DATA.map((item) => (
-              <div key={item.version} className="space-y-2 px-0.5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className={cn(
-                      "mono text-[9px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-sm border",
-                      item.type === "feature" && "text-runway bg-runway/10 border-runway/20",
-                      item.type === "fix" && "text-instrument bg-instrument/10 border-instrument/20",
-                      item.type === "security" && "text-destructive bg-destructive/10 border-destructive/20"
-                    )}>
-                      {item.version}
+            {Array.isArray(staticChangelogFeed) && staticChangelogFeed.length > 0 ? (
+              staticChangelogFeed.map((item: any) => (
+                <div key={item.id || item.version} className="space-y-2 px-0.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <span className={cn(
+                        "mono text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block",
+                        String(item.type).toUpperCase() === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" :
+                        String(item.type).toUpperCase() === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" :
+                        "text-runway bg-runway/15 border-runway/30"
+                      )}>
+                        {item.version}
+                      </span>
+                      <h4 className="font-display text-sm font-semibold text-slate-200">
+                        {item.title || "System Update"}
+                      </h4>
+                    </div>
+                    <span className="mono text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">
+                      {item.date || ""}
                     </span>
-                    <h4 className="font-display text-sm font-semibold text-slate-200">
-                      {item.title}
-                    </h4>
                   </div>
-                  <span className="mono text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">
-                    {item.date}
-                  </span>
-                </div>
 
-                <ul className="space-y-1.5 pl-2 border-l border-l-border/30 mt-2">
-                  {item.changes.map((change, i) => (
-                    <li key={i} className="text-[12px] leading-relaxed text-slate-300 flex items-start gap-2">
-                      {item.type === "feature" ? (
-                        <Sparkles className="h-3 w-3 shrink-0 text-runway/60 mt-1" />
-                      ) : item.type === "fix" ? (
-                        <Wrench className="h-3 w-3 shrink-0 text-instrument/60 mt-1" />
-                      ) : (
-                        <ShieldAlert className="h-3 w-3 shrink-0 text-destructive/60 mt-1" />
-                      )}
-                      <span>{change}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+                  {/* Linie Zmian — Czysty tekst bezpośrednio na szkle */}
+                  <p className="text-[12px] leading-relaxed text-slate-300 pl-2 border-l border-border/30 mt-2 whitespace-pre-line">
+                    {item.text}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground italic px-0.5">No recent updates available.</p>
+            )}
           </div>
         </div>
       )}
     </div>
   );
 }
+
