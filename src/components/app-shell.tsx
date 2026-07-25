@@ -70,17 +70,26 @@ function Sidebar() {
 
   return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
-      <div className="flex items-center gap-4 px-3 py-5 mb-5 border-b border-border/10">
-        <div className="relative flex h-64 w-64 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
+      
+      {/* 
+        MONUMENTALNE LOGO CENTER-FOCUS (ROZMIAR X2 -> h-36 w-36):
+        - Całkowicie wywaliliśmy dublujący się kod tekstowy SIMFLY / INTELLIGENCE / HUB.
+        - Kontener rośnie do 144x144px i centruje się idealnie do środka Sidebaru.
+        - Napisy zaszyte w grafice stają się w pełni czytelne, a detale globu zachwycają głębią.
+      */}
+      <div className="flex flex-col items-center justify-center px-3 py-6 mb-6 border-b border-border/10">
+        <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
           <img
             src={hubLogo}
             alt="SimFly Assets Intelligence Hub"
-            className="h-full w-full object-contain p-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105"
+            className="h-full w-full object-contain p-2.5 drop-shadow-[0_0_20px_rgba(34,211,238,0.45)] transition-transform duration-300 group-hover:scale-105"
           />
         </div>
-         
-            <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+      </div>
+
+      {/* STRUKTURA NAWIGACJI O ORYGINALNYM, ZWARTYM STYLU */}
+      <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -97,10 +106,10 @@ function Sidebar() {
           );
         })}
       </nav>
-
     </aside>
   );
 }
+
 
 export function PageHeader({
   eyebrow,
