@@ -69,41 +69,61 @@ function PayoutMatrixPage() {
 
   return (
     <AppShell>
-      <PageHeader
+          <PageHeader
         eyebrow="Analytics"
         title="Airport Flat PAX Payout Matrix"
         description="Estimated base per-flight PAX payout for every Aircraft Tier × Level, calculated from every completed flight in this airport's history. The Weekly Cycle First Movement (3×) bonus and other temporary multipliers are recorded separately — the matrix average uses the standard Airport Profit Split as the base payout, while the drawer's Total column shows the actual airport-owner wallet credit after bonus and share adjustments."
       />
 
-      <div className="mb-6 flex flex-wrap gap-3 items-end">
-        <label className="text-xs uppercase tracking-wider text-foreground/60">
-          Airport
-          <select
-            value={icao}
-            onChange={(e) => setIcao(e.target.value)}
-            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground min-w-[14rem]"
-          >
-            {airports.map((a) => (
-              <option key={a.icao} value={a.icao}>
-                {a.icao} · {a.name} (T{a.category} L{a.level})
-              </option>
-            ))}
-          </select>
-        </label>
-        <div className="text-[11px] text-foreground/50">
-          Sample depth: fixed ~250 flights (≈2 months of activity for most airports).
+      {/* STAN 1: Jeśli serwer odrzucił dostęp dla nie-supportera — renderujemy szklaną bramkę wewnątrz layoutu */}
+      {isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED") ? (
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      ) : isLoading ? (
+        /* STAN 2: Pasek ładowania widoczny dla Supporterów czekających na dane */
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse mt-6">
+          Verifying console access and loading payload…
         </div>
-      </div>
+      ) : !data || airports.length === 0 ? (
+        /* STAN 3: Obsługa pustych kont bez zakupionych lotnisk */
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40 mt-6">
+          No owned airports detected. Purchase your first airport on SimFly.io to unlock telemetry.
+        </div>
+      ) : (
+        /* STAN 4: DOSTĘP PRZYZNANY — Renderujemy oryginalne tabele i selecty z wersji 1.0 */
+        <>
+          <div className="mb-6 flex flex-wrap gap-3 items-end mt-6">
+            <label className="text-xs uppercase tracking-wider text-foreground/60">
+              Airport
+              <select
+                value={icao}
+                onChange={(e) => setIcao(e.target.value)}
+                className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground min-w-[14rem]"
+              >
+                {airports.map((a) => (
+                  <option key={a.icao} value={a.icao}>
+                    {a.icao} · {a.name} (T{a.category} L{a.level})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <div className="text-[11px] text-foreground/50">
+              Sample depth: fixed ~250 flights (≈2 months of activity for most airports).
+            </div>
+          </div>
 
-      {icao ? <MatrixCard icao={icao} pages={pages} /> : (
-        <p className="text-foreground/70 text-sm">No airports available for this pilot.</p>
+          {icao ? <MatrixCard icao={icao} pages={pages} /> : (
+            <p className="text-foreground/70 text-sm">No airports available for this pilot.</p>
+          )}
+
+          <div className="mt-10">
+            <CompareCard airports={airports} pages={pages} />
+          </div>
+        </>
       )}
-       <div className="mt-10">
-        <CompareCard airports={airports} pages={pages} />
-      </div>
     </AppShell>
   );
 }
+
 type AirportMeta = { icao: string; name: string; category: number; level: number };
 function CompareCard({
   airports,
