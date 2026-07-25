@@ -30,12 +30,13 @@ export const Route = createFileRoute("/payout-matrix")({
   errorComponent: ({ error }) => {
     return (
       <AppShell>
-        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40 mt-6">
-          {error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")
-            ? "This telemetry matrix requires an active Hub Support subscription. Please check your account status."
-            : "Access denied or system payload timeout. Please refresh or contact telemetry admin."}
-        </div>
+        <PageHeader 
+          eyebrow="Analytics" 
+          title="Airport Flat PAX Payout Matrix" 
+          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level." 
+        />
+        {/* Wstrzykujemy oficjalną bramkę – system wyświetli luksusowy paywall zamiast szarego komunikatu! */}
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
       </AppShell>
     );
   },
