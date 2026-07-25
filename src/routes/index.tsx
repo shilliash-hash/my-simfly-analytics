@@ -156,7 +156,7 @@ const { data: income30d } = useQuery({
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/30 to-slate-950/60 shadow-inner overflow-hidden backdrop-blur-md">
               <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
               <img 
-                src={hub_logo_512} 
+                src={hubLogo} 
                 alt="SimFly Hub"
                 className="h-8 w-8 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] transition-transform duration-300 group-hover:scale-105"
               />
