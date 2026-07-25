@@ -10,6 +10,56 @@ export interface ChangelogItem {
 export const staticChangelogFeed: ChangelogItem[] = [
  {
   id: "1",
+  version: "v 1.0 FULL RELEASE 25.Jul.26",
+  type: ["FEATURE", "UPGRADE", "FIX"],
+  text: `• Mission Intelligence Update. This marks the first major milestone for SimFly Hub.
+  The application has evolved from a collection of statistics into a complete operational intelligence
+  platform built around your historical SimFly data.
+
+  • UI / UX Updates - Redesigned homepage for improved responsiveness and cleaner information hierarchy.
+  • Reduced visual clutter by replacing large static panels with contextual hover pop-outs.
+  • Improved overall navigation and dashboard usability.
+  • Refined typography, spacing and component consistency across the application.
+
+  • New Operational Widgets
+  • New hover pop-outs provide instant access to operational information without leaving the current page.
+  • Fleet Status
+  • Ready aircraft overview
+  • Quick fleet availability check
+  • Active licences with live timers
+  • Remaining licence availability
+  • Immediate operational readiness overview
+
+  • Airports Intelligence - A brand new airport capacity visualization has been added.
+  • Weekly Arrivals vs Capacity
+  • Compare actual completed arrivals against available weekly arrival slots.
+  • Visualize airport utilization trends over time.
+  • Compare utilization across your owned airports.
+  • Historical weekly navigation.
+  • Optimized data loading and caching architecture.
+  • This metric makes it much easier to identify underutilized airports and optimize airport investment decisions.
+
+  • Mission Intelligence continues to evolve as the core prediction engine.
+  • Improved prediction methodology.
+  • Better licence awareness.
+  • Additional historical intelligence inputs.
+  • Multiple UI refinements for prediction transparency.
+
+  • Bug Fixes
+  • Fixed airport income calculations for owner-operated flights.
+  • Fixed historical activity edge cases affecting statistics.
+  • Resolved duplicated activity records created under specific ownership scenarios.
+  • Improved overall data consistency across analytical modules.
+
+  • Performance
+  • Improved responsiveness throughout the application.
+  • Reduced unnecessary page navigation through contextual widgets.
+  • Backend optimizations for analytical workloads.
+  • Multiple internal stability improvements.
+Thank you to everyone testing the Hub and providing feedback. Many of the improvements in this release originated directly from real-world usage and community suggestions.`
+},      
+  {
+  id: "1",
   version: "v 0.92 EXPERIMENTAL 23.Jul.26",
   type: ["FEATURE", "FIX"],
   text: `• Brand new prediction engine for planned flights.
