@@ -19,6 +19,7 @@ import {
   Mountain,
   Coins,
   Rocket,
+  ShieldKeyhole,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -33,6 +34,8 @@ const NAV = [
   { to: "/rankings",   label: "Rankings",  icon: Trophy },
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/stats",       label: "Stats",       icon: BarChart3 },
+  { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
+  { to: "/community",   label: "Community",   icon: Users },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
   { to: "/upgrade-advisor", label: "Upgrade Advisor", icon: TrendingUp },
   { to: "/historical-hub-analysis", label: "Historical Hub Analysis", icon: BarChart3 },
@@ -42,8 +45,6 @@ const NAV = [
   { to: "/mission", label: "Mission Prediction", icon: Rocket },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
-  { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
-  { to: "/community",   label: "Community",   icon: Users },
   //{ to: "/admin",       label: "Admin",       icon: Wrench },
 ] as const;
 
@@ -89,7 +90,7 @@ function Sidebar() {
       </div>
 
       {/* STRUKTURA NAWIGACJI O ORYGINALNYM, ZWARTYM STYLU */}
-      <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+                 <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -98,10 +99,14 @@ function Sidebar() {
               to={item.to}
               activeProps={{ className: "bg-secondary text-foreground" }}
               inactiveProps={{ className: "text-muted-foreground hover:bg-secondary/40 hover:text-foreground" }}
-              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:w-full"
+              className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:w-full"
             >
               <Icon className="h-4 w-4 shrink-0" />
               <span className="font-display tracking-wide">{item.label}</span>
+              
+              {item.supporterOnly && (
+                <ShieldKeyhole className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-cyan-400/60 transition-colors duration-200" />
+              )}
             </Link>
           );
         })}
