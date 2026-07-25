@@ -225,15 +225,14 @@ function UpgradeAdvisorPage() {
         </div>
       </div>
 
-      {/* PANCERNY BEZPIECZNIK ADMINA: Panel renderuje się wyłącznie dla profilu shill */}
- {payload?.username === "shill" && (
-   <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm animate-in fade-in duration-150">
-     <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60 select-none">
-       Admin controls
-     </summary>
- )}
+ {/* 1. TUTAJ OTWIERAMY WARUNEK DLA SHILLA */}
+{payload?.username === "shill" && (
+  <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
+    <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60">
+      Admin controls
+    </summary>
+    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
 
-        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
           <input
             type="password"
             placeholder="Admin token"
@@ -269,16 +268,17 @@ function UpgradeAdvisorPage() {
             Refresh all (24 h cap)
           </button>
         </div>
-        {msg && <div className="mt-2 text-xs text-foreground/70">{msg}</div>}
+                {msg && <div className="mt-2 text-xs text-foreground/70">{msg}</div>}
         {!isAdmin && (
           <div className="mt-2 text-[11px] text-foreground/50">
             Enter your admin token to unlock manual refresh and TTL configuration.
           </div>
         )}
       </details>
-    )}
+    )} {/* 2. TUTAJ I TYLKO TUTAJ DOMYKASZ CAŁY BLOK WARUNKU SHILLA! */}
 
-      {!gated && <UpgradeAdvisorLegend />}
+    {!gated && <UpgradeAdvisorLegend />}
+
 
       {!gated && isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
