@@ -148,62 +148,26 @@ const { data: income30d } = useQuery({
 
      return (
     <AppShell>
-          <PageHeader
+                <PageHeader
         title={
-          <div className="flex items-center gap-3.5 group mt-1">
-            {/* 
-              PRZESKALOWANY, PREMIUM KONTENER LOGO:
-              Zmieniamy z h-10 w-10 na h-12 w-12. Logo jest większe, ostrzejsze 
-              i idealnie prezentuje orbitę samolotu oraz wieżę kontroli!
-            */}
-            <div className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-cyan-500/25 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md">
-              <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
-              <img 
-                src={hubLogo} 
-                alt="SimFly Hub"
-                className="h-10 w-10 object-contain drop-shadow-[0_0_10px_rgba(34,211,238,0.35)] transition-transform duration-300 group-hover:scale-105"
-              />
-            </div>
-            
-            {/* 
-              NOWA, BEZBŁĘDNA KOLEJNOŚĆ SŁÓW: SIMFLY INTELLIGENCE HUB
-              Idealnie zgrana z brandingiem z Twojej grafiki 512x512!
-            */}
-            <div className="flex items-baseline flex-wrap gap-x-2 gap-y-0.5">
-              <span className="font-display text-xl font-extrabold tracking-wide text-white uppercase">
-                SimFly
-              </span>
-              <span className="mono text-xs font-bold uppercase tracking-widest text-cyan-400/80 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20">
-                Intelligence
-              </span>
-              <span className="font-display text-base font-semibold tracking-wider text-slate-300 uppercase">
-                Hub
-              </span>
-            </div>
+          /* CZYSTY, MINIMALISTYCZNY I LOTNICZY TYTUŁ STRONY GŁÓWNEJ */
+          <div className="flex items-center gap-3">
+            <h1 className="font-display text-2xl font-bold tracking-tight text-white uppercase">
+              Active Pilot: <span className="text-runway">@{viewedUser || "shill"}</span>
+            </h1>
           </div>
         }
         description={
-          <div className="space-y-2 mt-2">
-            {/* Wyciągnięcie statusu pilota na główny ekran jako czytelny, lotniczy status badge */}
-            <div className="flex items-center gap-2 text-xs">
-              <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground/60">Current Session:</span>
-              <span className="mono text-[11px] font-bold text-runway bg-runway/10 border border-runway/20 px-2 py-0.5 rounded">
-                Viewing Pilot @{viewedUser || "shill"}
-              </span>
-            </div>
-            <p className="text-sm text-muted-foreground/90 leading-relaxed max-w-3xl">
+          <div className="space-y-1 mt-1">
+            <p className="text-xs mono uppercase tracking-widest text-muted-foreground/60">
+              Operational Fleet Dashboard & Live Telemetry Control
+            </p>
+            <p className="text-sm text-muted-foreground/90 max-w-3xl leading-relaxed">
               Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find.
             </p>
           </div>
         }
 
-        description={
-          <div className="div className='space-y-3' mt-1">
-            <p className="text-sm text-text-muted-foreground">
-              Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find
-            </p>
-          </div>
-        }
 
        actions={
    <div className="flex items-center gap-4 w-full">
