@@ -162,7 +162,7 @@ const { data: income30d } = useQuery({
             <p className="text-[10px] font-medium tracking-wider text-muted-foreground/40 uppercase">
               Operational Fleet Dashboard & Live Telemetry Control
             </p>
-            <p className="text-sm text-muted-foreground/80 max-w-3xl leading-relaxed">
+            <p className="text-[10px] font-medium tracking-wider text-muted-foreground/40 uppercase">
               Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find.
             </p>
           </div>
