@@ -111,6 +111,25 @@ function Sidebar() {
           );
         })}
       </nav>
+      <div className="mt-6 hidden lg:block">
+        <a
+          href="https://paypal.me/shilliash"
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Support SimFly Hub via PayPal"
+          className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-runway/40 hover:bg-secondary/60 hover:text-foreground"
+        >
+          <Coffee className="h-3.5 w-3.5 shrink-0 text-runway transition-transform group-hover:-rotate-12" />
+          <span className="mono uppercase tracking-widest text-[10px]">Buy me a coffee</span>
+        </a>
+        <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
+          Enjoying SimFly Hub? ☕ Buy me a coffee to help cover hosting and development.
+          <br />
+          <br />
+          Prefer to support me in-game? ✈️ Fly to one of my airports just one time a week instead — every landing is just as appreciated and helps keep SimFly Hub online. ❤️
+        </p>
+
+      </div>
     </aside>
   );
 }
