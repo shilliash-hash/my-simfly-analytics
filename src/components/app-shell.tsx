@@ -80,10 +80,11 @@ function Sidebar() {
         {/* POWIĘKSZONA BRYŁA LOGO (h-24 w-24) */}
         <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
-          <img 
+                  <img 
             src={hubLogo} 
             alt="SimFly Assets Intelligence Hub"
-            {/* 
+            className="h-full w-full object-contain p-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105"
+          />
               CHIRURGICZNA POPRAWKA:
               Zmieniamy h-20 w-20 na h-full w-full p-2, aby grafika 512x512 
               idealnie i ostro rozszerzyła się do samych krawędzi nowej ramki!
