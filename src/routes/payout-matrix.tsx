@@ -41,14 +41,45 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-  // BEZPIECZNE, IDENTYCZNE JAK W TEAM-ACTIVITY ZAPYTANIE (useQuery zamiast useSuspenseQuery)
-  const { data, isLoading } = useQuery({
+   // 1. BEZPIECZNE ZAPYTANIE: Wyłączamy automatyczne ponawianie (retry: false), aby odciążyć serwer
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ["simfly", keyTag],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
+    retry: false, // <-- KLUCZ: Kończymy zapytanie natychmiast, zamiast migać ekranem przez 10s!
   });
 
-  // KROK A: STAN ŁADOWANIA (Klon z team-activity)
+  // 2. BEZPIECZNIK BŁĘDU SERWERA / TIMEOUTU
+  if (isError && error instanceof Error && !error.message.includes("HUB_SUPPORT_REQUIRED")) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="System Error"
+          title="Database Timeout"
+          description="The server took too long to compute the flight history matrices. Upstream database might be rate-limited."
+        />
+        <div className="panel rounded-xl p-6 text-sm text-destructive bg-destructive/10 border border-destructive/20">
+          Backend error: {error.message}. Please wait a minute and refresh the page to try again.
+        </div>
+      </AppShell>
+    );
+  }
+
+  // 3. CHIRURGICZNY BEZPIECZNIK BRAMKI SUPPORTERA
+  if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Analytics"
+          title="Airport Flat PAX Payout Matrix"
+          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
+        />
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      </AppShell>
+    );
+  }
+
+  // 4. STAN ŁADOWANIA
   if (isLoading) {
     return (
       <AppShell>
@@ -59,21 +90,22 @@ function PayoutMatrixPage() {
     );
   }
 
-  // KROK B: PANCERNE ODBLOKOWANIE — Sprawdzamy prawdziwy status użytkownika z Twojego API
- const isSupporter = data?.status?.active || data?.hubSupport?.active || data?.hubSupportActive;
+  // 5. WERYFIKACJA STATUSU DLA ZALOGOWANEGO SUPPORTERA
+  const isSupporter = data?.status?.active || data?.hubSupport?.active || data?.hubSupportActive;
 
- if (!data || !isSupporter) {
- return (
- <AppShell>
- <PageHeader
- eyebrow="Analytics"
- title="Airport Flat PAX Payout Matrix"
- description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
- />
- <HubSupportGate featureName="The Airport Payout Matrix Panel" />
- </AppShell>
- );
- }
+  if (!data || !isSupporter) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Analytics"
+          title="Airport Flat PAX Payout Matrix"
+          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
+        />
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      </AppShell>
+    );
+  }
+
 
 
   // KROK C: DOSTĘP PRZYZNANY — Mapujemy tablice (uruchomi się TYLKO gdy data i wsparcie istnieją)
