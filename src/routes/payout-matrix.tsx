@@ -45,6 +45,7 @@ function PayoutMatrixPage() {
       queryKey: ["simfly", keyTag],
       queryFn: () => fn(payload ? { data: payload } : undefined),
       staleTime: 30 * 60_000,
+      ssr: false,
     }),
   );
 
