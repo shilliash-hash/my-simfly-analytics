@@ -148,25 +148,26 @@ const { data: income30d } = useQuery({
 
      return (
     <AppShell>
-                <PageHeader
+       <PageHeader
         title={
-          /* CZYSTY, MINIMALISTYCZNY I LOTNICZY TYTUŁ STRONY GŁÓWNEJ */
-          <div className="flex items-center gap-3">
-            <h1 className="font-display text-2xl font-bold tracking-tight text-white uppercase">
-              Active Pilot: <span className="text-runway">@{viewedUser || "shill"}</span>
+          /* WYCISZONY, LOTNICZY KOMUNIKAT NAWIGACYJNY */
+          <div className="flex items-center gap-2">
+            <h1 className="font-display text-base font-medium tracking-wide text-muted-foreground/60 uppercase">
+              Active Pilot: <span className="text-muted-foreground/80 font-semibold">@{viewedUser || "shill"}</span>
             </h1>
           </div>
         }
         description={
-          <div className="space-y-1 mt-1">
-            <p className="text-xs mono uppercase tracking-widest text-muted-foreground/60">
+          <div className="space-y-1 mt-1.5">
+            <p className="text-[10px] font-medium tracking-wider text-muted-foreground/40 uppercase">
               Operational Fleet Dashboard & Live Telemetry Control
             </p>
-            <p className="text-sm text-muted-foreground/90 max-w-3xl leading-relaxed">
+            <p className="text-sm text-muted-foreground/80 max-w-3xl leading-relaxed">
               Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find.
             </p>
           </div>
         }
+
 
 
        actions={
