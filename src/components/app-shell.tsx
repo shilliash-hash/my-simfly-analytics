@@ -95,7 +95,7 @@ function Sidebar() {
         </div>
       </div>
 
-      <nav className="mt-2 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+            <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -104,14 +104,15 @@ function Sidebar() {
               to={item.to}
               activeProps={{ className: "bg-secondary text-foreground" }}
               inactiveProps={{ className: "text-muted-foreground hover:bg-secondary/40 hover:text-foreground" }}
-              className="mono flex items-center gap-3 rounded-lg px-3 py-2 text-xs uppercase tracking-widest transition-colors lg:w-full"
+              className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors lg:w-full"
             >
               <Icon className="h-4 w-4 shrink-0" />
-              <span>{item.label}</span>
+              <span className="font-display tracking-wide">{item.label}</span>
             </Link>
           );
         })}
       </nav>
+
     </aside>
   );
 }
