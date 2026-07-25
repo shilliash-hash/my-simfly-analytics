@@ -115,7 +115,7 @@ export function ChangelogBadge() {
                           const isLineAFix = line.toLowerCase().includes("fix") || 
                                              line.toLowerCase().includes("repair") || 
                                              line.toLowerCase().includes("optimize") ||
-                                             line.toLowerCase().includes("predict");
+                                             line.toLowerCase().includes("updated");
 
                           return (
                             <div key={i} className="flex items-start gap-2 py-0.5 group">
