@@ -70,8 +70,7 @@ function Sidebar() {
   const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
 
   return (
-    <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
-      
+    <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0 flex flex-col overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">      
       {/* 
         MONUMENTALNE LOGO CENTER-FOCUS (ROZMIAR X2 -> h-36 w-36):
         - Całkowicie wywaliliśmy dublujący się kod tekstowy SIMFLY / INTELLIGENCE / HUB.
