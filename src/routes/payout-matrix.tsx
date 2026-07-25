@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useSuspenseQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { getSimflyPayload, getAirportPayoutMatrix, getAllAirportPayoutMatrices } from "@/lib/simfly.functions";
 import type { AirportPayoutMatrix, PayoutMatrixCell } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
