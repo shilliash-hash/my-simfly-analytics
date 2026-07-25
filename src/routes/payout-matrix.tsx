@@ -41,16 +41,13 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-  // 1. PANCERNE ZAPYTANIE: retry: false natychmiast kończy pracę przy braku uprawnień
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v12-final-pancerny"],
+    queryKey: ["simfly", keyTag, "v12-pancerny-final"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
   });
 
-  // 2. TWARDY GATEWAY: Jeśli serwer odrzucił dostęp dla nie-supportera — od razu stawiamy paywall.
-  // Funkcja kończy działanie TUTAJ, nie pozwalając na wyciek żadnych danych ani lotnisk!
   if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
     return (
       <AppShell>
@@ -60,7 +57,6 @@ function PayoutMatrixPage() {
     );
   }
 
-  // 3. STAN ŁADOWANIA DLA SUPPORTERÓW:
   if (isLoading) {
     return (
       <AppShell>
@@ -71,17 +67,6 @@ function PayoutMatrixPage() {
     );
   }
 
-  // 4. BEZPIECZNIK STRUKTURY DANYCH:
-  if (!data || !data.airports || data.airports.length === 0) {
-    return (
-      <AppShell>
-        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout for every Aircraft Tier × Level." />
-        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40">
-          No owned airports detected. Purchase an airport to unlock telemetry.
-        </div>
-      </AppShell>
-    );
-  }
 
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
