@@ -67,26 +67,43 @@ export function AppShell({ children }: { children: ReactNode }) {
 function Sidebar() {
   const isAdmin = !!useAdminToken();
   const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
-   return (
+  
+  return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
+      
       {/* 
-        NOWY MINIMALISTYCZNY SYGNET BRANDINGU:
-        Całkowicie usunęliśmy tekst "SimFly Hub" i "Assets Intelligence", 
-        ponieważ dumnie i szeroko świecą już w nowym nagłówku na stronie głównej!
+        POTĘŻNY BRANDING KORPORACYJNY (X3 SIZE):
+        Całkowicie bezramkowy, czysty układ na szkle. Przyciąga wzrok i definiuje markę.
       */}
-      <div className="flex items-center justify-between lg:justify-start px-2 py-3 mb-2">
-        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
-          <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
-          <img 
-            src={hubLogo} 
-            alt="SimFly Hub Logo"
-            className="h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] transition-transform duration-300 group-hover:scale-105 group-hover:rotate-1"
-          />
-        </div>
-        
-        {/* Mała, szara sygnatura mono widoczna tylko na urządzeniach mobilnych, gdy belka się zwija */}
-        <div className="mono text-[10px] font-bold tracking-wider text-muted-foreground/40 uppercase lg:hidden pr-2">
-          System Console
+      <div className="flex flex-col gap-3 px-3 py-4 mb-4 border-b border-border/20">
+        <div className="flex items-center gap-3.5 group">
+          {/* TRZYKROTNIE POWIĘKSZONY, NEONOWY KONTENER LOGO (h-14 w-14) */}
+          <div className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md">
+            <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
+            <img 
+              src={hubLogo} 
+              alt="SimFly Assets Intelligence Hub"
+              className="h-11 w-11 object-contain drop-shadow-[0_0_12px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105 group-hover:rotate-1"
+            />
+          </div>
+
+          {/* SPÓJNA TYPOGRAFIA (ZERO GRAFOMANII) — TEN SAM FONT DLA SŁÓW KLUCZOWYCH */}
+          <div className="flex flex-col min-w-0 justify-center">
+            <div className="font-display text-sm font-extrabold tracking-wider text-white uppercase leading-none">
+              SimFly Assets
+            </div>
+            
+            {/* LOTNICZA NEONOWA PIGUŁKA W DRUGIEJ LINII */}
+            <div className="my-1.5 self-start">
+              <span className="mono text-[8px] font-bold uppercase tracking-widest text-cyan-400 bg-cyan-500/10 px-1.5 py-0.5 rounded border border-cyan-500/20 shadow-[0_0_6px_rgba(34,211,238,0.1)]">
+                Intelligence
+              </span>
+            </div>
+
+            <div className="font-display text-xs font-bold tracking-widest text-slate-400 uppercase leading-none pl-0.5">
+              Hub
+            </div>
+          </div>
         </div>
       </div>
 
