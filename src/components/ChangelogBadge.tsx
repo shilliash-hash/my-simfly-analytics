@@ -69,6 +69,115 @@ export function ChangelogBadge() {
             URATOWANA I SKONTROLOWANA LISTA ZMIAN:
             max-h-[28rem] + overflow-y-auto block zmuszają kontener do sprawnego załamania
             wysokości i wyrenderowania płynnego, pionowego paska scrolla!
+          */ font-sans flex flex-col gap-5}
+          <div className="max-h-[28rem] space-y-5 overflow-y-auto block pr-2 custom-scrollbar">
+            {hasData ? (
+              staticChangelogFeed.map((item: any) => {
+                const creativeTags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
+
+                return (
+                  <div key={item.id || item.version} className="space-y-2 px-0.5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        
+                        {/* DYNAMICZNE MAPOWANIE WIELU PILLSÓW Z TABLICY TYPE */}
+                        {creativeTags.map((tag: string) => (
+                          <span
+                            key={tag}
+                            className={cn(
+                              "mono text-[8px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block tracking-wider uppercase",
+                              tag === "FEATURE" && "text-runway bg-runway/15 border-runway/30",
+                              tag === "FIX" && "text-instrument bg-instrument/15 border-instrument/30",
+                              tag === "UPGRADE" && "text-amber-400 bg-amber-400/10 border-amber-400/20"
+                            )}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        
+                        <span className="mono text-[10px] font-semibold text-slate-200">
+                          {item.version}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* INTERFEJS PUNKTÓW Z INTELIGENTNYM DOBIERANIEM IKON */}
+                    <div className="text-[12px] leading-relaxed text-slate-300 pl-3 border-l border-border/30 mt-2 whitespace-pre-line font-sans space-y-1">
+                      {String(item.text || "")
+                        .split("\n")
+                        .filter((line) => line.trim().length > 0)
+                        .map((line, i) => {
+                          // PANCERNE OCZYSZCZANIE Z KROPEK I MYŚLNIKÓW (Bez niebezpiecznych RegEx-ów!)
+                          const rawLine = line.trim();
+                          const cleanLine = rawLine.startsWith("•") ? rawLine.slice(1).trim() :
+                                            rawLine.startsWith("-") ? rawLine.slice(1).trim() :
+                                            rawLine.startsWith("*") ? rawLine.slice(1).trim() : rawLine;
+                          
+                          // INTELIGENTNY DETEKTOR IKONY DLA KAŻDEJ LINII OSOBNO
+                          const lowerLine = line.toLowerCase();
+                          const isLineAFix = lowerLine.includes("fix") || 
+                                             lowerLine.includes("repair") || 
+                                             lowerLine.includes("optimize") ||
+                                             lowerLine.includes("Intro");
+
+                          return (
+                            <div key={i} className="flex items-start gap-2 py-0.5 group">
+                              {isLineAFix ? (
+                                <Wrench className="h-3 w-3 shrink-0 text-instrument/60 mt-1" />
+                              ) : (
+                                <Sparkles className="h-3 w-3 shrink-0 text-runway/60 mt-1" />
+                              )}
+                              <span className="text-slate-300 group-hover:text-white transition-colors">
+                                {cleanLine}
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <p className="text-xs text-muted-foreground italic px-0.5">No recent updates available.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+        <span className="font-medium">Changelog</span>
+        <span className="text-[10px] text-muted-foreground/40 font-normal">
+          v{latestBuild.split(" ")[1] || latestBuild}
+        </span>
+      </button>
+
+      {open && (
+        /* 
+          SZKLANY POPUP WYRÓWNANY DO PRAWEJ (right-0):
+          Rozwija się dynamicznie w lewą stronę, eliminując wyjeżdżanie poza ekran!
+          bg-background/60 + backdrop-blur-xl tworzy czyste, głębokie rozmycie szkła.
+        */
+        <div
+          className="panel absolute right-0 z-30 mt-2 w-[min(94vw,36rem)] max-h-[min(80vh,46rem)] overflow-hidden rounded-2xl p-5 shadow-2xl bg-background/60 backdrop-blur-xl border border-border/40 shadow-black/60 animate-in fade-in slide-in-from-top-1 duration-150"
+          role="dialog"
+        >
+          {/* NAGŁÓWEK POPOUTU */}
+          <div className="mb-4 flex items-center justify-between px-0.5 border-b border-border/20 pb-2">
+            <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway flex items-center gap-2">
+              <History className="h-3.5 w-3.5 text-runway" />
+              <span>System Update Logs</span>
+            </div>
+            <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/50">
+              Live Feed
+            </span>
+          </div>
+          
+          {/* 
+            URATOWANA I SKONTROLOWANA LISTA ZMIAN:
+            max-h-[28rem] + overflow-y-auto block zmuszają kontener do sprawnego załamania
+            wysokości i wyrenderowania płynnego, pionowego paska scrolla!
           */
           <div className="max-h-[28rem] space-y-5 overflow-y-auto block pr-2 custom-scrollbar">
             {hasData ? (
