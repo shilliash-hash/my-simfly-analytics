@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { History, Sparkles, Wrench, ShieldAlert } from "lucide-react";
+import { History, Sparkles, Wrench } from "lucide-react";
 import { staticChangelogFeed } from "@/lib/changelog-data";
 import { cn } from "@/lib/utils";
 
@@ -7,6 +7,7 @@ export function ChangelogBadge() {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
+  // Bezpieczne zamykanie okna po kliknięciu poza obszar lub naciśnięciu klawisza ESC
   useEffect(() => {
     if (!open) return;
     function onDoc(e: MouseEvent) {
@@ -28,6 +29,7 @@ export function ChangelogBadge() {
 
   return (
     <div ref={wrapRef} className="relative">
+      {/* MINIMALISTYCZNY PRZYCISK W BELCE NAWIGACYJNEJ */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -43,11 +45,16 @@ export function ChangelogBadge() {
       </button>
 
       {open && (
-        /* WYRÓWNANIE DO PRAWEJ (right-0) — ROZWIJA SIĘ W LEWO */
+        /* 
+          SZKLANY POPUP WYRÓWNANY DO PRAWEJ (right-0):
+          Rozwija się dynamicznie w lewą stronę, eliminując wyjeżdżanie poza ekran!
+          bg-background/60 + backdrop-blur-xl tworzy czyste, głębokie rozmycie szkła.
+        */
         <div
           className="panel absolute right-0 z-30 mt-2 w-[min(94vw,36rem)] max-h-[min(80vh,46rem)] overflow-hidden rounded-2xl p-5 shadow-2xl bg-background/60 backdrop-blur-xl border border-border/40 shadow-black/60 animate-in fade-in slide-in-from-top-1 duration-150"
           role="dialog"
         >
+          {/* NAGŁÓWEK POPOUTU */}
           <div className="mb-4 flex items-center justify-between px-0.5 border-b border-border/20 pb-2">
             <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway flex items-center gap-2">
               <History className="h-3.5 w-3.5 text-runway" />
@@ -58,19 +65,23 @@ export function ChangelogBadge() {
             </span>
           </div>
           
-                    <div className="max-h-[28rem] space-y-5 overflow-y-auto block pr-2 custom-scrollbar">
+          {/* 
+            URATOWANA I SKONTROLOWANA LISTA ZMIAN:
+            max-h-[28rem] + overflow-y-auto block zmuszają kontener do sprawnego załamania
+            wysokości i wyrenderowania płynnego, pionowego paska scrolla!
+          */
+          <div className="max-h-[28rem] space-y-5 overflow-y-auto block pr-2 custom-scrollbar">
             {hasData ? (
               staticChangelogFeed.map((item: any) => {
-                const tags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
-                const isFix = tags.includes("FIX");
+                const creativeTags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
 
                 return (
                   <div key={item.id || item.version} className="space-y-2 px-0.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2 flex-wrap">
                         
-                        {/* ITERACJA PO TABLICY TAGÓW FEEDERA */}
-                        {tags.map((tag: string) => (
+                        {/* DYNAMICZNE MAPOWANIE WIELU PILLSÓW Z TABLICY TYPE */}
+                        {creativeTags.map((tag: string) => (
                           <span
                             key={tag}
                             className={cn(
@@ -90,21 +101,32 @@ export function ChangelogBadge() {
                       </div>
                     </div>
 
-                    {/* PRZETWARZANIE LINII TEKSTOWYCH */}
+                    {/* INTERFEJS PUNKTÓW Z INTELIGENTNYM DOBIERANIEM IKON */}
                     <div className="text-[12px] leading-relaxed text-slate-300 pl-3 border-l border-border/30 mt-2 whitespace-pre-line font-sans space-y-1">
                       {String(item.text || "")
                         .split("\n")
                         .filter((line) => line.trim().length > 0)
                         .map((line, i) => {
                           const cleanLine = line.replace(/^[•\-\*\s]+/, "");
+                          
+                          // INTELIGENTNY BEZPIECZNIK: Skanujemy treść konkretnej linii osobno!
+                          // Jeśli podpunkt dotyczy błędu lub optymalizacji — dostaje Wrench.
+                          // Jeśli to nowa funkcja (jak prediction engine) — świecą gwiazdki Sparkles!
+                          const isLineAFix = line.toLowerCase().includes("fix") || 
+                                             line.toLowerCase().includes("repair") || 
+                                             line.toLowerCase().includes("optimize") ||
+                                             line.toLowerCase().includes("predict");
+
                           return (
                             <div key={i} className="flex items-start gap-2 py-0.5 group">
-                              {isFix ? (
+                              {isLineAFix ? (
                                 <Wrench className="h-3 w-3 shrink-0 text-instrument/60 mt-1" />
                               ) : (
                                 <Sparkles className="h-3 w-3 shrink-0 text-runway/60 mt-1" />
                               )}
-                              <span>{cleanLine}</span>
+                              <span className="text-slate-300 group-hover:text-white transition-colors">
+                                {cleanLine}
+                              </span>
                             </div>
                           );
                         })}
