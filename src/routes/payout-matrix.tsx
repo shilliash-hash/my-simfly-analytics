@@ -25,17 +25,28 @@ import { useAdminToken } from "@/lib/admin-token";
 
 export const Route = createFileRoute("/payout-matrix")({
   component: PayoutMatrixPage,
+  // Jeśli router odrzuci nie-supportera, przechwytujemy to tutaj, 
+  // zapobiegając pętli śmierci i błędowi #300!
+  errorComponent: ({ error }) => {
+    return (
+      <AppShell>
+        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40 mt-6">
+          {error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")
+            ? "This telemetry matrix requires an active Hub Support subscription. Please check your account status."
+            : "Access denied or system payload timeout. Please refresh or contact telemetry admin."}
+        </div>
+      </AppShell>
+    );
+  },
   head: () => ({
     meta: [
       { title: "Payout Matrix — SimFly Hub" },
-      {
-        name: "description",
-        content:
-          "Estimated base PAX payout per aircraft Tier × Level for each of your airports, derived from real flight history with weekly bonuses excluded.",
-      },
+      { name: "robots", content: "noindex,nofollow" },
     ],
   }),
 });
+
 
 function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
