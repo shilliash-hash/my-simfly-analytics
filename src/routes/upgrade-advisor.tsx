@@ -173,99 +173,81 @@ function UpgradeAdvisorPage() {
 
       {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
 
-      {!gated && advisor && (
-        <div className="mb-4 rounded-lg border border-border bg-card/60 p-4 text-xs grid gap-2 sm:grid-cols-3">
-          <div>
-            <div className="mono uppercase tracking-widest text-foreground/50">Generated</div>
-            <div className="mono text-foreground">{fmtDate(advisor.generatedAt)}</div>
-          </div>
-          <div>
-            <div className="mono uppercase tracking-widest text-foreground/50">Based on</div>
-            <div className="mono text-foreground">Last {advisor.windowDays} days</div>
-          </div>
-          <div>
-            <div className="mono uppercase tracking-widest text-foreground/50">Next refresh</div>
-            <div className="mono text-foreground">
-              {fmtDay(advisor.refreshAfter)}{" "}
-              <span className="text-foreground/50">(TTL {advisor.ttlDays}d)</span>
+            {!gated && (
+        <>
+          {/* KONTENER FILTRÓW I SORTOWANIA */}
+          <div className="mb-6 flex flex-wrap items-center gap-4">
+            <div className="space-y-1">
+              <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground block pl-0.5">
+                History window
+              </label>
+              <div className="mono rounded-lg border border-border bg-secondary/20 px-3 py-1.5 text-xs font-semibold text-foreground">
+                LAST 60 DAYS (FIXED)
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground block pl-0.5">
+                Sort by
+              </label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="mono rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-runway"
+              >
+                <option value="payback">Fastest payback</option>
+                <option value="profit">Highest profit</option>
+                <option value="cost">Lowest cost</option>
+              </select>
             </div>
           </div>
-          <p className="sm:col-span-3 text-foreground/60">
-            This analysis is intentionally refreshed only once every {advisor.ttlDays} day
-            {advisor.ttlDays === 1 ? "" : "s"} per airport — upgrade recommendations change
-            slowly, and recalculating on every visit would waste database and upstream SimFly
-            capacity.
+
+          {/* LISTA KART LOTNISK I STANÓW ŁADOWANIA */}
+          <div className="space-y-4">
+            {isError && (
+              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+                Failed to compute advisor.{" "}
+                <button onClick={() => refetch()} className="underline font-semibold">Retry</button>
+              </div>
+            )}
+
+            {!advisor && !isError && (
+              <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground animate-pulse">
+                Loading cached analysis...
+              </div>
+            )}
+
+            {advisor && (
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {rows.map((r) => (
+                  <AdvisorCard
+                    key={r.icao}
+                    row={r}
+                    canRefresh={isAdmin}
+                    busy={busy === r.icao}
+                    onRefresh={() => forceRefresh([r.icao])}
+                  />
+                ))}
+              </div>
+            )}
+
+            {rows.length === 0 && !isError && advisor && (
+              <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground italic">
+                No owned airports.
+              </div>
+            )}
+          </div>
+
+          {/* LEGENDA I METODOLOGIA URATOWANA POD LOCKIEM */}
+          <UpgradeAdvisorLegend />
+
+          <p className="mt-6 text-[11px] text-muted-foreground/50 max-w-3xl leading-relaxed">
+            Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX credited to each airport across every flight touching the airport in the selected window, sampled from the same public airport history as the Payout Matrix. Payback = upgrade cost ÷ current daily income. Results are cached per airport / level / window; cache invalidates automatically when a level change is detected during sync, or when an administrator forces a refresh (once per 24 h per airport).
           </p>
-        </div>
+        </>
       )}
-
-      <div className="mb-5 flex flex-wrap items-end gap-3">
-        <div className="text-xs uppercase tracking-wider text-foreground/60">
-          History window
-          <div className="mt-1 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
-            Last {windowDays} days (fixed)
-          </div>
-        </div>
-        <label className="text-xs uppercase tracking-wider text-foreground/60">
-          Sort by
-          <select
-            value={sortKey}
-            onChange={(e) => setSortKey(e.target.value as SortKey)}
-            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-          >
-            <option value="payback">Fastest payback</option>
-            <option value="daily">Highest daily increase</option>
-            <option value="annual">Highest annual increase</option>
-            <option value="cost">Lowest upgrade cost</option>
-            <option value="name">Airport name</option>
-          </select>
-        </label>
-        <div className="ml-auto text-[11px] text-foreground/50">
-          {isFetching ? "Loading…" : advisor ? `${rows.length} airports analysed` : ""}
-        </div>
-      </div>
-
-    {!gated && <UpgradeAdvisorLegend />}
-
-      {!gated && isError && (
-        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
-          Failed to compute advisor.{" "}
-          <button onClick={() => refetch()} className="underline">Retry</button>
-        </div>
-      )}
-
-      {!gated && !advisor && !isError && (
-        <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
-          Loading cached analysis…
-        </div>
-      )}
-
-      {!gated && advisor && (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {rows.map((r) => (
-            <AdvisorCard
-              key={r.icao}
-              row={r}
-              canRefresh={isAdmin}
-              busy={busy === r.icao}
-              onRefresh={() => forceRefresh([r.icao])}
-            />
-          ))}
-           {!gated && rows.length === 0 && (
-          <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
-            No owned airports.
-          </div>
-        )}
-      </div>
-
-      <>
-        <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
-          Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX credited to each airport across every flight touching the airport in the selected window, sampled from the same public airport history as the Payout Matrix. Payback = upgrade cost ÷ current daily income. Results are cached per airport / level / window; cache invalidates automatically when a level change is detected during sync, or when an administrator forces a refresh (once per 24 h per airport).
-        </p>
-      </>
-    )}
-  </AppShell>
-);
+    </AppShell>
+  );
 }
 
 function TtlEditor({
