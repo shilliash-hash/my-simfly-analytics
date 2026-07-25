@@ -23,14 +23,11 @@ export function ChangelogBadge() {
     };
   }, [open]);
 
-  // Bezpieczne pobranie danych nagłówkowych z tablicy bota
   const hasData = Array.isArray(staticChangelogFeed) && staticChangelogFeed.length > 0;
   const latestBuild = hasData ? (staticChangelogFeed[0]?.version || "0.0.0") : "0.0.0";
-  const latestDate = hasData ? (staticChangelogFeed[0]?.date || "") : "";
 
   return (
     <div ref={wrapRef} className="relative">
-      {/* PRZYCISK SFORMATOWANY */}
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -41,84 +38,68 @@ export function ChangelogBadge() {
         <History className="h-3.5 w-3.5 text-muted-foreground/80" />
         <span className="font-medium">Changelog</span>
         <span className="text-[10px] text-muted-foreground/40 font-normal">
-          v{latestBuild.split(" ")[0]}
+          v{latestBuild.split(" ")[1] || latestBuild}
         </span>
       </button>
 
       {open && (
-        /* 
-          CHIRURGICZNA POPRAWKA POZYCJONOWANIA (right-0 zamiast left-0):
-          Panel idealnie wyrównuje się do prawej krawędzi przycisku i rozwija w lewo, 
-          eliminując ucinanie ekranu! Szerokość w-[min(94vw,36rem)] gwarantuje pełne bezpieczeństwo.
-        */
+        /* WYRÓWNANIE DO PRAWEJ (right-0) — ROZWIJA SIĘ W LEWO */
         <div
           className="panel absolute right-0 z-30 mt-2 w-[min(94vw,36rem)] max-h-[min(80vh,46rem)] overflow-hidden rounded-2xl p-5 shadow-2xl bg-background/60 backdrop-blur-xl border border-border/40 shadow-black/60 animate-in fade-in slide-in-from-top-1 duration-150"
           role="dialog"
         >
-          {/* NAGŁÓWEK POPOUTU */}
           <div className="mb-4 flex items-center justify-between px-0.5 border-b border-border/20 pb-2">
             <div className="mono text-[10px] font-bold uppercase tracking-widest text-runway flex items-center gap-2">
               <History className="h-3.5 w-3.5 text-runway" />
               <span>System Update Logs</span>
             </div>
             <span className="mono text-[9px] uppercase tracking-widest text-muted-foreground/50">
-              Freshness: {latestDate}
+              Live Feed
             </span>
           </div>
           
-          {/* PRZEWIJANA LISTA ELEMENTÓW */}
-          <div className="max-h-[calc(min(80vh,46rem)-5rem)] space-y-5 overflow-auto pr-1 custom-scrollbar">
+          <div className="max-h-[calc(min-80vh,46rem)-5rem)] space-y-5 overflow-auto pr-1 custom-scrollbar">
             {hasData ? (
               staticChangelogFeed.map((item: any) => {
-                // TWARDY FAKT: Dla oryginalnych rekordów bota domyślnym typem jest "UPGRADE" lub "EXPERIMENTAL"
-                const isExperimental = String(item.title || "").toLowerCase().includes("experimental") || 
-                                       String(item.version || "").toLowerCase().includes("experimental");
-                const isFix = String(item.title || "").toLowerCase().includes("fix") || 
-                              String(item.text || "").toLowerCase().includes("fixed");
+                const tags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
+                const isFix = tags.includes("FIX");
 
                 return (
                   <div key={item.id || item.version} className="space-y-2 px-0.5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2 flex-wrap">
-                        {/* 
-                          DOPASOWANIE BADGE: 
-                          Przywracamy neonowe pigułki bazując na rzeczywistej zawartości pól tekstowych bota!
-                        */}
-                        <span className={cn(
-                          "mono text-[8px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block tracking-wider uppercase",
-                          isExperimental ? "text-amber-400 bg-amber-400/10 border-amber-400/20" :
-                          isFix ? "text-instrument bg-instrument/15 border-instrument/30" :
-                          "text-runway bg-runway/15 border-runway/30"
-                        )}>
-                          {isExperimental ? "EXPERIMENTAL" : isFix ? "BUG FIX" : "UPGRADE"}
-                        </span>
                         
-                        <span className="mono text-[10px] font-semibold text-muted-foreground/80 bg-secondary/30 px-1.5 py-0.5 rounded border border-border/40">
+                        {/* ITERACJA PO TABLICY TAGÓW FEEDERA */}
+                        {tags.map((tag: string) => (
+                          <span
+                            key={tag}
+                            className={cn(
+                              "mono text-[8px] font-bold px-1.5 py-0.5 rounded border shrink-0 inline-block tracking-wider uppercase",
+                              tag === "FEATURE" && "text-runway bg-runway/15 border-runway/30",
+                              tag === "FIX" && "text-instrument bg-instrument/15 border-instrument/30",
+                              tag === "UPGRADE" && "text-amber-400 bg-amber-400/10 border-amber-400/20"
+                            )}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        
+                        <span className="mono text-[10px] font-semibold text-slate-200">
                           {item.version}
                         </span>
-
-                        <h4 className="font-display text-sm font-semibold text-slate-200 ml-1">
-                          {item.title || "System Update"}
-                        </h4>
                       </div>
-                      <span className="mono text-[10px] text-muted-foreground/40 shrink-0 mt-0.5">
-                        {item.date || ""}
-                      </span>
                     </div>
 
-                    {/* PRZYWRÓCONE I ZOPTYMALIZOWANE PUNKTY ZMIAN NA SZKLE */}
+                    {/* PRZETWARZANIE LINII TEKSTOWYCH */}
                     <div className="text-[12px] leading-relaxed text-slate-300 pl-3 border-l border-border/30 mt-2 whitespace-pre-line font-sans space-y-1">
                       {String(item.text || "")
                         .split("\n")
                         .filter((line) => line.trim().length > 0)
                         .map((line, i) => {
-                          // Oczyszczamy tekst z myślników i gwiazdek bota, podmieniając je na czyste ikony UI
                           const cleanLine = line.replace(/^[•\-\*\s]+/, "");
                           return (
                             <div key={i} className="flex items-start gap-2 py-0.5 group">
-                              {isExperimental ? (
-                                <Sparkles className="h-3 w-3 shrink-0 text-amber-400/60 mt-1" />
-                              ) : isFix ? (
+                              {isFix ? (
                                 <Wrench className="h-3 w-3 shrink-0 text-instrument/60 mt-1" />
                               ) : (
                                 <Sparkles className="h-3 w-3 shrink-0 text-runway/60 mt-1" />
