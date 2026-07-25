@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { History, Sparkles, Wrench, ShieldAlert } from "lucide-react";
-import { CHANGELOG_DATA } from "@/lib/changelog-data";
+import { staticChangelogFeed } from "@/lib/changelog-data";
 import { cn } from "@/lib/utils";
 
 export function ChangelogBadge() {
