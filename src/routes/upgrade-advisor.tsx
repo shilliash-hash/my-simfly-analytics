@@ -225,60 +225,7 @@ function UpgradeAdvisorPage() {
         </div>
       </div>
 
- {/* PANCERNY BEZPIECZNIK: Sprawdzamy bezpośrednio keyTag sesji */}
-{keyTag === "shill" && (
-  <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm animate-in fade-in duration-150">
-    <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60 select-none">
-      Admin controls
-    </summary>
-    <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
-
-          <input
-            type="password"
-            placeholder="Admin token"
-            value={adminToken}
-            onChange={(e) => {
-              setAdminToken(e.target.value);
-              try {
-                localStorage.setItem(ADMIN_TOKEN_LS_KEY, e.target.value);
-              } catch { /* noop */ }
-            }}
-            className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
-          />
-          <TtlEditor
-            currentTtl={settings?.ttlDays ?? 30}
-            disabled={!isAdmin}
-            onSave={async (n) => {
-              try {
-                await setSettingsFn({ data: { adminToken, ttlDays: n } });
-                qc.invalidateQueries({ queryKey: ["advisor-settings"] });
-                setMsg(`TTL set to ${n} days.`);
-              } catch (e) {
-                setMsg((e as Error).message || "Failed to save TTL.");
-              }
-            }}
-          />
-          <button
-            type="button"
-            disabled={!isAdmin || busy !== null || !advisor}
-            onClick={() => forceRefresh(rows.map((r) => r.icao))}
-            className="inline-flex items-center gap-2 rounded-md border border-runway/50 bg-runway/10 px-3 py-2 text-xs text-runway hover:bg-runway/20 disabled:opacity-40"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-            Refresh all (24 h cap)
-          </button>
-        </div>
-                {msg && <div className="mt-2 text-xs text-foreground/70">{msg}</div>}
-        {!isAdmin && (
-          <div className="mt-2 text-[11px] text-foreground/50">
-            Enter your admin token to unlock manual refresh and TTL configuration.
-          </div>
-        )}
-      </details>
-    )} {/* 2. TUTAJ I TYLKO TUTAJ DOMYKASZ CAŁY BLOK WARUNKU SHILLA! */}
-
     {!gated && <UpgradeAdvisorLegend />}
-
 
       {!gated && isError && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
