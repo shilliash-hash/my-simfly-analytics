@@ -42,27 +42,21 @@ function PayoutMatrixPage() {
   const { keyTag, payload } = useSimflyArgs();
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag, "v3-final-fix"],
+    queryKey: ["simfly", keyTag, "v4-stable-payout"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
   });
 
-  // KROK A: Jeśli serwer rzucił błędem braku supportera — od razu pokazujemy bramkę
   if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
     return (
       <AppShell>
-        <PageHeader
-          eyebrow="Analytics"
-          title="Airport Flat PAX Payout Matrix"
-          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
-        />
+        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
         <HubSupportGate featureName="The Airport Payout Matrix Panel" />
       </AppShell>
     );
   }
 
-  // KROK B: Stan ładowania dla oczekujących na pobranie 1.77 MB danych lotnisk
   if (isLoading) {
     return (
       <AppShell>
@@ -73,20 +67,16 @@ function PayoutMatrixPage() {
     );
   }
 
-  // KROK C: ZABEZPIECZENIE STRUKTURY — Jeśli zapytanie przeszło pomyślnie, użytkownik MA supportera!
-  if (!data || !data.airports) {
+  if (!data || !data.airports || data.airports.length === 0) {
     return (
       <AppShell>
-        <PageHeader
-          eyebrow="Analytics"
-          title="Airport Flat PAX Payout Matrix"
-          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
-        />
-        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+        <PageHeader eyebrow="Analytics" title="Airport Flat PAX Payout Matrix" description="Estimated base per-flight PAX payout." />
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground italic bg-secondary/10 border border-border/40">
+          No owned airports detected. Purchase an airport to unlock telemetry.
+        </div>
       </AppShell>
     );
   }
-
 
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
@@ -95,7 +85,6 @@ function PayoutMatrixPage() {
 
   const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
   const pages = 63;
-
 
   return (
     <AppShell>
