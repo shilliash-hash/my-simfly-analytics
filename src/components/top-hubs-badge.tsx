@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Building2 } from "lucide-react";
 import { TierPill, RotationCell, formatNumber } from "@/components/app-shell";
+import { cn } from "@/lib/utils";
 import type { AirportExt } from "@/lib/types";
 
 export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
@@ -28,6 +29,7 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
     () => [...airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
     [airports],
   );
+
   const count = sorted.length;
 
   return (
@@ -47,19 +49,19 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
           aria-expanded={open}
           title="Your hubs"
         >
-          <span className="inline-flex items-center gap-1 text-runway">
+          <span className={cn(
+            "inline-flex items-center gap-1",
+            count > 0 ? "text-runway" : "text-muted-foreground/60"
+          )}>
             <Building2 className="h-3.5 w-3.5" />
             {count}
           </span>
         </button>
 
         {open && (
+          /* WYRÓWNANY WIZUALNIE PANEL - Dokładnie taki sam styl jak ReadyStatusBadge (Strona 2) */
           <div
-            className="panel absolute right-0 z-30 mt-2 w-[min(92vw,32rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-xl p-4 shadow-2xl runway-glow"
-            style={{
-              background:
-                "linear-gradient(180deg, rgba(17,24,41,0.85), rgba(10,15,28,0.85))",
-            }}
+            className="panel absolute right-0 z-30 mt-2 w-[min(92vw,32rem)] max-h-[min(80vh,42rem)] overflow-hidden rounded-xl p-4 shadow-xl bg-background/80 backdrop-blur-lg border border-border"
             role="dialog"
           >
             <div className="mb-3 flex items-center justify-between">
@@ -74,6 +76,7 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
                 All airports →
               </Link>
             </div>
+            
             {count === 0 ? (
               <p className="text-[11px] text-muted-foreground">
                 No airports owned yet.
@@ -86,7 +89,7 @@ export function TopHubsBadge({ airports }: { airports: AirportExt[] }) {
                       to="/airports/$id"
                       params={{ id: a.icao }}
                       onClick={() => setOpen(false)}
-                      className="panel group block rounded-lg p-3 transition-colors hover:bg-secondary/40"
+                      className="panel group block rounded-lg p-3 transition-colors hover:bg-secondary/40 border border-border/40 bg-secondary/10"
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
