@@ -73,20 +73,16 @@ function UpgradeAdvisorPage() {
     [data.airports],
   );
 
-  const advisorFn = useServerFn(getUpgradeAdvisor);
-  const settingsFn = useServerFn(getAdvisorSettings);
-  const setSettingsFn = useServerFn(setAdvisorSettings);
+   // 1. CZYSZCZENIE: Usunęliśmy stąd nieużywane funkcje serwerowe admina (advisorFn, settingsFn)
   const qc = useQueryClient();
+  const windowDays = 60;
 
-  const windowDays = 60; // fixed to keep upstream load predictable
-  const [adminToken, setAdminToken] = useState<string>("");
-  useEffect(() => {
-    try {
-      setAdminToken(localStorage.getItem(ADMIN_TOKEN_LS_KEY) ?? "");
-    } catch { /* noop */ }
-  }, []);
+  // 2. JEDYNE POTRZEBNE STANY DLA PILOTA (Wyrównane do góry, widoczne dla Vite)
+  const [sortBy, setSortBy] = useState<"payback" | "profit" | "cost">("payback");
+  const [busy, setBusy] = useState<string | null>(null);
 
-  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, adminToken ? "admin" : "user"] as const;
+  // 3. PANCERNY KLUCZ ZAPYTANIA CACHE (Bezpieczny, wolny od zmiennych adminToken i isAdmin)
+  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, "user"] as const;
   const { data: advisor, isFetching, isError, error, refetch } = useQuery({
     queryKey: advisorQueryKey,
     queryFn: () =>
