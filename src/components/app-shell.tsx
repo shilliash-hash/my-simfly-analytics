@@ -19,7 +19,7 @@ import {
   Mountain,
   Coins,
   Rocket,
-  Lock,
+  Lock
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
