@@ -225,10 +225,10 @@ function UpgradeAdvisorPage() {
         </div>
       </div>
 
- {/* 1. TUTAJ OTWIERAMY WARUNEK DLA SHILLA */}
-{payload?.username === "shill" && (
-  <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
-    <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60">
+ {/* PANCERNY BEZPIECZNIK: Sprawdzamy bezpośrednio keyTag sesji */}
+{keyTag === "shill" && (
+  <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm animate-in fade-in duration-150">
+    <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60 select-none">
       Admin controls
     </summary>
     <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
