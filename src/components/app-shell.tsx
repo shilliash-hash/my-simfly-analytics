@@ -19,7 +19,7 @@ import {
   Mountain,
   Coins,
   Rocket,
-  ShieldAlert,
+  Lock,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -90,7 +90,7 @@ function Sidebar() {
       </div>
 
       {/* STRUKTURA NAWIGACJI O ORYGINALNYM, ZWARTYM STYLU */}
-                 <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+     <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => {
           const Icon = item.icon;
           return (
@@ -105,7 +105,7 @@ function Sidebar() {
               <span className="font-display tracking-wide">{item.label}</span>
               
               {item.supporterOnly && (
-                <ShieldKeyhole className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-cyan-400/60 transition-colors duration-200" />
+                <Lock className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground/30 group-hover:text-cyan-400/60 transition-colors duration-200" />
               )}
             </Link>
           );
