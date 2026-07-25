@@ -12,6 +12,7 @@ import {
 } from "@/components/app-shell";
 import { HubSupportCard } from "@/components/hub-support";
 import { ReadyStatusBadge } from "@/components/ready-status-badge";
+import { TopHubsBadge } from "@/components/top-hubs-badge";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, runFleetActivityBackfill } from "@/lib/simfly.functions";
@@ -159,6 +160,7 @@ const { data: income30d } = useQuery({
               licenses={data.licenses}
               liveFlights={myFlights}
             />
+              <TopHubsBadge airports={data.airports} />
               {data.me.avatarUrl ? (
                 <img
                   src={data.me.avatarUrl}
@@ -366,52 +368,7 @@ const { data: income30d } = useQuery({
           </ul>
         </div>
       </section>
-
-      <section className="mt-8">
-        <div className="mb-3 flex items-end justify-between">
-          <h2 className="font-display text-xl font-semibold">Your top hubs</h2>
-          <Link to="/airports" className="mono text-[11px] uppercase tracking-widest text-runway hover:underline">
-            All airports →
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {[...data.airports]
-            .sort((a, b) => b.totalEarnedPax - a.totalEarnedPax)
-            .slice(0, 6)
-            .map((a) => (
-              <Link
-                key={a.icao}
-                to="/airports/$id"
-                params={{ id: a.icao }}
-                className="panel group block rounded-xl p-5 transition-colors hover:bg-secondary/40"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="mono text-[11px] uppercase tracking-widest text-runway">{a.icao}</div>
-                    <div className="font-display mt-1 truncate text-lg font-semibold">{a.name}</div>
-                    <div className="text-xs text-muted-foreground">{a.country} · L{a.level}</div>
-                  </div>
-                  <TierPill tier={a.tier} label={a.tierLabel} />
-                </div>
-                <div className="mt-4 grid grid-cols-3 gap-3 border-t border-border pt-4 text-xs">
-                  <Stat label="Lifetime PAX" value={formatNumber(Math.round(a.totalEarnedPax))} />
-                  <Stat label="PAX 7d" value={formatNumber(Math.round(a.pax7d))} />
-                  <Stat label="Rotation" value="" custom={<RotationCell rotation={a.rotation} max={a.maxRotation} />} />
-                </div>
-              </Link>
-            ))}
-        </div>
-      </section>
     </AppShell>
-  );
-}
-
-function Stat({ label, value, custom }: { label: string; value: string; custom?: React.ReactNode }) {
-  return (
-    <div>
-      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className="font-display mt-0.5 text-base font-semibold">{custom ?? value}</div>
-    </div>
   );
 }
 
