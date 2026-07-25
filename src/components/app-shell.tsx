@@ -78,7 +78,7 @@ function Sidebar() {
         - Napisy zaszyte w grafice stają się w pełni czytelne, a detale globu zachwycają głębią.
       */}
       <div className="flex flex-col items-center justify-center px-3 py-6 mb-6 border-b border-border/10">
-        <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
+        <div className="relative flex h-48 w-48 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
           <img
             src={hubLogo}
