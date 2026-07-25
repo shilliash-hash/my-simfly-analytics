@@ -40,21 +40,49 @@ export const Route = createFileRoute("/payout-matrix")({
 function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
-  const { data } = useSuspenseQuery(
-    queryOptions({
-      queryKey: ["simfly", keyTag],
-      queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000,
-    }),
-  );
 
+  // BEZPIECZNE, IDENTYCZNE JAK W TEAM-ACTIVITY ZAPYTANIE (useQuery zamiast useSuspenseQuery)
+  const { data, isLoading } = useQuery({
+    queryKey: ["simfly", keyTag],
+    queryFn: () => fn(payload ? { data: payload } : undefined),
+    staleTime: 30 * 60_000,
+  });
+
+  // KROK A: STAN ŁADOWANIA (Klon z team-activity)
+  if (isLoading) {
+    return (
+      <AppShell>
+        <div className="panel rounded-xl p-6 text-sm text-muted-foreground animate-pulse">
+          Verifying console access and loading payload…
+        </div>
+      </AppShell>
+    );
+  }
+
+  // KROK B: TWARDY GATEWAY (Jeśli backend nie zwrócił danych lub flagi aktywności)
+  // Serwer został zablokowany na pierwszej linijce walidacji — baza danych jest bezpieczna!
+  if (!data || !data.hubSupportActive) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="Analytics"
+          title="Airport Flat PAX Payout Matrix"
+          description="Estimated base per-flight PAX payout for every Aircraft Tier × Level."
+        />
+        <HubSupportGate featureName="The Airport Payout Matrix Panel" />
+      </AppShell>
+    );
+  }
+
+  // KROK C: DOSTĘP PRZYZNANY — Mapujemy tablice (uruchomi się TYLKO gdy data i wsparcie istnieją)
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
     [data.airports],
   );
 
   const [icao, setIcao] = useState<string>(airports[0]?.icao ?? "");
-  const pages = 63; // fixed ~250-flight sample (covers ~2 months for most airports)
+  const pages = 63;
+
 
   return (
     <AppShell>
