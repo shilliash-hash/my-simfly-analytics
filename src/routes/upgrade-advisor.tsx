@@ -1,12 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useSuspenseQuery, useQueryClient, queryOptions } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import {
   getSimflyPayload,
   getUpgradeAdvisor,
   getAdvisorSettings,
-  setAdvisorSettings,
   type UpgradeAdvisorRow,
   type UpgradeAdvisorRowMeta,
 } from "@/lib/simfly.functions";
@@ -24,8 +23,7 @@ export const Route = createFileRoute("/upgrade-advisor")({
       { title: "Upgrade Advisor — SimFly Hub" },
       {
         name: "description",
-        content:
-          "ROI-based recommendation of which airport to upgrade next, derived from your real flight history and the Airport Payout Matrix.",
+        content: "ROI-based recommendation of which airport to upgrade next, derived from your real flight history and the Airport Payout Matrix.",
       },
     ],
   }),
@@ -33,8 +31,6 @@ export const Route = createFileRoute("/upgrade-advisor")({
 
 type SortKey = "payback" | "daily" | "annual" | "cost" | "name";
 type AdvisorRow = UpgradeAdvisorRow & { meta: UpgradeAdvisorRowMeta };
-
-const ADMIN_TOKEN_LS_KEY = "simflyhub:adminToken";
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -50,16 +46,16 @@ function fmtDay(iso: string | null | undefined) {
   return d.toISOString().slice(0, 10);
 }
 
-function UpgradeAdvisorPage() {
+export function UpgradeAdvisorPage() {
   const fn = useServerFn(getSimflyPayload);
+  const advisorFn = useServerFn(getUpgradeAdvisor);
   const { keyTag, payload } = useSimflyArgs();
-  const { data } = useSuspenseQuery(
-    queryOptions({
-      queryKey: ["simfly", keyTag],
-      queryFn: () => fn(payload ? { data: payload } : undefined),
-      staleTime: 30 * 60_000,
-    }),
-  );
+
+  const { data } = useSuspenseQuery({
+    queryKey: ["simfly", keyTag],
+    queryFn: () => fn(payload ? { data: payload } : undefined),
+    staleTime: 30 * 60_000,
+  });
 
   const airportsInput = useMemo(
     () =>
@@ -73,17 +69,13 @@ function UpgradeAdvisorPage() {
     [data.airports],
   );
 
-   // 1. CZYSZCZENIE: Usunęliśmy stąd nieużywane funkcje serwerowe admina (advisorFn, settingsFn)
-  const qc = useQueryClient();
   const windowDays = 60;
-
-  // 2. JEDYNE POTRZEBNE STANY DLA PILOTA (Wyrównane do góry, widoczne dla Vite)
-  const [sortBy, setSortBy] = useState<"payback" | "profit" | "cost">("payback");
+  const [sortKey, setSortKey] = useState<SortKey>("payback");
   const [busy, setBusy] = useState<string | null>(null);
 
-  // 3. PANCERNY KLUCZ ZAPYTANIA CACHE (Bezpieczny, wolny od zmiennych adminToken i isAdmin)
   const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, "user"] as const;
-  const { data: advisor, isFetching, isError, error, refetch } = useQuery({
+  
+  const { data: advisor, isError, error, refetch } = useQuery({
     queryKey: advisorQueryKey,
     queryFn: () =>
       advisorFn({
@@ -91,7 +83,6 @@ function UpgradeAdvisorPage() {
           username: payload?.username,
           airports: airportsInput,
           windowDays,
-          ...(adminToken ? { adminToken } : {}),
         },
       }),
     staleTime: 30 * 60_000,
@@ -100,14 +91,6 @@ function UpgradeAdvisorPage() {
   });
 
   const gated = isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED");
-
-  const { data: settings } = useQuery({
-    queryKey: ["advisor-settings"],
-    queryFn: () => settingsFn(),
-    staleTime: 60_000,
-  });
-
-  const [sortKey, setSortKey] = useState<SortKey>("payback");
 
   const rows = useMemo<AdvisorRow[]>(() => {
     const list = [...((advisor?.rows ?? []) as AdvisorRow[])];
@@ -132,33 +115,6 @@ function UpgradeAdvisorPage() {
     return list;
   }, [advisor, sortKey]);
 
-  const isAdmin = adminToken.trim().length > 0;
-  const [busy, setBusy] = useState<string | null>(null);
-  const [msg, setMsg] = useState<string | null>(null);
-
-  async function forceRefresh(icaos: string[]) {
-    if (!isAdmin || icaos.length === 0) return;
-    setBusy(icaos.join(","));
-    setMsg(null);
-    try {
-      const res = await advisorFn({
-        data: {
-          username: payload?.username,
-          airports: airportsInput,
-          windowDays,
-          forceIcaos: icaos,
-          adminToken,
-        },
-      });
-      qc.setQueryData(advisorQueryKey, res);
-      setMsg("Refreshed.");
-    } catch (e) {
-      setMsg((e as Error).message || "Refresh failed.");
-    } finally {
-      setBusy(null);
-    }
-  }
-
   return (
     <AppShell>
       <PageHeader
@@ -166,9 +122,9 @@ function UpgradeAdvisorPage() {
         title="Airport Upgrade Advisor"
         description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Long-lived analysis — cached and refreshed on a slow cadence to keep upstream load low."
       />
-
+      
       {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
-             
+      
       {!gated && (
         <>
           <div className="mb-6 flex flex-wrap items-center gap-4">
@@ -186,17 +142,17 @@ function UpgradeAdvisorPage() {
                 Sort by
               </label>
               <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as any)}
+                value={sortKey}
+                onChange={(e) => setSortKey(e.target.value as SortKey)}
                 className="mono rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-runway"
               >
                 <option value="payback">Fastest payback</option>
-                <option value="profit">Highest profit</option>
+                <option value="daily">Highest profit</option>
                 <option value="cost">Lowest cost</option>
+                <option value="name">ICAO Code</option>
               </select>
             </div>
           </div>
-
           <div className="space-y-4">
             {isError && (
               <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
@@ -217,9 +173,9 @@ function UpgradeAdvisorPage() {
                   <AdvisorCard
                     key={r.icao}
                     row={r}
-                    canRefresh={isAdmin}
+                    canRefresh={false}
                     busy={busy === r.icao}
-                    onRefresh={() => forceRefresh([r.icao])}
+                    onRefresh={() => {}}
                   />
                 ))}
               </div>
@@ -243,8 +199,7 @@ function UpgradeAdvisorPage() {
   );
 }
 
-
-function TtlEditor({
+export function TtlEditor({
   currentTtl,
   disabled,
   onSave,
@@ -293,11 +248,10 @@ function AdvisorCard({
   onRefresh: () => void;
 }) {
   const hasData = row.flightsSampled > 0 && row.dailyIncrease > 0;
-  const lastManualMs = row.meta.lastManualRefreshAt
-    ? new Date(row.meta.lastManualRefreshAt).getTime()
-    : 0;
+  const lastManualMs = row.meta.lastManualRefreshAt ? new Date(row.meta.lastManualRefreshAt).getTime() : 0;
   const cooldownLeftMs = Math.max(0, lastManualMs + 24 * 60 * 60 * 1000 - Date.now());
   const cooldown = cooldownLeftMs > 0;
+
   return (
     <article className="panel rounded-xl p-4 flex flex-col gap-3">
       <header className="flex items-baseline justify-between gap-3">
@@ -317,30 +271,20 @@ function AdvisorCard({
           </div>
         </div>
       </header>
-
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <Field label="Upgrade cost" value={`${formatNumber(row.upgradeCost)} PAX`} />
         <Field
           label="Est. payback"
-          value={
-            hasData && row.paybackDays > 0
-              ? `${Math.round(row.paybackDays)} d`
-              : "—"
-          }
+          value={hasData && row.paybackDays > 0 ? `${Math.round(row.paybackDays)} d` : "—"}
           accent="instrument"
         />
-        <Field
-          label="Current daily PAX"
-          value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"}
-          accent="runway"
-        />
+        <Field label="Current daily PAX" value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"} accent="runway" />
         <Field
           label="Annual @ current rate"
           value={hasData ? `${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
           accent="runway"
         />
       </dl>
-
       <footer className="flex items-center justify-between pt-2 border-t border-border/60">
         <Stars stars={row.stars} />
         <div className="text-right text-[11px]">
@@ -355,7 +299,6 @@ function AdvisorCard({
           )}
         </div>
       </footer>
-
       <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-foreground/50">
         <div>
           <div>Generated {fmtDate(row.meta.generatedAt)}</div>
@@ -366,11 +309,7 @@ function AdvisorCard({
             type="button"
             onClick={onRefresh}
             disabled={busy || cooldown}
-            title={
-              cooldown
-                ? `Manual refresh available in ${Math.ceil(cooldownLeftMs / 3_600_000)} h`
-                : "Force recalculation now"
-            }
+            title={cooldown ? `Manual refresh available in ${Math.ceil(cooldownLeftMs / 3_600_000)} h` : "Force recalculation now"}
             className="inline-flex items-center gap-1 rounded-md border border-runway/40 bg-runway/10 px-2 py-1 text-runway hover:bg-runway/20 disabled:opacity-40"
           >
             <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
@@ -391,12 +330,7 @@ function Field({
   value: string;
   accent?: "runway" | "instrument";
 }) {
-  const tone =
-    accent === "runway"
-      ? "text-runway"
-      : accent === "instrument"
-        ? "text-instrument"
-        : "text-foreground";
+  const tone = accent === "runway" ? "text-runway" : accent === "instrument" ? "text-instrument" : "text-foreground";
   return (
     <div>
       <dt className="mono text-[10px] uppercase tracking-widest text-foreground/50">
@@ -412,11 +346,11 @@ function Stars({ stars }: { stars: 1 | 2 | 3 | 4 | 5 }) {
     stars === 5
       ? "text-instrument"
       : stars === 4
-        ? "text-runway"
-        : stars === 3
-          ? "text-tier-gold"
-          : stars === 2
-            ? "text-tier-silver"
-            : "text-muted-foreground";
+      ? "text-runway"
+      : stars === 3
+      ? "text-tier-gold"
+      : stars === 2
+      ? "text-tier-silver"
+      : "text-muted-foreground";
   return <TowerRating count={stars} toneClass={tone} />;
 }
