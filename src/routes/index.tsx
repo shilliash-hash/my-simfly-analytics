@@ -45,6 +45,11 @@ function Overview() {
   const fn = useServerFn(getSimflyPayload);
   const qc = useQueryClient();
   const { keyTag, payload, username: viewedUser } = useSimflyArgs();
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+  setIsMounted(true);
+  }, []);
+
   
   // REJESTRUJEMY NASZ BACKENDOWY ROBOT NAPRAWCZY:
   const triggerFleetRepair = useServerFn(runFleetActivityBackfill);
@@ -155,8 +160,8 @@ const { data: income30d } = useQuery({
        actions={
    <div className="flex items-center gap-4 w-full">
      {/* LEWA STRONA BELKI: Nowy, minimalistyczny przycisk Changelogu */}
-     <div className="flex items-center">
-       <ChangelogBadge />
+     <div className="flex items-center min-w-[100px] h-9">
+       {isMounted ? <ChangelogBadge /> : <div className="w-[100px] h-9 bg-secondary/10 rounded-md border border-border/20 animate-pulse" />}
      </div>
 
      {/* PRAWA STRONA BELKI: Twoje obecne, sprawne popupy operacyjne i avatar */}
