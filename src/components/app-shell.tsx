@@ -67,92 +67,51 @@ export function AppShell({ children }: { children: ReactNode }) {
 function Sidebar() {
   const isAdmin = !!useAdminToken();
   const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
-  
+
   return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
-      
-      {/* 
-        MONUMENTALNY BRANDING OPERACYJNY (GIGANT SIZE):
-        - Kontener h-24 w-24 (96x96px) pozwala w pełni docenić detale wieży kontrolnej i globu.
-        - Typografia w 100% oparta na jednym, spójnym font-display.
-      */}
       <div className="flex items-center gap-4 px-3 py-5 mb-5 border-b border-border/10">
-        {/* POWIĘKSZONA BRYŁA LOGO (h-24 w-24) */}
         <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
-                  <img 
-            src={hubLogo} 
+          <img
+            src={hubLogo}
             alt="SimFly Assets Intelligence Hub"
-            className="h-full w-full object-contain p-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105"
-          />
-              CHIRURGICZNA POPRAWKA:
-              Zmieniamy h-20 w-20 na h-full w-full p-2, aby grafika 512x512 
-              idealnie i ostro rozszerzyła się do samych krawędzi nowej ramki!
-            */}
             className="h-full w-full object-contain p-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105"
           />
         </div>
 
-        {/* TYPOGRAFIA DOPASOWANA DO ROZMIARU GIGANT (100% FONT-DISPLAY) */}
         <div className="flex flex-col min-w-0 justify-center h-24">
           <div className="font-display text-base font-black tracking-wider text-white uppercase leading-none">
             SimFly
           </div>
-                    
-          {/* PIGUŁKA KORZYSTA Z TEGO SAMEGO FONT-DISPLAY CO RESZTA UKŁADU */}
           <div className="my-2 self-start">
             <span className="font-display text-[9px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 shadow-[0_0_8px_rgba(34,211,238,0.15)]">
               Intelligence
             </span>
           </div>
-
-          <div className="font-display text-base font-black tracking-wider text-white uppercase leading-none">
+          <div className="font-display text-sm font-bold tracking-widest text-slate-400 uppercase leading-none pl-0.5">
             Hub
           </div>
         </div>
       </div>
 
-
-      <nav className="mt-4 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
-        {items.map(({ to, label, icon: Icon }) => (
-          <Link
-            key={to}
-            to={to}
-            activeOptions={{ exact: to === "/" }}
-            className={cn(
-              "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors",
-              "hover:bg-secondary hover:text-foreground",
-            )}
-            activeProps={{
-              className:
-                "bg-secondary text-foreground ring-1 ring-primary/30 shadow-[0_0_0_1px_rgba(34,211,238,0.15)]",
-            }}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            <span className="whitespace-nowrap">{label}</span>
-          </Link>
-        ))}
+      <nav className="mt-2 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
+        {items.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              activeProps={{ className: "bg-secondary text-foreground" }}
+              inactiveProps={{ className: "text-muted-foreground hover:bg-secondary/40 hover:text-foreground" }}
+              className="mono flex items-center gap-3 rounded-lg px-3 py-2 text-xs uppercase tracking-widest transition-colors lg:w-full"
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
-
-      <div className="mt-6 hidden lg:block">
-        <a
-          href="https://paypal.me/shilliash"
-          target="_blank"
-          rel="noopener noreferrer"
-          title="Support SimFly Hub via PayPal"
-          className="group flex items-center gap-2.5 rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-xs text-muted-foreground transition-colors hover:border-runway/40 hover:bg-secondary/60 hover:text-foreground"
-        >
-          <Coffee className="h-3.5 w-3.5 shrink-0 text-runway transition-transform group-hover:-rotate-12" />
-          <span className="mono uppercase tracking-widest text-[10px]">Buy me a coffee</span>
-        </a>
-        <p className="mt-2 px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Enjoying SimFly Hub? ☕ Buy me a coffee to help cover hosting and development.
-          <br />
-          <br />
-          Prefer to support me in-game? ✈️ Fly to one of my airports just one time a week instead — every landing is just as appreciated and helps keep SimFly Hub online. ❤️
-        </p>
-
-      </div>
     </aside>
   );
 }
