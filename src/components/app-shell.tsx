@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { cn } from "@/lib/utils";
+import hubLogo from "@/assets/hub_logo_512.png";
 import {
   LayoutDashboard,
   Building2,
@@ -66,19 +67,29 @@ export function AppShell({ children }: { children: ReactNode }) {
 function Sidebar() {
   const isAdmin = !!useAdminToken();
   const items = NAV.filter((n) => !("adminOnly" in n && n.adminOnly) || isAdmin);
-  return (
-    <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0">
-      <div className="panel flex items-center gap-3 rounded-xl px-4 py-3">
-        <div className="grid h-9 w-9 place-items-center rounded-lg bg-primary text-primary-foreground">
-          <Plane className="h-5 w-5 -rotate-45" />
+   return (
+    <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
+      {/* 
+        NOWY MINIMALISTYCZNY SYGNET BRANDINGU:
+        Całkowicie usunęliśmy tekst "SimFly Hub" i "Assets Intelligence", 
+        ponieważ dumnie i szeroko świecą już w nowym nagłówku na stronie głównej!
+      */}
+      <div className="flex items-center justify-between lg:justify-start px-2 py-3 mb-2">
+        <div className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
+          <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
+          <img 
+            src={hubLogo} 
+            alt="SimFly Hub Logo"
+            className="h-9 w-9 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] transition-transform duration-300 group-hover:scale-105 group-hover:rotate-1"
+          />
         </div>
-        <div className="leading-tight">
-          <div className="font-display text-base font-semibold tracking-tight">SimFly Hub</div>
-          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            Assets Intelligence
-          </div>
+        
+        {/* Mała, szara sygnatura mono widoczna tylko na urządzeniach mobilnych, gdy belka się zwija */}
+        <div className="mono text-[10px] font-bold tracking-wider text-muted-foreground/40 uppercase lg:hidden pr-2">
+          System Console
         </div>
       </div>
+
 
       <nav className="mt-4 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map(({ to, label, icon: Icon }) => (
