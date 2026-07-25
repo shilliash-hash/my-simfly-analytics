@@ -71,7 +71,7 @@ function Sidebar() {
   return (
     <aside className="lg:sticky lg:top-6 lg:h-[calc(100vh-3rem)] lg:w-64 lg:shrink-0 px-2 lg:px-0">
       <div className="flex items-center gap-4 px-3 py-5 mb-5 border-b border-border/10">
-        <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
+        <div className="relative flex h-64 w-64 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
           <img
             src={hubLogo}
@@ -79,22 +79,7 @@ function Sidebar() {
             className="h-full w-full object-contain p-2 drop-shadow-[0_0_15px_rgba(34,211,238,0.4)] transition-transform duration-300 group-hover:scale-105"
           />
         </div>
-
-        <div className="flex flex-col min-w-0 justify-center h-24">
-          <div className="font-display text-base font-black tracking-wider text-white uppercase leading-none">
-            SimFly
-          </div>
-          <div className="my-2 self-start">
-            <span className="font-display text-[9px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 shadow-[0_0_8px_rgba(34,211,238,0.15)]">
-              Intelligence
-            </span>
-          </div>
-          <div className="font-display text-sm font-bold tracking-widest text-slate-400 uppercase leading-none pl-0.5">
-            Hub
-          </div>
-        </div>
-      </div>
-
+         
             <nav className="mt-6 flex gap-1 overflow-x-auto lg:flex-col lg:overflow-visible">
         {items.map((item) => {
           const Icon = item.icon;
