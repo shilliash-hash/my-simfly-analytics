@@ -58,7 +58,7 @@ export function ChangelogBadge() {
             </span>
           </div>
           
-          <div className="max-h-[calc(min-80vh,46rem)-5rem)] space-y-5 overflow-auto pr-1 custom-scrollbar">
+                    <div className="max-h-[28rem] space-y-5 overflow-y-auto block pr-2 custom-scrollbar">
             {hasData ? (
               staticChangelogFeed.map((item: any) => {
                 const tags = Array.isArray(item.type) ? item.type : [item.type].filter(Boolean);
