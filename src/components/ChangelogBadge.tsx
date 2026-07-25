@@ -1,3 +1,8 @@
+import { useEffect, useRef, useState } from "react";
+import { History, Sparkles, Wrench, ShieldAlert } from "lucide-react";
+import { staticChangelogFeed } from "@/lib/changelog-data";
+import { cn } from "@/lib/utils";
+
 export function ChangelogBadge() {
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
