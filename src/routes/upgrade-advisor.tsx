@@ -276,6 +276,7 @@ function UpgradeAdvisorPage() {
           </div>
         )}
       </details>
+    )}
 
       {!gated && <UpgradeAdvisorLegend />}
 
