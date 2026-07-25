@@ -42,7 +42,7 @@ function PayoutMatrixPage() {
   const { keyTag, payload } = useSimflyArgs();
 
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ["simfly", keyTag],
+    queryKey: ["simfly", keyTag, "v2-fresh"],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
     retry: false,
