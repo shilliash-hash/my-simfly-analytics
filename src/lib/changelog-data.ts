@@ -12,7 +12,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
   id: "1",
   version: "v 1.0 FULL RELEASE 25.Jul.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
-  text: `• Mission Intelligence Update. This marks the first major milestone for SimFly Hub.
+  text: `• Introducing full release - Mission Intelligence Update. This marks the first major milestone for SimFly Hub.
   The application has evolved from a collection of statistics into a complete operational intelligence
   platform built around your historical SimFly data.
 
