@@ -41,31 +41,13 @@ function PayoutMatrixPage() {
   const fn = useServerFn(getSimflyPayload);
   const { keyTag, payload } = useSimflyArgs();
 
-   // 1. BEZPIECZNE ZAPYTANIE: Wyłączamy automatyczne ponawianie (retry: false), aby odciążyć serwer
   const { data, isLoading, isError, error } = useQuery({
     queryKey: ["simfly", keyTag],
     queryFn: () => fn(payload ? { data: payload } : undefined),
     staleTime: 30 * 60_000,
-    retry: false, // <-- KLUCZ: Kończymy zapytanie natychmiast, zamiast migać ekranem przez 10s!
+    retry: false,
   });
 
-  // 2. BEZPIECZNIK BŁĘDU SERWERA / TIMEOUTU
-  if (isError && error instanceof Error && !error.message.includes("HUB_SUPPORT_REQUIRED")) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="System Error"
-          title="Database Timeout"
-          description="The server took too long to compute the flight history matrices. Upstream database might be rate-limited."
-        />
-        <div className="panel rounded-xl p-6 text-sm text-destructive bg-destructive/10 border border-destructive/20">
-          Backend error: {error.message}. Please wait a minute and refresh the page to try again.
-        </div>
-      </AppShell>
-    );
-  }
-
-  // 3. CHIRURGICZNY BEZPIECZNIK BRAMKI SUPPORTERA
   if (isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED")) {
     return (
       <AppShell>
@@ -79,7 +61,21 @@ function PayoutMatrixPage() {
     );
   }
 
-  // 4. STAN ŁADOWANIA
+  if (isError) {
+    return (
+      <AppShell>
+        <PageHeader
+          eyebrow="System Error"
+          title="Database Connection Failure"
+          description="The upstream server took too long to compute flight history matrices."
+        />
+        <div className="panel rounded-xl p-6 text-sm text-destructive bg-destructive/10 border border-destructive/20 mono">
+          Backend error: {error instanceof Error ? error.message : "Unknown error"}. Please refresh.
+        </div>
+      </AppShell>
+    );
+  }
+
   if (isLoading) {
     return (
       <AppShell>
@@ -90,7 +86,6 @@ function PayoutMatrixPage() {
     );
   }
 
-  // 5. WERYFIKACJA STATUSU DLA ZALOGOWANEGO SUPPORTERA
   const isSupporter = data?.status?.active || data?.hubSupport?.active || data?.hubSupportActive;
 
   if (!data || !isSupporter) {
@@ -106,9 +101,6 @@ function PayoutMatrixPage() {
     );
   }
 
-
-
-  // KROK C: DOSTĘP PRZYZNANY — Mapujemy tablice (uruchomi się TYLKO gdy data i wsparcie istnieją)
   const airports = useMemo(
     () => [...data.airports].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax),
     [data.airports],
