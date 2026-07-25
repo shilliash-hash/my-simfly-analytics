@@ -78,7 +78,7 @@ function Sidebar() {
       */}
       <div className="flex items-center gap-4 px-3 py-5 mb-5 border-b border-border/10">
         {/* POWIĘKSZONA BRYŁA LOGO (h-24 w-24) */}
-        <div className="relative flex h-24 w-24 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
+        <div className="relative flex h-36 w-36 shrink-0 items-center justify-center rounded-2xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/40 to-slate-950/70 shadow-2xl overflow-hidden backdrop-blur-md group">
           <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
           <img 
             src={hubLogo} 
@@ -92,10 +92,7 @@ function Sidebar() {
           <div className="font-display text-base font-black tracking-wider text-white uppercase leading-none">
             SimFly
           </div>
-          <div className="font-display text-sm font-extrabold tracking-wide text-white uppercase leading-none mt-1">
-            Assets
-          </div>
-          
+                    
           {/* PIGUŁKA KORZYSTA Z TEGO SAMEGO FONT-DISPLAY CO RESZTA UKŁADU */}
           <div className="my-2 self-start">
             <span className="font-display text-[9px] font-black uppercase tracking-widest text-cyan-400 bg-cyan-500/10 px-2 py-0.5 rounded border border-cyan-500/20 shadow-[0_0_8px_rgba(34,211,238,0.15)]">
@@ -103,7 +100,7 @@ function Sidebar() {
             </span>
           </div>
 
-          <div className="font-display text-sm font-bold tracking-widest text-slate-400 uppercase leading-none pl-0.5">
+          <div className="font-display text-base font-black tracking-wider text-white uppercase leading-none">
             Hub
           </div>
         </div>
