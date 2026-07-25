@@ -1,5 +1,6 @@
 import { getIncomeSummary } from "@/lib/income.functions";
 import { supabase } from "@/integrations/supabase/client";
+import hubLogo from "@/assets/hub_logo_512.png";
 import { staticChangelogFeed } from "../lib/changelog-data";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanstack/react-query";
@@ -145,18 +146,44 @@ const { data: income30d } = useQuery({
  //  staleTime: 5 * 60 * 1000,
 // });
 
-   return (
+     return (
     <AppShell>
       <PageHeader
         eyebrow={viewedUser ? `Viewing pilot @${viewedUser}` : "Welcome back"}
-        title={`Captain ${data.me.displayName}`}
+        title={
+          <div className="flex items-center gap-3 group mt-1">
+            {/* Neonowy, szklany kontener na Twoje nowe logo z katalogu src/assets/ */}
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-cyan-500/20 bg-gradient-to-br from-cyan-950/30 to-slate-950/60 shadow-inner overflow-hidden backdrop-blur-md">
+              <div className="absolute inset-0 bg-cyan-500/5 mix-blend-screen opacity-60" />
+              <img 
+                src={hub_logo_512} 
+                alt="SimFly Hub"
+                className="h-8 w-8 object-contain drop-shadow-[0_0_8px_rgba(34,211,238,0.3)] transition-transform duration-300 group-hover:scale-105"
+              />
+            </div>
+            
+            {/* Typografia z nowego logo — w jednej linii */}
+            <div className="flex items-baseline gap-1.5">
+              <span className="font-display text-xl font-extrabold tracking-wide text-white uppercase">
+                SimFly
+              </span>
+              <span className="font-display text-base font-bold tracking-wider text-cyan-400 uppercase">
+                Hub
+              </span>
+              <span className="mono text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/40 ml-1.5 hidden sm:inline">
+                Intelligence
+              </span>
+            </div>
+          </div>
+        }
         description={
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Real-time intelligence on your SimFly.io operations — unofficial but the best dashboard you can find
+          <div className="div className='space-y-3' mt-1">
+            <p className="text-sm text-text-muted-foreground">
+              Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find
             </p>
           </div>
-        } 
+        }
+
        actions={
    <div className="flex items-center gap-4 w-full">
      {/* LEWA STRONA BELKI: Nowy, minimalistyczny przycisk Changelogu */}
