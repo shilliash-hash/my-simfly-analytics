@@ -1,3 +1,4 @@
+import { searchAirports } from "@/lib/simfly.functions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -11,7 +12,7 @@ import {
   getMissionCatalog,
   predictMissionFn,
   rankMissionsFn,
-  type MissionCatalog,
+ type MissionCatalog,
 } from "@/lib/mission.functions";
 import { SimbriefLink } from "@/components/simbrief-link";
 import { MissionLoadingSequence } from "@/components/mission-loading-sequence";
