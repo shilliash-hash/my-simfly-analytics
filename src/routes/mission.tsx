@@ -229,14 +229,15 @@ function MissionForm(props: {
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={catalog?.owned.map((o) => o.icao) ?? []}
+        options={catalog?.owned.map((o) => ({ icao: o.icao, name: o.name })) ?? []}
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={catalog?.owned.map((o) => o.icao) ?? []}
+        options={catalog?.owned.map((o) => ({ icao: o.icao, name: o.name })) ?? []}
       />
+
       <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
@@ -313,7 +314,7 @@ function FieldIcao({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: string[];
+  options: { icao: string; name: string }[];
 }) {
   const listId = `icao-${label.toLowerCase()}`;
   return (
@@ -329,12 +330,15 @@ function FieldIcao({
       />
       <datalist id={listId}>
         {options.map((o) => (
-          <option key={o} value={o} />
+          <option key={o.icao} value={o.icao}>
+            {o.name}
+          </option>
         ))}
       </datalist>
     </label>
   );
 }
+
 
 function FieldSelect({
   label,
