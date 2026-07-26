@@ -225,18 +225,20 @@ function MissionForm(props: {
         onChange={props.onLicence}
         options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
       />
-      <FieldIcao
+           <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={catalog?.owned.map((o) => ({ icao: o.icao, name: o.name })) ?? []}
+        options={catalog?.owned.map((o) => ({ value: o.icao, label: o.name })) ?? []}
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={catalog?.owned.map((o) => ({ icao: o.icao, name: o.name })) ?? []}
+        options={catalog?.owned.map((o) => ({ value: o.icao, label: o.name })) ?? []}
       />
+
+
 
       <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
         <input
@@ -314,30 +316,32 @@ function FieldIcao({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { icao: string; name: string }[];
+  options: { value: string; label: string }[];
 }) {
-  const listId = `icao-${label.toLowerCase()}`;
   return (
     <label className="flex flex-col gap-1.5">
       <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      <input
-        type="text"
+      <select
         value={value}
-        onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
-        placeholder="ICAO"
-        list={listId}
-        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40"
-      />
-      <datalist id={listId}>
+        onChange={(e) => onChange(e.target.value)}
+        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-runway/40 font-mono text-foreground"
+      >
+        <option value="" className="font-sans text-muted-foreground">— Select Airport —</option>
         {options.map((o) => (
-          <option key={o.icao} value={o.icao}>
-            {o.name}
+          /* 
+            PANCERNY UKŁAD SUBSYSTEMU LICENCJI:
+            Wartością przekazywaną do bazy jest 4-literowy kod ICAO (o.value),
+            a użytkownik na ekranie widzi luksusową, pełną nazwę portu (o.value · o.label)!
+          */
+          <option key={o.value} value={o.value} className="font-sans">
+            {o.value} · {o.label}
           </option>
         ))}
-      </datalist>
+      </select>
     </label>
   );
 }
+
 
 
 function FieldSelect({
