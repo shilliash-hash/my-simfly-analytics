@@ -203,7 +203,11 @@ function MissionForm({
   onDisableDepIncome,
   onDisableArrIncome,
 }) {
-  // PANCERNE ZACIĄGNIĘCIE GLOBALNEJ BAZY ŚWIATA (0ms narzutu na sieć dzięki pamięci podręcznej!)
+ function MissionForm(props: MissionFormProps) {
+  // 1. TA LINIA MUSI BYĆ PIERWSZA (Tak jak stworzyło to Lovable!)
+  const { catalog } = props;
+
+  // 2. NASZ BEZPIECZNIK SIECIOWY WCHODZI IDEALNIE POD NIĄ:
   const globalPayloadFn = useServerFn(getSimflyPayload);
   const { keyTag, payload: globalArgs } = useSimflyArgs();
   const { data: globalHubData } = useSuspenseQuery(
