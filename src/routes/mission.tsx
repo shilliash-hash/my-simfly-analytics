@@ -366,7 +366,7 @@ function FieldIcao({
               {/* Pełna, realna nazwa lotniska z bazy danych */}
               <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors">
                 {o.name}
-              </style>
+              </span>
             </div>
           ))}
         </div>
