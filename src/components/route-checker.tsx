@@ -1,387 +1,70 @@
-import { searchAirports } from "@/lib/simfly.functions";
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { useMemo, useState } from "react";
-import { Rocket, Gauge, ArrowRight, Sparkles, Zap, Pickaxe, Wind } from "lucide-react";
-import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
+import { useQuery } from "@tanstack/react-query";
+import { evaluateRouteForAllLicences, searchAirports } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
-import { HubSupportGate } from "@/components/hub-support";
-import { getHubSupportStatus } from "@/lib/hub-support.functions";
-import {
-  getMissionCatalog,
-  predictMissionFn,
-  rankMissionsFn,
- type MissionCatalog,
-} from "@/lib/mission.functions";
-import { SimbriefLink } from "@/components/simbrief-link";
-import { MissionLoadingSequence } from "@/components/mission-loading-sequence";
-import { cn } from "@/lib/utils";
+import type { LicenseExt } from "@/lib/types";
+import { CheckCircle2, XCircle, Loader2, Search } from "lucide-react";
 
-export const Route = createFileRoute("/mission")({
-  component: MissionRoute,
-  head: () => ({
-    meta: [
-      { title: "Mission Intelligence — SimFly Hub" },
-      {
-        name: "description",
-        content:
-          "Predict PAX, income, and PAX/hour for a planned SimFly mission using your own historical flight data.",
-      },
-    ],
-  }),
-});
-
-function MissionRoute() {
-  const statusFn = useServerFn(getHubSupportStatus);
-  const { keyTag, payload } = useSimflyArgs();
-  const { data: status, isLoading } = useQuery({
-    queryKey: ["hub-support", keyTag],
-    queryFn: () => statusFn(payload ? { data: payload } : undefined),
-    staleTime: 5 * 60_000,
-  });
-  if (isLoading) {
-    return (
-      <AppShell>
-        <PageHeader eyebrow="Premium" title="Mission Intelligence" description="Loading…" />
-        <MissionLoadingSequence />
-      </AppShell>
-    );
-  }
-  if (!status?.active) {
-    return (
-      <AppShell>
-        <PageHeader
-          eyebrow="Premium"
-          title="Mission Intelligence"
-          description="Predict PAX, income, and PAX/hour for planned missions."
-        />
-        <HubSupportGate featureName="Mission Intelligence" />
-      </AppShell>
-    );
-  }
-  return <MissionPlanner />;
-}
-
-function MissionPlanner() {
-  const { keyTag, username } = useSimflyArgs();
-  const catalogFn = useServerFn(getMissionCatalog);
-  const predictFn = useServerFn(predictMissionFn);
-
-  const { data: catalog } = useQuery({
-    queryKey: ["mission-catalog", keyTag],
-    queryFn: () => catalogFn(username ? { data: { username } } : undefined),
-    staleTime: 5 * 60_000,
-  });
-
-  const [departure, setDeparture] = useState("");
-  const [arrival, setArrival] = useState("");
-  const [aircraftId, setAircraftId] = useState<string>("");
-  const [licence, setLicence] = useState<string>("");
-  const [useCommunity, setUseCommunity] = useState<boolean>(false);
-  const [disableDepIncome, setDisableDepIncome] = useState<boolean>(false);
-  const [disableArrIncome, setDisableArrIncome] = useState<boolean>(false);
-  const [runToken, setRunToken] = useState<number>(0);
-  const [runSnapshot, setRunSnapshot] = useState<{
-    departure: string; arrival: string; aircraftId: string;
-    licence: string; useCommunity: boolean;
-    disableDepIncome: boolean; disableArrIncome: boolean;
-  } | null>(null);
-
-  const canRun =
-    departure.length >= 3 && arrival.length >= 3 && !!aircraftId && !!licence;
-
-  const prediction = useQuery({
-    enabled: runToken > 0 && !!runSnapshot,
-    queryKey: ["mission-predict", keyTag, runToken],
-    queryFn: () =>
-      predictFn({
-        data: {
-          departure: runSnapshot!.departure,
-          arrival: runSnapshot!.arrival,
-          aircraftId: runSnapshot!.aircraftId,
-          licence: runSnapshot!.licence || undefined,
-          useCommunity: runSnapshot!.useCommunity,
-          disableDepIncome: runSnapshot!.disableDepIncome,
-          disableArrIncome: runSnapshot!.disableArrIncome,
-          ...(username ? { username } : {}),
-        },
-      }),
-    staleTime: Infinity,
-  });
-
-  const inputsChanged = !!runSnapshot && (
-    runSnapshot.departure !== departure ||
-    runSnapshot.arrival !== arrival ||
-    runSnapshot.aircraftId !== aircraftId ||
-    runSnapshot.licence !== licence ||
-    runSnapshot.useCommunity !== useCommunity ||
-    runSnapshot.disableDepIncome !== disableDepIncome ||
-    runSnapshot.disableArrIncome !== disableArrIncome
-  );
-
-  const beginDataMining = () => {
-    if (!canRun) return;
-    setRunSnapshot({ departure, arrival, aircraftId, licence, useCommunity, disableDepIncome, disableArrIncome });
-    setRunToken((t) => t + 1);
-  };
-
-  return (
-    <AppShell>
-      <PageHeader
-        eyebrow="Decision support"
-        title="Mission Intelligence"
-        description="Predicts PAX, income and PAX/hour for a planned flight using your own historical ledger — never a second accounting engine."
-        actions={null}
-      />
-
-      <MissionForm
-        catalog={catalog}
-        departure={departure}
-        arrival={arrival}
-        aircraftId={aircraftId}
-        licence={licence}
-        useCommunity={useCommunity}
-        disableDepIncome={disableDepIncome}
-        disableArrIncome={disableArrIncome}
-        onDeparture={setDeparture}
-        onArrival={setArrival}
-        onAircraftId={setAircraftId}
-        onLicence={setLicence}
-        onUseCommunity={setUseCommunity}
-        onDisableDepIncome={setDisableDepIncome}
-        onDisableArrIncome={setDisableArrIncome}
-      />
-
-      <section className="panel mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl p-4">
-        <div className="text-xs text-muted-foreground">
-          {canRun
-            ? inputsChanged && runToken > 0
-              ? "Inputs changed — press Spool Prediction Engine to refresh."
-              : "Ready. Press Spool Prediction Engine so engine roar wakes up math goblins."
-            : "Pick aircraft, licence, departure and arrival to unlock Engine Spooling."}
-        </div>
-        <button
-          type="button"
-          onClick={beginDataMining}
-          disabled={!canRun || prediction.isFetching}
-          className={cn(
-            "mono inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs uppercase tracking-widest transition",
-            canRun && !prediction.isFetching
-              ? "bg-runway text-background hover:bg-runway/90"
-              : "bg-secondary text-muted-foreground cursor-not-allowed",
-          )}
-        >
-          <Wind className="h-4 w-4" />
-          {prediction.isFetching ? "Spooling..." : "Spool Prediction Engine"}
-        </button>
-      </section>
-
-      <PlannerResult query={prediction} hasRun={runToken > 0} inputsStale={inputsChanged} />
-    </AppShell>
-  );
-}
-
-function MissionForm(props: {
-  catalog: MissionCatalog | undefined;
-  departure: string;
-  arrival: string;
-  aircraftId: string;
-  licence: string;
-  useCommunity: boolean;
-  disableDepIncome: boolean;
-  disableArrIncome: boolean;
-  onDeparture: (v: string) => void;
-  onArrival: (v: string) => void;
-  onAircraftId: (v: string) => void;
-  onLicence: (v: string) => void;
-  onUseCommunity: (v: boolean) => void;
-  onDisableDepIncome: (v: boolean) => void;
-  onDisableArrIncome: (v: boolean) => void;
-}) {
-  const { catalog } = props;
-  const aircraftOptions =
-    catalog?.aircraft.filter((a) => a.mode !== "rental").map((a) => {
-      const modeTag = a.mode === "owned" ? "Owned" : "Generic";
-      const tail = a.tailNumber ? ` — ${a.tailNumber}` : "";
-      const icao = a.icao ? ` (${a.icao})` : "";
-      return { value: a.aircraftId, label: `[${modeTag}] ${a.label}${tail}${icao}` };
-    }) ?? [];
-  const ownedSet = new Set((catalog?.owned ?? []).map((o) => o.icao.toUpperCase()));
-  const depUp = props.departure.toUpperCase();
-  const arrUp = props.arrival.toUpperCase();
-  const depOwned = depUp.length >= 3 && ownedSet.has(depUp);
-  const arrOwned = arrUp.length >= 3 && ownedSet.has(arrUp);
-  return (
-    <section className="panel mb-4 grid gap-4 rounded-xl p-5 sm:grid-cols-2 lg:grid-cols-4">
-      <FieldSelect
-        label="Aircraft"
-        value={props.aircraftId}
-        onChange={props.onAircraftId}
-        options={aircraftOptions}
-      />
-      <FieldSelect
-        label="Licence"
-        value={props.licence}
-        onChange={props.onLicence}
-        options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
-      />
-      <FieldIcao
-        label="Departure"
-        value={props.departure}
-        onChange={props.onDeparture}
-        options={catalog?.owned.map((o) => o.icao) ?? []}
-      />
-      <FieldIcao
-        label="Arrival"
-        value={props.arrival}
-        onChange={props.onArrival}
-        options={catalog?.owned.map((o) => o.icao) ?? []}
-      />
-      <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          checked={props.useCommunity}
-          onChange={(e) => props.onUseCommunity(e.target.checked)}
-          className="h-4 w-4 rounded border-border/40 bg-secondary/40"
-        />
-        <span>Use Community Intelligence (supplementary global medians; influence decreases as personal history grows)</span>
-      </label>
-      <div className="sm:col-span-2 lg:col-span-4 grid gap-3 rounded-md border border-border/30 bg-secondary/20 p-3 sm:grid-cols-2">
-        <EndpointDisableToggle
-          role="Departure"
-          icao={depUp}
-          owned={depOwned}
-          checked={props.disableDepIncome}
-          onChange={props.onDisableDepIncome}
-        />
-        <EndpointDisableToggle
-          role="Arrival"
-          icao={arrUp}
-          owned={arrOwned}
-          checked={props.disableArrIncome}
-          onChange={props.onDisableArrIncome}
-        />
-      </div>
-    </section>
-  );
-}
-
-function EndpointDisableToggle({
-  role,
-  icao,
-  owned,
-  checked,
-  onChange,
-}: {
-  role: "Departure" | "Arrival";
-  icao: string;
-  owned: boolean;
-  checked: boolean;
-  onChange: (v: boolean) => void;
-}) {
-  const status = !icao || icao.length < 3
-    ? "—"
-    : owned
-      ? "owned"
-      : "not-owned / system?";
-  return (
-    <label className="flex items-start gap-2 text-xs text-muted-foreground">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="mt-0.5 h-4 w-4 rounded border-border/40 bg-secondary/40"
-      />
-      <span className="leading-tight">
-        <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{role}</span>{" "}
-        <span className="mono text-foreground">{icao || "—"}</span>{" "}
-        <span className={owned ? "text-runway" : "text-instrument"}>({status})</span>
-        <span className="block text-[11px]">Check if its a system/bank airport - those airports generate no income (it will disable prediction).</span>
-      </span>
-    </label>
-  );
-}
-
-
-
-function FieldIcao({
-  label,
-  value,
-  onChange,
-}: {
+type AirportFieldProps = {
   label: string;
   value: string;
   onChange: (v: string) => void;
-}) {
-  // Sprowadzamy oficjalną i niezależną funkcję wyszukiwania lotnisk z bazy Hubu
-  const searchFn = useServerFn(searchAirports);
-  const [isOpen, setIsOpen] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
+};
 
-  // Zamykamy okno podpowiedzi, jeśli użytkownik kliknie gdziekolwiek poza wyszukiwarką
+function AirportField({ label, value, onChange }: AirportFieldProps) {
+  const searchFn = useServerFn(searchAirports);
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) {
-        setIsOpen(false);
-      }
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
     };
     window.addEventListener("mousedown", handler);
     return () => window.removeEventListener("mousedown", handler);
   }, []);
-
   const q = value.toUpperCase();
-
-  // Pancerny klient sieciowy z Route Checkera — pobiera dane z bazy w locie w miarę wpisywania liter!
   const sug = useQuery({
-    queryKey: ["airport-search-mission", q],
+    queryKey: ["airport-search", q],
     queryFn: () => searchFn({ data: { query: q, limit: 8 } }),
-    enabled: isOpen && q.length >= 1,
+    enabled: open && q.length >= 1,
     staleTime: 60_000,
   });
-
   return (
-    <div ref={boxRef} className="relative flex flex-col gap-1.5 w-full font-sans">
-      <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+    <div ref={boxRef} className="relative">
+      <label className="mono mb-1 block text-[10px] uppercase tracking-widest text-muted-foreground">
         {label}
       </label>
-      
-      <div className="relative w-full">
+      <div className="flex items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-1.5">
+        <Search className="h-3.5 w-3.5 text-muted-foreground" />
         <input
-          type="text"
           value={value}
-          onFocus={() => setIsOpen(true)}
           onChange={(e) => {
             onChange(e.target.value.toUpperCase().slice(0, 4));
-            setIsOpen(true);
+            setOpen(true);
           }}
+          onFocus={() => setOpen(true)}
           placeholder="ICAO"
           maxLength={4}
-          className="w-full rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40 text-foreground placeholder:text-muted-foreground/40"
+          className="mono w-full bg-transparent text-sm uppercase tracking-widest outline-none placeholder:text-muted-foreground/60"
+          autoComplete="off"
+          spellCheck={false}
         />
       </div>
-
-      {/* STYLIZOWANA, LUKSUSOWA LISTA ROZWIJANA (STYL PREMIUM 1:1 Z ROUTE CHECKERA) */}
-      {isOpen && q.length >= 1 && (sug.data?.length ?? 0) > 0 && (
-        <ul className="absolute top-[62px] left-0 z-50 w-full max-h-56 overflow-y-auto rounded-md border border-border bg-[#0c101b] shadow-2xl p-1 font-sans animate-in fade-in slide-in-from-top-1 duration-100 flex flex-col gap-0.5">
+      {open && q.length >= 1 && (sug.data?.length ?? 0) > 0 && (
+        <ul className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-background shadow-lg">
           {sug.data!.map((s) => (
             <li key={s.icao}>
               <button
                 type="button"
                 onClick={() => {
                   onChange(s.icao);
-                  setIsOpen(false);
+                  setOpen(false);
                 }}
-                className="flex w-full items-center gap-3 px-3 py-2 text-left rounded hover:bg-secondary/80 transition-colors group"
+                className="mono flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-secondary"
               >
-                {/* Neonowy, jasnoniebieski kod ICAO o stałej szerokości */}
-                <span className="mono text-cyan-400 font-semibold w-14 text-xs shrink-0 group-hover:text-cyan-300 transition-colors">
-                  {s.icao}
-                </span>
-                {/* Pełna, realna nazwa lotniska pobrana dynamicznie z bazy danych Hubu */}
-                <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors normal-case tracking-normal">
-                  {s.name}
-                </span>
+                <span className="text-runway">{s.icao}</span>
+                <span className="truncate text-muted-foreground normal-case tracking-normal">{s.name}</span>
               </button>
             </li>
           ))}
@@ -391,325 +74,163 @@ function FieldIcao({
   );
 }
 
-
-function FieldSelect({
-  label,
-  value,
-  onChange,
-  options,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: { value: string; label: string }[];
-}) {
-  return (
-    <label className="flex flex-col gap-1.5">
-      <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-runway/40"
-      >
-        <option value="">—</option>
-        {options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+export function RouteChecker({ licenses }: { licenses: LicenseExt[] }) {
+  const fn = useServerFn(evaluateRouteForAllLicences);
+  const { username, keyTag } = useSimflyArgs();
+  const codes = useMemo(
+    () => Array.from(new Set(licenses.map((l) => l.code).filter(Boolean))) as string[],
+    [licenses],
   );
-}
+  const nameByCode = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const l of licenses) if (l.code) m.set(l.code, l.name);
+    return m;
+  }, [licenses]);
 
-function fmtDuration(ms: number | null): string {
-  if (!ms) return "—";
-  const h = Math.floor(ms / 3_600_000);
-  const m = Math.floor((ms % 3_600_000) / 60_000);
-  return `${h}h ${m}m`;
-}
+  const [departure, setDeparture] = useState("");
+  const [arrival, setArrival] = useState("");
+  const [isSingleMode, setIsSingleMode] = useState(false); // [EDIT 1] Dodany stan dla checkboxa
 
-function ConfidenceBadge({ score }: { score: number }) {
-  const tone =
-    score >= 80
-      ? "bg-runway/15 text-runway ring-runway/30"
-      : score >= 55
-        ? "bg-instrument/15 text-instrument ring-instrument/30"
-        : "bg-destructive/10 text-destructive ring-destructive/30";
+  // [EDIT 2] Dynamiczna walidacja formularza dla jednego lub dwóch lotnisk
+  const isDepartureValid = /^[A-Z0-9]{4}$/.test(departure);
+  const isArrivalValid = /^[A-Z0-9]{4}$/.test(arrival);
+  const ready = codes.length > 0 && (isSingleMode ? isDepartureValid : (isDepartureValid && isArrivalValid));
+
+  // [EDIT 3] Kopiowanie wartości lotniska, jeśli zaznaczono tryb Single Mode
+  const reqDeparture = departure;
+  const reqArrival = isSingleMode ? departure : arrival;
+
+  const q = useQuery({
+    queryKey: ["route-licence-eval", keyTag, reqDeparture, reqArrival, codes.join(","), isSingleMode],
+    queryFn: () =>
+      fn({ data: { departure: reqDeparture, arrival: reqArrival, licences: codes, ...(username ? { username } : {}) } }),
+    enabled: ready,
+    staleTime: 30_000,
+  });
+
+  const result = q.data;
+  const eligibleCount = result ? result.licences.filter((l) => !l.used).length : 0;
+  const usedCount = result ? result.licences.filter((l) => l.used).length : 0;
+
   return (
-    <span
-      className={cn(
-        "mono inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest ring-1",
-        tone,
-      )}
-    >
-      {score}%
-    </span>
-  );
-}
-
-function PlannerResult({
-  query,
-  hasRun,
-  inputsStale,
-}: {
-  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof predictMissionFn>>>>;
-  hasRun: boolean;
-  inputsStale: boolean;
-}) {
-  if (!hasRun) {
-    return (
-      <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Select Aircraft, Licence, Departure and Arrival, then press <span className="mono text-runway">Spool Prediction Engine</span> to get flight individual income components estimations.
+    <section className="panel mb-6 rounded-xl p-5">
+      <div className="mb-4 flex items-baseline justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-4">
+          <h2 className="font-display text-lg font-semibold">Route Checker</h2>
+          
+          {/* [EDIT 4] Wizualny checkbox w nagłówku */}
+          <label className="flex items-center gap-2 cursor-pointer select-none rounded-md bg-secondary/50 px-2 py-1 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <input
+              type="checkbox"
+              checked={isSingleMode}
+              onChange={(e) => {
+                setIsSingleMode(e.target.checked);
+                if (e.target.checked) setArrival(""); // czyszczenie drugiego pola
+              }}
+              className="accent-runway h-3.5 w-3.5 rounded border-border"
+            />
+            <span>Single Airport Mode</span>
+          </label>
+        </div>
+        <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+          Current SimFly week (Mon 00:00 → Sun 23:59 UTC)
+        </span>
       </div>
-    );
-  }
-  if (query.isFetching && !query.data) {
-    return <MissionLoadingSequence />;
-  }
-  if (!query.data) return null;
-  void inputsStale;
-  if (!query.data) return null;
-  const p = query.data;
-  const componentSum = p.components.reduce((s, c) => s + c.value, 0);
-  const bonusExtra = p.weeklyBonus.available ? p.weeklyBonus.extraPax : 0;
 
-  return (
-    <div className="relative space-y-6">
-      {query.isFetching && <MissionLoadingSequence variant="overlay" />}
-
-      {/* Prediction header + KPIs */}
-      <section className="panel rounded-xl p-5">
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="grid h-10 w-10 place-items-center rounded-lg bg-secondary text-runway">
-              <Rocket className="h-5 w-5" />
-            </div>
-            <div>
-              <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                Prediction
-              </div>
-              <div className="font-display text-xl font-semibold tracking-tight">
-                <SimbriefLink icao={p.inputs.departure.icao} />{" "}
-                <ArrowRight className="inline h-4 w-4 text-runway" />{" "}
-                <SimbriefLink icao={p.inputs.arrival.icao} />
-              </div>
-            </div>
-          </div>
-          <ConfidenceBadge score={p.overallConfidence} />
-        </div>
-
-        <div className="grid gap-4 sm:grid-cols-4">
-          <Tile label="Historical base" value={`${p.totalPax.toFixed(2)} PAX`} />
-          <Tile
-            label="Projected today"
-            value={`${p.projectedPax.toFixed(2)} PAX`}
-            icon={<Sparkles className="h-4 w-4 text-instrument" />}
-          />
-          <Tile label="PAX / hour" value={p.paxPerHour ? p.paxPerHour.toFixed(2) : "—"} icon={<Gauge className="h-4 w-4" />} />
-          <Tile label="Flight time" value={fmtDuration(p.flightTimeMs)} />
-        </div>
-      </section>
-
-      {/* Component breakdown */}
-      <section className="panel rounded-xl p-5">
-        <div className="mono mb-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-          Base prediction · component breakdown
-        </div>
-        <div className="space-y-2">
-          {p.components.map((c) => (
-            <div
-              key={c.key}
-              className="rounded-md border border-border/30 bg-secondary/30 px-3 py-2.5 text-sm"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="font-medium">{c.label}</span>
-                  <ConfidenceBadge score={c.confidence} />
-                  <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    {c.tier}
-                  </span>
-                  {c.timer?.exhausted && (
-                    <span className="mono rounded bg-destructive/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-destructive ring-1 ring-destructive/30">
-                      Timer exhausted
-                    </span>
-                  )}
-                  {c.timer && !c.timer.exhausted && c.timer.scale < 1 && (
-                    <span className="mono rounded bg-instrument/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-instrument ring-1 ring-instrument/30">
-                      Timer limited {Math.round(c.timer.scale * 100)}%
-                    </span>
-                  )}
-                  {c.timer && !c.timer.exhausted && c.timer.scale >= 1 && (
-                    <span className="mono rounded bg-runway/15 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-runway ring-1 ring-runway/30">
-                      Fits timer
-                    </span>
-                  )}
-                </div>
-                <span className="mono text-runway">{c.value.toFixed(2)} PAX</span>
-              </div>
-              {(c.ownerShare > 0 || c.pilotShare > 0) && (
-                <div className="mono mt-1 flex gap-3 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  {c.ownerShare > 0 && <span>Owner: {c.ownerShare.toFixed(2)}</span>}
-                  {c.pilotShare > 0 && <span>Pilot: {c.pilotShare.toFixed(2)}</span>}
-                </div>
-              )}
-              <div className="mt-1 text-xs text-muted-foreground">{c.note}</div>
-              {c.timer && (
-                <div className="mono mt-1 text-[11px] text-muted-foreground">
-                  Historical: {c.timer.historicalValue.toFixed(2)} PAX
-                  {c.timer.limiting && c.timer.minutesCap !== undefined && (
-                    <> · {c.timer.limiting}: {c.timer.minutesAvailable} / {c.timer.minutesCap} min</>
-                  )}
-                  {" · "}Effective today: <span className={c.timer.exhausted ? "text-destructive" : "text-runway"}>{c.value.toFixed(2)} PAX</span>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-        <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
-          <span className="text-muted-foreground">Historical base (sum of components)</span>
-          <span className="text-runway">= {componentSum.toFixed(2)} PAX</span>
-        </div>
-      </section>
-
-      {/* Weekly bonus modifier */}
-      <section
-        className={cn(
-          "panel rounded-xl p-5",
-          p.weeklyBonus.available && "runway-glow ring-1 ring-instrument/30",
+      {/* [EDIT 5] Dynamiczne ukrywanie i rozciąganie pól tekstowych */}
+      <div className={`grid gap-3 ${isSingleMode ? "grid-cols-1" : "md:grid-cols-2"}`}>
+        <AirportField label={isSingleMode ? "Airport ICAO" : "Departure"} value={departure} onChange={setDeparture} />
+        {!isSingleMode && (
+          <AirportField label="Arrival" value={arrival} onChange={setArrival} />
         )}
-      >
-        <div className="mono mb-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-          <Zap className="h-3 w-3 text-instrument" /> Temporary modifiers
+      </div>
+
+      {!ready && (
+        <div className="mono mt-4 text-[11px] uppercase tracking-widest text-muted-foreground">
+          {/* [EDIT 6] Dynamiczny komunikat pomocniczy */}
+          {isSingleMode 
+            ? `Enter single ICAO code — all ${codes.length} licenses will be evaluated automatically.`
+            : `Enter both ICAO codes — all ${codes.length} licenses will be evaluated automatically.`
+          }
         </div>
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border/30 bg-secondary/30 px-3 py-2.5 text-sm">
-          <div className="flex items-center gap-2">
-            <span className="font-medium">Weekly First Arrival Bonus</span>
-            <span
-              className={cn(
-                "mono rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest ring-1",
-                p.weeklyBonus.available
-                  ? "bg-instrument/15 text-instrument ring-instrument/30"
-                  : "bg-secondary text-muted-foreground ring-border",
-              )}
-            >
-              {p.weeklyBonus.available ? `×${p.weeklyBonus.multiplier} available` : "not available"}
+      )}
+
+      {ready && q.isLoading && (
+        <div className="mono mt-4 flex items-center gap-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking {codes.length} licenses…
+        </div>
+      )}
+
+      {ready && q.error && (
+        <div className="mt-4 text-xs text-destructive">
+          {q.error instanceof Error ? q.error.message : "Check failed."}
+        </div>
+      )}
+
+      {ready && result && (
+        <>
+          <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
+            <span className="mono uppercase tracking-widest text-muted-foreground">
+              {/* [EDIT 7] Wyświetlanie wyniku dla jednego lub dwóch lotnisk */}
+              {isSingleMode ? `${result.departure}` : `${result.departure} → ${result.arrival}`}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-runway/30 bg-runway/10 px-2 py-0.5 text-runway">
+              <CheckCircle2 className="h-3.5 w-3.5" /> {eligibleCount} eligible
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-destructive/40 bg-destructive/10 px-2 py-0.5 text-destructive">
+              <XCircle className="h-3.5 w-3.5" /> {usedCount} used
             </span>
           </div>
-          <span className="mono text-instrument">
-            {p.weeklyBonus.available ? `+ ${bonusExtra.toFixed(2)} PAX` : "—"}
-          </span>
-        </div>
-        <div className="mt-2 text-xs text-muted-foreground">{p.weeklyBonus.reason}</div>
-        <div className="mono mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-[11px] uppercase tracking-widest">
-          <span className="text-muted-foreground">Projected today (base + modifiers)</span>
-          <span className="text-instrument">= {p.projectedPax.toFixed(2)} PAX</span>
-        </div>
-      </section>
 
-      {p.signals.length > 0 && (
-        <section className="panel rounded-xl p-5">
-          <div className="mono mb-3 flex items-center gap-2 text-[10px] uppercase tracking-widest text-muted-foreground">
-            <Sparkles className="h-3 w-3" /> Signals
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {p.signals.map((s) => (
-              <span
-                key={s.key}
-                title={s.hint}
-                className={cn(
-                  "mono inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] ring-1",
-                  s.tone === "positive" && "bg-runway/10 text-runway ring-runway/30",
-                  s.tone === "warn" && "bg-destructive/10 text-destructive ring-destructive/30",
-                  s.tone === "neutral" && "bg-secondary text-muted-foreground ring-border",
-                )}
-              >
-                <span className="uppercase tracking-widest">{s.label}:</span>
-                <span>{s.value}</span>
-              </span>
-            ))}
-          </div>
-        </section>
+          <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {result.licences.map((l) => {
+              const name = nameByCode.get(l.licence) ?? "";
+              if (l.used) {
+                return (
+                  <li
+                    key={l.licence}
+                    className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-2.5"
+                    title={l.match?.completedAt ? `Last used ${formatUtc(l.match.completedAt)}` : ""}
+                  >
+                    <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <div className="min-w-0 flex-1">
+                      <div className="mono text-xs font-semibold text-destructive">{l.licence}</div>
+                      <div className="truncate text-[11px] text-muted-foreground">{name}</div>
+                      {l.match?.completedAt && (
+                        <div className="mono mt-0.5 text-[10px] text-muted-foreground">
+                          {l.match.departure ?? "?"} → {l.match.arrival ?? "?"} · {formatUtc(l.match.completedAt)}
+                        </div>
+                      )}
+                    </div>
+                  </li>
+                );
+              }
+              return (
+                <li
+                  key={l.licence}
+                  className="flex items-start gap-2 rounded-md border border-runway/30 bg-runway/10 p-2.5"
+                >
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-runway" />
+                  <div className="min-w-0 flex-1">
+                    <div className="mono text-xs font-semibold text-runway">{l.licence}</div>
+                    <div className="truncate text-[11px] text-muted-foreground">{name}</div>
+                    <div className="mono mt-0.5 text-[10px] text-muted-foreground">×3 bonus available</div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </>
       )}
-
-      <p className="text-xs text-muted-foreground">
-        Prediction sourced from your Stats/Income accounting ledger — {formatNumber(p.coverage.myFlights)} own flights
-        and {formatNumber(p.coverage.visitorFlights)} visitor flights. Each component is independently derived; the
-        weekly ×3 bonus is surfaced separately and never folded into the historical base.
-      </p>
-    </div>
+    </section>
   );
 }
 
-function RankerResult({
-  query,
-  canRank,
-}: {
-  query: ReturnType<typeof useQuery<Awaited<ReturnType<typeof rankMissionsFn>>>>;
-  canRank: boolean;
-}) {
-  if (!canRank) {
-    return (
-      <div className="panel rounded-xl p-6 text-sm text-muted-foreground">
-        Pick departure and aircraft to rank owned destinations.
-      </div>
-    );
+// Org function
+function formatUtc(iso: string) {
+  try {
+    return new Date(iso).toISOString().replace("T", " ").slice(0, 16) + " UTC";
+  } catch {
+    return iso;
   }
-  if (query.isFetching && !query.data) {
-    return <MissionLoadingSequence />;
-  }
-  if (!query.data) return null;
-  const rows = query.data.results;
-  return (
-    <div className="panel overflow-x-auto rounded-xl">
-      <table className="w-full text-sm">
-        <thead className="border-b border-border/40 text-left">
-          <tr className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-            <th className="px-4 py-3">Airport</th>
-            <th className="px-4 py-3">Distance</th>
-            <th className="px-4 py-3">Flight time</th>
-            <th className="px-4 py-3">Total PAX</th>
-            <th className="px-4 py-3">PAX / hr</th>
-            <th className="px-4 py-3">Confidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.arrival} className="border-b border-border/20 last:border-0">
-              <td className="px-4 py-2">
-                <SimbriefLink icao={r.arrival} />
-                <span className="ml-2 text-xs text-muted-foreground">{r.arrivalName}</span>
-              </td>
-              <td className="px-4 py-2 mono">{r.distanceNm ? `${r.distanceNm.toFixed(0)} NM` : "—"}</td>
-              <td className="px-4 py-2 mono">{fmtDuration(r.flightTimeMs)}</td>
-              <td className="px-4 py-2 mono">{r.totalPax.toFixed(2)}</td>
-              <td className="px-4 py-2 mono">{r.paxPerHour ? r.paxPerHour.toFixed(2) : "—"}</td>
-              <td className="px-4 py-2">
-                <ConfidenceBadge score={r.confidence} />
-              </td>
-            </tr>
-          ))}
-          {rows.length === 0 && (
-            <tr>
-              <td colSpan={6} className="px-4 py-6 text-center text-sm text-muted-foreground">
-                No candidate arrivals — you need at least one other owned airport.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function Tile({ label, value, icon }: { label: string; value: string; icon?: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-border/40 bg-secondary/40 p-3">
-      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
-      <div className="mt-1 flex items-center gap-2 font-display text-2xl font-semibold tracking-tight">
-        {icon}
-        {value}
-      </div>
-    </div>
-  );
 }
