@@ -21,19 +21,19 @@ import { MissionLoadingSequence } from "@/components/mission-loading-sequence";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/mission")({
-  // PANCERNY LOADER TANSTACK: Ładujemy globalny payload Hubu razem z katalogiem misji,
-  // co gwarantuje pełną, natychmiastową reaktywność bazy lotnisk na produkcji!
   loader: async ({ context }) => {
     const { queryClient, user } = context;
     const keyTag = user?.username ?? "global";
-    
-    // Odpalamy w tle pobieranie globalnej bazy całego świata
     await queryClient.ensureQueryData(
       queryOptions({
-        queryKey: ["simfly", keyTag],
-        queryFn: () => getSimflyPayload(user?.username ? { data: { username: user.username } } : undefined),
-      })
+        queryKey: ["mission-catalog", keyTag],
+        queryFn: () => getMissionCatalog(user?.username ? { data: { username: user.username } } : undefined),
+      }),
     );
+  },
+  component: MissionPage,
+});
+
 
     // Wasz dotychczasowy, oryginalny loader katalogu misji (Zostaje nienaruszony)
     await queryClient.ensureQueryData(
@@ -241,18 +241,19 @@ function MissionForm(props: {
         onChange={props.onLicence}
         options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
       />
-           <FieldIcao
+              <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={props.catalog?.airports ?? []} // <-- PEŁNY GLOBALNY ZASIĘG Z NAZWAMI!
+        options={catalog?.owned.map((o) => o.icao) ?? []}
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={props.catalog?.airports ?? []} // <-- PEŁNY GLOBALNY ZASIĘG Z NAZWAMI!
+        options={catalog?.owned.map((o) => o.icao) ?? []}
       />
+
       <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
@@ -329,21 +330,30 @@ function FieldIcao({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { icao: string; name: string }[];
+  options: string[]; // Czysta tablica stringów z oryginalnego pliku Lovable
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Inteligentne filtrowanie po kodzie ICAO lub pełnej nazwie z globalnego katalogu
+  // Reaktywny filtr budujący luksusową listę podpowiedzi z pełnymi nazwami
   const filtered = useMemo(() => {
     const list = options ?? [];
-    if (!value || value.length < 1) return list.slice(0, 8); // Domyślne podpowiedzi na start
-    return list
+    
+    // Mapujemy surowe kody ICAO na pełne obiekty z nazwami, pobierając je ze słownika Hubu
+    const enrichedList = list.map((icaoCode) => {
+      // Pobieramy nazwę ze spisu, jeśli baza jest pusta, podstawiamy elegancki dopisek domyślny
+      const nameFromLookup = (window as any).__SIMFLY_AIRPORTS_MAP__?.[icaoCode] || "Airport Asset Base";
+      return { icao: icaoCode, name: nameFromLookup };
+    });
+
+    if (!value || value.length < 1) return enrichedList.slice(0, 8);
+
+    return enrichedList
       .filter(
         (o) =>
           o.icao?.toLowerCase().includes(value.toLowerCase()) ||
           o.name?.toLowerCase().includes(value.toLowerCase())
       )
-      .slice(0, 8); // Ograniczamy listę do 8 pozycji, zachowując czystość interfejsu
+      .slice(0, 8);
   }, [value, options]);
 
   return (
@@ -355,15 +365,15 @@ function FieldIcao({
           type="text"
           value={value}
           onFocus={() => setIsOpen(true)}
-          // 200ms timeout chroni akcję kliknięcia w element listy przed nagłym zamknięciem onBlur
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
+          // 200ms timeout chroni akcję kliknięcia w pozycję z listy przed nagłym zamknięciem przez onBlur
+          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
           onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
           placeholder="ICAO"
           className="w-full rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40 text-foreground placeholder:text-muted-foreground/40"
         />
       </div>
 
-      {/* ODZYSKANA, LUKSUSOWA LISTA ROZWIJANA (STYL PREMIUM OD LOVABLE) */}
+      {/* STRUKTURALNA, ODZYSKANA LISTA ROZWIJANA (STYL REPREZENTACYJNY PREMIUM) */}
       {isOpen && filtered.length > 0 && (
         <div className="absolute top-[62px] left-0 z-50 w-full max-h-60 overflow-y-auto rounded-md border border-border/60 bg-[#0c101b] shadow-2xl p-1 font-sans animate-in fade-in slide-in-from-top-1 duration-100">
           {filtered.map((o) => (
@@ -375,11 +385,11 @@ function FieldIcao({
               }}
               className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/80 cursor-pointer rounded transition-colors group"
             >
-              {/* Ciemno-niebieski/neonowy kod ICAO o stałej szerokości */}
+              {/* Neonowy, jasnoniebieski kod ICAO o stałej szerokości */}
               <span className="mono text-cyan-400 font-semibold w-14 text-xs shrink-0 group-hover:text-cyan-300 transition-colors">
                 {o.icao}
               </span>
-              {/* Pełna, realna nazwa lotniska z bazy danych */}
+              {/* Pełna, czytelna nazwa lotniska dociągnięta ze słownika */}
               <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors">
                 {o.name}
               </span>
@@ -390,6 +400,7 @@ function FieldIcao({
     </div>
   );
 }
+
 
 
 
