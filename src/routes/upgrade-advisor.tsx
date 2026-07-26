@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useSuspenseQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useSuspenseQuery, useQueryClient, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useState } from "react";
 import {
   getSimflyPayload,
   getUpgradeAdvisor,
   getAdvisorSettings,
+  setAdvisorSettings,
   type UpgradeAdvisorRow,
   type UpgradeAdvisorRowMeta,
 } from "@/lib/simfly.functions";
@@ -23,7 +24,8 @@ export const Route = createFileRoute("/upgrade-advisor")({
       { title: "Upgrade Advisor — SimFly Hub" },
       {
         name: "description",
-        content: "ROI-based recommendation of which airport to upgrade next, derived from your real flight history and the Airport Payout Matrix.",
+        content:
+          "ROI-based recommendation of which airport to upgrade next, derived from your real flight history and the Airport Payout Matrix.",
       },
     ],
   }),
@@ -31,6 +33,8 @@ export const Route = createFileRoute("/upgrade-advisor")({
 
 type SortKey = "payback" | "daily" | "annual" | "cost" | "name";
 type AdvisorRow = UpgradeAdvisorRow & { meta: UpgradeAdvisorRowMeta };
+
+const ADMIN_TOKEN_LS_KEY = "simflyhub:adminToken";
 
 function fmtDate(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -46,16 +50,16 @@ function fmtDay(iso: string | null | undefined) {
   return d.toISOString().slice(0, 10);
 }
 
-export function UpgradeAdvisorPage() {
+function UpgradeAdvisorPage() {
   const fn = useServerFn(getSimflyPayload);
-  const advisorFn = useServerFn(getUpgradeAdvisor);
   const { keyTag, payload } = useSimflyArgs();
-
-  const { data } = useSuspenseQuery({
-    queryKey: ["simfly", keyTag],
-    queryFn: () => fn(payload ? { data: payload } : undefined),
-    staleTime: 30 * 60_000,
-  });
+  const { data } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ["simfly", keyTag],
+      queryFn: () => fn(payload ? { data: payload } : undefined),
+      staleTime: 30 * 60_000,
+    }),
+  );
 
   const airportsInput = useMemo(
     () =>
@@ -69,13 +73,21 @@ export function UpgradeAdvisorPage() {
     [data.airports],
   );
 
-  const windowDays = 60;
-  const [sortKey, setSortKey] = useState<SortKey>("payback");
-  const [busy, setBusy] = useState<string | null>(null);
+  const advisorFn = useServerFn(getUpgradeAdvisor);
+  const settingsFn = useServerFn(getAdvisorSettings);
+  const setSettingsFn = useServerFn(setAdvisorSettings);
+  const qc = useQueryClient();
 
-  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, "user"] as const;
-  
-  const { data: advisor, isError, error, refetch } = useQuery({
+  const windowDays = 60; // fixed to keep upstream load predictable
+  const [adminToken, setAdminToken] = useState<string>("");
+  useEffect(() => {
+    try {
+      setAdminToken(localStorage.getItem(ADMIN_TOKEN_LS_KEY) ?? "");
+    } catch { /* noop */ }
+  }, []);
+
+  const advisorQueryKey = ["upgrade-advisor", keyTag, windowDays, airportsInput.length, adminToken ? "admin" : "user"] as const;
+  const { data: advisor, isFetching, isError, error, refetch } = useQuery({
     queryKey: advisorQueryKey,
     queryFn: () =>
       advisorFn({
@@ -83,6 +95,7 @@ export function UpgradeAdvisorPage() {
           username: payload?.username,
           airports: airportsInput,
           windowDays,
+          ...(adminToken ? { adminToken } : {}),
         },
       }),
     staleTime: 30 * 60_000,
@@ -91,6 +104,14 @@ export function UpgradeAdvisorPage() {
   });
 
   const gated = isError && error instanceof Error && error.message.includes("HUB_SUPPORT_REQUIRED");
+
+  const { data: settings } = useQuery({
+    queryKey: ["advisor-settings"],
+    queryFn: () => settingsFn(),
+    staleTime: 60_000,
+  });
+
+  const [sortKey, setSortKey] = useState<SortKey>("payback");
 
   const rows = useMemo<AdvisorRow[]>(() => {
     const list = [...((advisor?.rows ?? []) as AdvisorRow[])];
@@ -115,6 +136,33 @@ export function UpgradeAdvisorPage() {
     return list;
   }, [advisor, sortKey]);
 
+  const isAdmin = adminToken.trim().length > 0;
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function forceRefresh(icaos: string[]) {
+    if (!isAdmin || icaos.length === 0) return;
+    setBusy(icaos.join(","));
+    setMsg(null);
+    try {
+      const res = await advisorFn({
+        data: {
+          username: payload?.username,
+          airports: airportsInput,
+          windowDays,
+          forceIcaos: icaos,
+          adminToken,
+        },
+      });
+      qc.setQueryData(advisorQueryKey, res);
+      setMsg("Refreshed.");
+    } catch (e) {
+      setMsg((e as Error).message || "Refresh failed.");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <AppShell>
       <PageHeader
@@ -122,84 +170,157 @@ export function UpgradeAdvisorPage() {
         title="Airport Upgrade Advisor"
         description="Purely data-driven. Uses the real TOTAL PAX your airports have received on landing (Airport Profit Split + Weekly Cycle ×3 bonus). Long-lived analysis — cached and refreshed on a slow cadence to keep upstream load low."
       />
-      
+
       {gated && <HubSupportGate featureName="The Airport Upgrade Advisor" />}
-      
-      {!gated && (
-        <>
-          <div className="mb-6 flex flex-wrap items-center gap-4">
-            <div className="space-y-1">
-              <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground block pl-0.5">
-                History window
-              </label>
-              <div className="mono rounded-lg border border-border bg-secondary/20 px-3 py-1.5 text-xs font-semibold text-foreground">
-                LAST 60 DAYS (FIXED)
-              </div>
-            </div>
 
-            <div className="space-y-1">
-              <label className="mono text-[10px] uppercase tracking-widest text-muted-foreground block pl-0.5">
-                Sort by
-              </label>
-              <select
-                value={sortKey}
-                onChange={(e) => setSortKey(e.target.value as SortKey)}
-                className="mono rounded-lg border border-border bg-card px-3 py-1.5 text-xs font-semibold text-foreground outline-none focus:border-runway"
-              >
-                <option value="payback">Fastest payback</option>
-                <option value="daily">Highest profit</option>
-                <option value="cost">Lowest cost</option>
-                <option value="name">ICAO Code</option>
-              </select>
+      {!gated && advisor && (
+        <div className="mb-4 rounded-lg border border-border bg-card/60 p-4 text-xs grid gap-2 sm:grid-cols-3">
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Generated</div>
+            <div className="mono text-foreground">{fmtDate(advisor.generatedAt)}</div>
+          </div>
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Based on</div>
+            <div className="mono text-foreground">Last {advisor.windowDays} days</div>
+          </div>
+          <div>
+            <div className="mono uppercase tracking-widest text-foreground/50">Next refresh</div>
+            <div className="mono text-foreground">
+              {fmtDay(advisor.refreshAfter)}{" "}
+              <span className="text-foreground/50">(TTL {advisor.ttlDays}d)</span>
             </div>
           </div>
-          <div className="space-y-4">
-            {isError && (
-              <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
-                Failed to compute advisor.{" "}
-                <button onClick={() => refetch()} className="underline font-semibold">Retry</button>
-              </div>
-            )}
-
-            {!advisor && !isError && (
-              <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground animate-pulse">
-                Loading cached analysis...
-              </div>
-            )}
-
-            {advisor && (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {rows.map((r) => (
-                  <AdvisorCard
-                    key={r.icao}
-                    row={r}
-                    canRefresh={false}
-                    busy={busy === r.icao}
-                    onRefresh={() => {}}
-                  />
-                ))}
-              </div>
-            )}
-
-            {rows.length === 0 && !isError && advisor && (
-              <div className="rounded-lg border border-border bg-card p-6 text-sm text-muted-foreground italic">
-                No owned airports.
-              </div>
-            )}
-          </div>
-
-          <UpgradeAdvisorLegend />
-
-          <p className="mt-6 text-[11px] text-muted-foreground/50 max-w-3xl leading-relaxed">
-            Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX credited to each airport across every flight touching the airport in the selected window, sampled from the same public airport history as the Payout Matrix. Payback = upgrade cost ÷ current daily income. Results are cached per airport / level / window; cache invalidates automatically when a level change is detected during sync, or when an administrator forces a refresh (once per 24 h per airport).
+          <p className="sm:col-span-3 text-foreground/60">
+            This analysis is intentionally refreshed only once every {advisor.ttlDays} day
+            {advisor.ttlDays === 1 ? "" : "s"} per airport — upgrade recommendations change
+            slowly, and recalculating on every visit would waste database and upstream SimFly
+            capacity.
           </p>
-        </>
+        </div>
       )}
+
+      <div className="mb-5 flex flex-wrap items-end gap-3">
+        <div className="text-xs uppercase tracking-wider text-foreground/60">
+          History window
+          <div className="mt-1 rounded-md border border-border bg-card px-3 py-2 text-sm text-foreground">
+            Last {windowDays} days (fixed)
+          </div>
+        </div>
+        <label className="text-xs uppercase tracking-wider text-foreground/60">
+          Sort by
+          <select
+            value={sortKey}
+            onChange={(e) => setSortKey(e.target.value as SortKey)}
+            className="mt-1 block bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+          >
+            <option value="payback">Fastest payback</option>
+            <option value="daily">Highest daily increase</option>
+            <option value="annual">Highest annual increase</option>
+            <option value="cost">Lowest upgrade cost</option>
+            <option value="name">Airport name</option>
+          </select>
+        </label>
+        <div className="ml-auto text-[11px] text-foreground/50">
+          {isFetching ? "Loading…" : advisor ? `${rows.length} airports analysed` : ""}
+        </div>
+      </div>
+
+      {/* Admin panel */}
+      <details className="mb-4 rounded-lg border border-border bg-card/40 p-3 text-sm">
+        <summary className="cursor-pointer text-xs uppercase tracking-widest text-foreground/60">
+          Admin controls
+        </summary>
+        <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <input
+            type="password"
+            placeholder="Admin token"
+            value={adminToken}
+            onChange={(e) => {
+              setAdminToken(e.target.value);
+              try {
+                localStorage.setItem(ADMIN_TOKEN_LS_KEY, e.target.value);
+              } catch { /* noop */ }
+            }}
+            className="bg-card border border-border rounded-md px-3 py-2 text-sm text-foreground"
+          />
+          <TtlEditor
+            currentTtl={settings?.ttlDays ?? 30}
+            disabled={!isAdmin}
+            onSave={async (n) => {
+              try {
+                await setSettingsFn({ data: { adminToken, ttlDays: n } });
+                qc.invalidateQueries({ queryKey: ["advisor-settings"] });
+                setMsg(`TTL set to ${n} days.`);
+              } catch (e) {
+                setMsg((e as Error).message || "Failed to save TTL.");
+              }
+            }}
+          />
+          <button
+            type="button"
+            disabled={!isAdmin || busy !== null || !advisor}
+            onClick={() => forceRefresh(rows.map((r) => r.icao))}
+            className="inline-flex items-center gap-2 rounded-md border border-runway/50 bg-runway/10 px-3 py-2 text-xs text-runway hover:bg-runway/20 disabled:opacity-40"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh all (24 h cap)
+          </button>
+        </div>
+        {msg && <div className="mt-2 text-xs text-foreground/70">{msg}</div>}
+        {!isAdmin && (
+          <div className="mt-2 text-[11px] text-foreground/50">
+            Enter your admin token to unlock manual refresh and TTL configuration.
+          </div>
+        )}
+      </details>
+
+      {!gated && <UpgradeAdvisorLegend />}
+
+      {!gated && isError && (
+        <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm">
+          Failed to compute advisor.{" "}
+          <button onClick={() => refetch()} className="underline">Retry</button>
+        </div>
+      )}
+
+      {!gated && !advisor && !isError && (
+        <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
+          Loading cached analysis…
+        </div>
+      )}
+
+      {!gated && advisor && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {rows.map((r) => (
+            <AdvisorCard
+              key={r.icao}
+              row={r}
+              canRefresh={isAdmin}
+              busy={busy === r.icao}
+              onRefresh={() => forceRefresh([r.icao])}
+            />
+          ))}
+          {rows.length === 0 && (
+            <div className="rounded-lg border border-border bg-card p-6 text-sm text-foreground/60">
+              No owned airports.
+            </div>
+          )}
+        </div>
+      )}
+
+      <p className="mt-6 text-[11px] text-foreground/50 max-w-3xl">
+        Methodology: purely data-driven. Average per-arrival income is the mean TOTAL PAX
+        credited to each airport across every flight touching the airport in the selected
+        window, sampled from the same public airport history as the Payout Matrix. Payback =
+        upgrade cost ÷ current daily income. Results are cached per airport / level / window;
+        cache invalidates automatically when a level change is detected during sync, or when an
+        administrator forces a refresh (once per 24 h per airport).
+      </p>
     </AppShell>
   );
 }
 
-export function TtlEditor({
+function TtlEditor({
   currentTtl,
   disabled,
   onSave,
@@ -248,10 +369,11 @@ function AdvisorCard({
   onRefresh: () => void;
 }) {
   const hasData = row.flightsSampled > 0 && row.dailyIncrease > 0;
-  const lastManualMs = row.meta.lastManualRefreshAt ? new Date(row.meta.lastManualRefreshAt).getTime() : 0;
+  const lastManualMs = row.meta.lastManualRefreshAt
+    ? new Date(row.meta.lastManualRefreshAt).getTime()
+    : 0;
   const cooldownLeftMs = Math.max(0, lastManualMs + 24 * 60 * 60 * 1000 - Date.now());
   const cooldown = cooldownLeftMs > 0;
-
   return (
     <article className="panel rounded-xl p-4 flex flex-col gap-3">
       <header className="flex items-baseline justify-between gap-3">
@@ -271,20 +393,30 @@ function AdvisorCard({
           </div>
         </div>
       </header>
+
       <dl className="grid grid-cols-2 gap-2 text-sm">
         <Field label="Upgrade cost" value={`${formatNumber(row.upgradeCost)} PAX`} />
         <Field
           label="Est. payback"
-          value={hasData && row.paybackDays > 0 ? `${Math.round(row.paybackDays)} d` : "—"}
+          value={
+            hasData && row.paybackDays > 0
+              ? `${Math.round(row.paybackDays)} d`
+              : "—"
+          }
           accent="instrument"
         />
-        <Field label="Current daily PAX" value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"} accent="runway" />
+        <Field
+          label="Current daily PAX"
+          value={hasData ? `${row.dailyIncrease.toFixed(2)} PAX` : "—"}
+          accent="runway"
+        />
         <Field
           label="Annual @ current rate"
           value={hasData ? `${formatNumber(Math.round(row.annualIncrease))} PAX` : "—"}
           accent="runway"
         />
       </dl>
+
       <footer className="flex items-center justify-between pt-2 border-t border-border/60">
         <Stars stars={row.stars} />
         <div className="text-right text-[11px]">
@@ -299,6 +431,7 @@ function AdvisorCard({
           )}
         </div>
       </footer>
+
       <div className="flex items-center justify-between border-t border-border/40 pt-2 text-[10px] text-foreground/50">
         <div>
           <div>Generated {fmtDate(row.meta.generatedAt)}</div>
@@ -309,7 +442,11 @@ function AdvisorCard({
             type="button"
             onClick={onRefresh}
             disabled={busy || cooldown}
-            title={cooldown ? `Manual refresh available in ${Math.ceil(cooldownLeftMs / 3_600_000)} h` : "Force recalculation now"}
+            title={
+              cooldown
+                ? `Manual refresh available in ${Math.ceil(cooldownLeftMs / 3_600_000)} h`
+                : "Force recalculation now"
+            }
             className="inline-flex items-center gap-1 rounded-md border border-runway/40 bg-runway/10 px-2 py-1 text-runway hover:bg-runway/20 disabled:opacity-40"
           >
             <RefreshCw className={cn("h-3 w-3", busy && "animate-spin")} />
@@ -330,7 +467,12 @@ function Field({
   value: string;
   accent?: "runway" | "instrument";
 }) {
-  const tone = accent === "runway" ? "text-runway" : accent === "instrument" ? "text-instrument" : "text-foreground";
+  const tone =
+    accent === "runway"
+      ? "text-runway"
+      : accent === "instrument"
+        ? "text-instrument"
+        : "text-foreground";
   return (
     <div>
       <dt className="mono text-[10px] uppercase tracking-widest text-foreground/50">
@@ -346,11 +488,11 @@ function Stars({ stars }: { stars: 1 | 2 | 3 | 4 | 5 }) {
     stars === 5
       ? "text-instrument"
       : stars === 4
-      ? "text-runway"
-      : stars === 3
-      ? "text-tier-gold"
-      : stars === 2
-      ? "text-tier-silver"
-      : "text-muted-foreground";
+        ? "text-runway"
+        : stars === 3
+          ? "text-tier-gold"
+          : stars === 2
+            ? "text-tier-silver"
+            : "text-muted-foreground";
   return <TowerRating count={stars} toneClass={tone} />;
 }
