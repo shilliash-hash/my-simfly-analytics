@@ -35,18 +35,6 @@ export const Route = createFileRoute("/mission")({
 });
 
 
-    // Wasz dotychczasowy, oryginalny loader katalogu misji (Zostaje nienaruszony)
-    await queryClient.ensureQueryData(
-      queryOptions({
-        queryKey: ["mission-catalog", keyTag],
-        queryFn: () => getMissionCatalog(user?.username ? { data: { username: user.username } } : undefined),
-      })
-    );
-  },
-  component: MissionPage,
-});
-
-
 function MissionRoute() {
   const statusFn = useServerFn(getHubSupportStatus);
   const { keyTag, payload } = useSimflyArgs();
