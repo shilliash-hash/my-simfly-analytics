@@ -1,3 +1,6 @@
+import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { getSimflyPayload } from "@/lib/simfly.functions";
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -18,18 +21,31 @@ import { MissionLoadingSequence } from "@/components/mission-loading-sequence";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/mission")({
-  component: MissionRoute,
-  head: () => ({
-    meta: [
-      { title: "Mission Intelligence — SimFly Hub" },
-      {
-        name: "description",
-        content:
-          "Predict PAX, income, and PAX/hour for a planned SimFly mission using your own historical flight data.",
-      },
-    ],
-  }),
+  // PANCERNY LOADER TANSTACK: Ładujemy globalny payload Hubu razem z katalogiem misji,
+  // co gwarantuje pełną, natychmiastową reaktywność bazy lotnisk na produkcji!
+  loader: async ({ context }) => {
+    const { queryClient, user } = context;
+    const keyTag = user?.username ?? "global";
+    
+    // Odpalamy w tle pobieranie globalnej bazy całego świata
+    await queryClient.ensureQueryData(
+      queryOptions({
+        queryKey: ["simfly", keyTag],
+        queryFn: () => getSimflyPayload(user?.username ? { data: { username: user.username } } : undefined),
+      })
+    );
+
+    // Wasz dotychczasowy, oryginalny loader katalogu misji (Zostaje nienaruszony)
+    await queryClient.ensureQueryData(
+      queryOptions({
+        queryKey: ["mission-catalog", keyTag],
+        queryFn: () => getMissionCatalog(user?.username ? { data: { username: user.username } } : undefined),
+      })
+    );
+  },
+  component: MissionPage,
 });
+
 
 function MissionRoute() {
   const statusFn = useServerFn(getHubSupportStatus);
