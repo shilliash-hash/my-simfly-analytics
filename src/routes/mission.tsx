@@ -1,3 +1,8 @@
+import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { getSimflyPayload } from "@/lib/simfly.functions";
+
+
+
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -181,24 +186,33 @@ function MissionPlanner() {
   );
 }
 
-function MissionForm(props: {
-  catalog: MissionCatalog | undefined;
-  departure: string;
-  arrival: string;
-  aircraftId: string;
-  licence: string;
-  useCommunity: boolean;
-  disableDepIncome: boolean;
-  disableArrIncome: boolean;
-  onDeparture: (v: string) => void;
-  onArrival: (v: string) => void;
-  onAircraftId: (v: string) => void;
-  onLicence: (v: string) => void;
-  onUseCommunity: (v: boolean) => void;
-  onDisableDepIncome: (v: boolean) => void;
-  onDisableArrIncome: (v: boolean) => void;
+function MissionForm({
+  catalog,
+  departure,
+  arrival,
+  aircraftId,
+  licence,
+  useCommunity,
+  disableDepIncome,
+  disableArrIncome,
+  onDeparture,
+  onArrival,
+  onAircraftId,
+  onLicence,
+  onUseCommunity,
+  onDisableDepIncome,
+  onDisableArrIncome,
 }) {
-  const { catalog } = props;
+  // PANCERNE ZACIĄGNIĘCIE GLOBALNEJ BAZY ŚWIATA (0ms narzutu na sieć dzięki pamięci podręcznej!)
+  const globalPayloadFn = useServerFn(getSimflyPayload);
+  const { keyTag, payload: globalArgs } = useSimflyArgs();
+  const { data: globalHubData } = useSuspenseQuery(
+    queryOptions({
+      queryKey: ["simfly", keyTag],
+      queryFn: () => globalPayloadFn(globalArgs ? { data: globalArgs } : undefined),
+    }),
+  );
+
   const aircraftOptions =
     catalog?.aircraft.filter((a) => a.mode !== "rental").map((a) => {
       const modeTag = a.mode === "owned" ? "Owned" : "Generic";
@@ -225,20 +239,18 @@ function MissionForm(props: {
         onChange={props.onLicence}
         options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
       />
-     <FieldIcao
+           <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={catalog?.airports ?? []} // <-- Przekazujemy globalną listę lotnisk z misji!
+        options={catalog?.owned ?? []} // <-- Wracamy do fizycznie istniejącej tablicy z PDF-a!
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={catalog?.airports ?? []} // <-- Przekazujemy globalną listę lotnisk z misji!
+        options={catalog?.owned ?? []} // <-- Wracamy do fizycznie istniejącej tablicy z PDF-a!
       />
-
-
 
 
       <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
