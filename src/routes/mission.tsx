@@ -225,18 +225,19 @@ function MissionForm(props: {
         onChange={props.onLicence}
         options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
       />
-           <FieldIcao
+     <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={catalog?.owned.map((o) => ({ value: o.icao, label: o.name })) ?? []}
+        options={catalog?.airports ?? []} // <-- Przekazujemy globalną listę lotnisk z misji!
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={catalog?.owned.map((o) => ({ value: o.icao, label: o.name })) ?? []}
+        options={catalog?.airports ?? []} // <-- Przekazujemy globalną listę lotnisk z misji!
       />
+
 
 
 
@@ -316,31 +317,69 @@ function FieldIcao({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  options: { value: string; label: string }[];
+  options: { icao: string; name: string }[];
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  // Inteligentne filtrowanie po kodzie ICAO lub pełnej nazwie z globalnego katalogu
+  const filtered = useMemo(() => {
+    if (!value || value.length < 1) return options.slice(0, 8); // domyślne podpowiedzi na start
+    return options
+      .filter(
+        (o) =>
+          o.icao.toLowerCase().includes(value.toLowerCase()) ||
+          o.name.toLowerCase().includes(value.toLowerCase())
+      )
+      .slice(0, 8); // Ograniczamy listę do 8 pozycji, żeby nie rozpychać pionowo formularza
+  }, [value, options]);
+
   return (
-    <label className="flex flex-col gap-1.5">
+    <div className="relative flex flex-col gap-1.5 w-full">
+      {/* Mała, techniczna etykieta nad inputem (np. DEPARTURE / ARRIVAL) */}
       <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-runway/40 font-mono text-foreground"
-      >
-        <option value="" className="font-sans text-muted-foreground">— Select Airport —</option>
-        {options.map((o) => (
-          /* 
-            PANCERNY UKŁAD SUBSYSTEMU LICENCJI:
-            Wartością przekazywaną do bazy jest 4-literowy kod ICAO (o.value),
-            a użytkownik na ekranie widzi luksusową, pełną nazwę portu (o.value · o.label)!
-          */
-          <option key={o.value} value={o.value} className="font-sans">
-            {o.value} · {o.label}
-          </option>
-        ))}
-      </select>
-    </label>
+      
+      <div className="relative w-full">
+        {/* Input stylizowany dokładnie na wzór Twojego Route Checkera */}
+        <input
+          type="text"
+          value={value}
+          onFocus={() => setIsOpen(true)}
+          // Bezpieczny timeout, aby przeglądarka zdążyła zarejestrować kliknięcie w pozycję z listy zanim ją zamknie
+          onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
+          onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
+          placeholder="Q ICAO"
+          className="w-full rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40 text-foreground placeholder:text-muted-foreground/40"
+        />
+      </div>
+
+      {/* STRUKTURALNA, LUKSUSOWA LISTA ROZWIJANA TYPEAHEAD (WIDOK PREMIUM) */}
+      {isOpen && filtered.length > 0 && (
+        <div className="absolute top-[62px] left-0 z-50 w-full max-h-60 overflow-y-auto rounded-md border border-border/60 bg-[#0c101b] shadow-2xl p-1 font-sans animate-in fade-in slide-in-from-top-1 duration-100">
+          {filtered.map((o) => (
+            <div
+              key={o.icao}
+              onClick={() => {
+                onChange(o.icao);
+                setIsOpen(false);
+              }}
+              className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/80 cursor-pointer rounded transition-colors group"
+            >
+              {/* Kod ICAO - Jasny, neonowy, o stałej szerokości */}
+              <span className="mono text-cyan-400 font-semibold w-14 text-xs shrink-0 group-hover:text-cyan-300 transition-colors">
+                {o.icao}
+              </span>
+              {/* Pełna nazwa lotniska docelowego - Zabezpieczona przed wyciekaniem */}
+              <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors">
+                {o.name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
+
 
 
 
