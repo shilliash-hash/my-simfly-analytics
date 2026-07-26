@@ -1,4 +1,3 @@
-import { searchAirports } from "@/lib/simfly.functions";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
@@ -226,19 +225,18 @@ function MissionForm(props: {
         onChange={props.onLicence}
         options={catalog?.licences.map((l) => ({ value: l.code, label: `${l.code} — ${l.name}` })) ?? []}
       />
-         <FieldIcao
+      <FieldIcao
         label="Departure"
         value={props.departure}
         onChange={props.onDeparture}
-        options={props.catalog?.airports ?? []} // <-- CAŁY SPEKTAKL GLOBALNEGO ŚWIATA!
+        options={catalog?.owned.map((o) => o.icao) ?? []}
       />
       <FieldIcao
         label="Arrival"
         value={props.arrival}
         onChange={props.onArrival}
-        options={props.catalog?.airports ?? []} // <-- CAŁY SPEKTAKL GLOBALNEGO ŚWIATA!
+        options={catalog?.owned.map((o) => o.icao) ?? []}
       />
-
       <label className="sm:col-span-2 lg:col-span-4 flex items-center gap-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
@@ -315,68 +313,28 @@ function FieldIcao({
   label: string;
   value: string;
   onChange: (v: string) => void;
-  // Dynamiczna tablica obiektów z całego globalnego atlasu Hubu
-  options: { icao: string; name: string }[];
+  options: string[];
 }) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  // Dynamiczny, krystalicznie czysty filtr globalnego świata
-  const filtered = useMemo(() => {
-    const list = options ?? [];
-    if (!value || value.length < 1) return list.slice(0, 15); // Na start pokazujemy 15 lotnisk
-    
-    return list.filter(
-      (o) =>
-        o.icao?.toLowerCase().includes(value.toLowerCase()) ||
-        o.name?.toLowerCase().includes(value.toLowerCase())
-    ); // <-- BRAK SLICE! Lista przyjmie tyle lotnisk, ile realnie pasuje do wpisanej frazy!
-  }, [value, options]);
-
+  const listId = `icao-${label.toLowerCase()}`;
   return (
-    <div className="relative flex flex-col gap-1.5 w-full font-sans">
+    <label className="flex flex-col gap-1.5">
       <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
-      
-      <div className="relative w-full">
-        <input
-          type="text"
-          value={value}
-          onFocus={() => setIsOpen(true)}
-          // 200ms timeout zapobiega wycięciu okna z DOM przed zarejestrowaniem kliknięcia w element listy
-          onBlur={() => setTimeout(() => setIsOpen(false), 200)}
-          onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
-          placeholder="Q ICAO"
-          className="w-full rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40 text-foreground placeholder:text-muted-foreground/40"
-        />
-      </div>
-
-      {/* STRUKTURALNA, SCROLLOWALNA I LUKSUSOWA LISTA (Dla Twoich 31 baz i całego świata) */}
-      {isOpen && filtered.length > 0 && (
-        <div className="absolute top-[62px] left-0 z-50 w-full max-h-56 overflow-y-auto rounded-md border border-border/60 bg-[#0c101b] shadow-2xl p-1 font-sans animate-in fade-in slide-in-from-top-1 duration-100 flex flex-col gap-0.5">
-          {filtered.map((o) => (
-            <div
-              key={o.icao}
-              onClick={() => {
-                onChange(o.icao);
-                setIsOpen(false);
-              }}
-              className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/80 cursor-pointer rounded transition-colors group"
-            >
-              {/* Neonowy, jasnoniebieski kod ICAO o stałej szerokości */}
-              <span className="mono text-cyan-400 font-semibold w-14 text-xs shrink-0 group-hover:text-cyan-300 transition-colors">
-                {o.icao}
-              </span>
-              {/* Pełna, realna nazwa lotniska pobrana dynamicznie bez limitów */}
-              <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors">
-                {o.name}
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
+        placeholder="ICAO"
+        list={listId}
+        className="rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40"
+      />
+      <datalist id={listId}>
+        {options.map((o) => (
+          <option key={o} value={o} />
+        ))}
+      </datalist>
+    </label>
   );
 }
-
 
 function FieldSelect({
   label,
