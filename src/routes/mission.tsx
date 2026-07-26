@@ -321,38 +321,40 @@ function FieldIcao({
 }) {
   const [isOpen, setIsOpen] = useState(false);
 
-  // Inteligentne filtrowanie po kodzie ICAO lub pełnej nazwie z globalnego katalogu
+  // PANCERNY I REAKTYWNY FILTR GLOBALNEGO KATALOGU:
+  // Zabezpieczamy referencję za pomocą operatora fallback (options ?? []) 
+  // dzięki czemu filtr natychmiast ożyje, gdy tylko dane dojadą z sieci w tle!
   const filtered = useMemo(() => {
-    if (!value || value.length < 1) return options.slice(0, 8); // domyślne podpowiedzi na start
-    return options
+    const list = options ?? [];
+    if (!value || value.length < 1) return list.slice(0, 8); // Domyślne podpowiedzi na start
+    
+    return list
       .filter(
         (o) =>
-          o.icao.toLowerCase().includes(value.toLowerCase()) ||
-          o.name.toLowerCase().includes(value.toLowerCase())
+          o.icao?.toLowerCase().includes(value.toLowerCase()) ||
+          o.name?.toLowerCase().includes(value.toLowerCase())
       )
-      .slice(0, 8); // Ograniczamy listę do 8 pozycji, żeby nie rozpychać pionowo formularza
+      .slice(0, 8); // Trzymamy stały limit 8 pozycji dla czystości interfejsu
   }, [value, options]);
 
   return (
     <div className="relative flex flex-col gap-1.5 w-full">
-      {/* Mała, techniczna etykieta nad inputem (np. DEPARTURE / ARRIVAL) */}
       <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</span>
       
       <div className="relative w-full">
-        {/* Input stylizowany dokładnie na wzór Twojego Route Checkera */}
         <input
           type="text"
           value={value}
           onFocus={() => setIsOpen(true)}
-          // Bezpieczny timeout, aby przeglądarka zdążyła zarejestrować kliknięcie w pozycję z listy zanim ją zamknie
+          // Bezpieczny 200ms timeout na kliknięcie elementu, zanim onBlur zamknie listę w drzewie DOM
           onBlur={() => setTimeout(() => setIsOpen(false), 200)} 
           onChange={(e) => onChange(e.target.value.toUpperCase().slice(0, 4))}
-          placeholder="Q ICAO"
+          placeholder="ICAO"
           className="w-full rounded-md border border-border/40 bg-secondary/40 px-3 py-2 text-sm font-mono uppercase outline-none focus:ring-1 focus:ring-runway/40 text-foreground placeholder:text-muted-foreground/40"
         />
       </div>
 
-      {/* STRUKTURALNA, LUKSUSOWA LISTA ROZWIJANA TYPEAHEAD (WIDOK PREMIUM) */}
+      {/* REAKTYWNA, STRUKTURALNA LISTA ROZWIJANA (WIDOK PREMIUM) */}
       {isOpen && filtered.length > 0 && (
         <div className="absolute top-[62px] left-0 z-50 w-full max-h-60 overflow-y-auto rounded-md border border-border/60 bg-[#0c101b] shadow-2xl p-1 font-sans animate-in fade-in slide-in-from-top-1 duration-100">
           {filtered.map((o) => (
@@ -364,11 +366,11 @@ function FieldIcao({
               }}
               className="flex items-center gap-3 px-3 py-2 hover:bg-secondary/80 cursor-pointer rounded transition-colors group"
             >
-              {/* Kod ICAO - Jasny, neonowy, o stałej szerokości */}
+              {/* Ciemno-niebieski/neonowy kod ICAO o stałej szerokości */}
               <span className="mono text-cyan-400 font-semibold w-14 text-xs shrink-0 group-hover:text-cyan-300 transition-colors">
                 {o.icao}
               </span>
-              {/* Pełna nazwa lotniska docelowego - Zabezpieczona przed wyciekaniem */}
+              {/* Pełna nazwa lotniska - Zabezpieczona przed rozpychaniem wiersza */}
               <span className="text-foreground/80 text-xs truncate leading-none group-hover:text-foreground transition-colors">
                 {o.name}
               </span>
@@ -379,6 +381,7 @@ function FieldIcao({
     </div>
   );
 }
+
 
 
 
