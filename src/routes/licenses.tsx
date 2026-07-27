@@ -39,8 +39,12 @@ function LicensesPage() {
     queryFn: () => fn(payload ? { data: payload } : undefined),
   }));
 
-  const rows = [...data.licenses].sort((a, b) => b.totalEarnedPax - a.totalEarnedPax);
-  const totalPax = rows.reduce((s, l) => s + l.totalEarnedPax, 0);
+    const rows = [...data.licenses]
+    .filter((l) => l.code || l.sku)
+    .sort((a, b) => (b.totalEarnedPax || 0) - (a.totalEarnedPax || 0));
+    
+  const totalPax = rows.reduce((s, l) => s + (l.totalEarnedPax || 0), 0);
+
 
   return (
     <AppShell>
