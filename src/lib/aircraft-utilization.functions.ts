@@ -67,7 +67,7 @@ export type AircraftUtilizationTimeline = {
 
 export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
  // Rozszerzamy walidator o opcjonalną tablicę identyfikatorów maszyn
- .inputValidator(d?: { username?: string; weeks?: number; aircraftIds?: string[] }) => d ?? {})
+  .inputValidator((d?: { username?: string; weeks?: number; aircraftIds?: string[] }) => d ?? {})
  .handler(async ({ data }): Promise<AircraftUtilizationTimeline> => {
  const { getSessionIdentity } = await import("./identity.server");
  const identity = await getSessionIdentity({ username: data.username });
