@@ -87,13 +87,18 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
    .select("flight_id, aircraft_id, aircraft, aircraft_icao, aircraft_tail_number, mission_start_ts, flight_time, pax, total_reward")
    .gte("mission_start_ts", new Date(earliestWeekStart).toISOString());
 
- // Budujemy filtr OR na bazie pewnych danych z frontu
  if (myAircraftIds.length > 0) {
+   /* 
+     POPRAWNA SKŁADNIA DLA OPERATORA OR + IN W SUPABASE JS:
+     Wewnątrz ciągu tekstowego .or() lista identyfikatorów dla operatora .in.
+     musi być bezwzględnie zamknięta w zwykłych nawiasach okrągłych: .in.(id1,id2,id3)
+   */
    const formattedIds = myAircraftIds.join(",");
-   query = query.or(`username.eq.${username},aircraft_id.in.({${formattedIds}})`);
+   query = query.or(`username.eq.${username},aircraft_id.in.(${formattedIds})`);
  } else {
    query = query.eq("username", username);
  }
+
 
  const { data: rowsRaw, error } = await query.order("mission_start_ts", { ascending: true });
  if (error) throw new Error(`Aircraft utilization query failed: ${error.message}`);
