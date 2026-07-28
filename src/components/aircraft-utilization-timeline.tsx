@@ -92,12 +92,28 @@ export function AircraftUtilizationTimeline({
 
   // Selection: default to top 6 by trailing utilization (recomputed once data loads).
   const [selected, setSelected] = useState<string[] | null>(null);
-   const effectiveSelected = useMemo(() => {
-   // Jeśli użytkownik dokonał manualnego wyboru, zwracamy jego wybór
-   if (selected) return selected;
-   // W przeciwnym wypadku (czysty start strony) nie zaznaczamy domyślnie żadnego samolotu
-   return [];
- }, [selected]);
+  const effectiveSelected = useMemo(() => {
+ if (selected) return selected;
+ if (!data) return [];
+ const scored = allIds.map((id) => {
+ const perWeek = data.cells[id];
+ if (!perWeek) return { id, u: 0 };
+ const weeks = data.weeks.slice(-4);
+ let s = 0,
+ n = 0;
+ for (const w of weeks) {
+ const c = perWeek[w.weekStartIso];
+ if (c) {
+ s += c.utilization;
+ n += 1;
+ }
+ }
+ return { id, u: n > 0 ? s / n : 0 };
+ });
+ scored.sort((a, b) => b.u - a.u);
+ return scored.slice(0, Math.min(6, scored.length)).map((x) => x.id);
+ }, [selected, data, allIds]);
+
 
   // Weekly windowed data for the chart.
   const chartData = useMemo(() => {
