@@ -66,7 +66,8 @@ export type AircraftUtilizationTimeline = {
 };
 
 export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
- .inputValidator((d?: { username?: string; weeks?: number }) => d ?? {})
+ // Rozszerzamy walidator o opcjonalną tablicę identyfikatorów maszyn
+ .inputValidator(d?: { username?: string; weeks?: number; aircraftIds?: string[] }) => d ?? {})
  .handler(async ({ data }): Promise<AircraftUtilizationTimeline> => {
  const { getSessionIdentity } = await import("./identity.server");
  const identity = await getSessionIdentity({ username: data.username });
@@ -78,33 +79,21 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
  const currentWeekStart = weekStartUtcMs(now);
  const earliestWeekStart = currentWeekStart - (weeksBack - 1) * MS_PER_WEEK;
 
- // POBIERAMY IDENTYFIKATORY TWOICH PRAWILNYCH SAMOLOTÓW Z BAZY FLOTY
- const { data: myAircraftsRaw } = await supabaseAdmin
-   .from("simfly_aircraft") // Upewnij się, czy nazwa tabeli Twojej floty to simfly_aircraft
-   .select("aircraft_id, tail_number, name, aircraft_icao")
-   .eq("username", username);
+ // KOŃCZYMY Z ZGADYWANIEM: Bierzemy identyfikatory bezpośrednio z frontu!
+ const myAircraftIds = data.aircraftIds?.filter(Boolean) || [];
 
- const myAircraftIds = myAircraftsRaw?.map((a) => a.aircraft_id).filter(Boolean) as string[] ?? [];
-
- // STRUKTURA FILTRU OR: Pobieramy Twoje loty LUB loty innych pilotów Twoimi samolotami
  let query = supabaseAdmin
    .from("simfly_flights")
    .select("flight_id, aircraft_id, aircraft, aircraft_icao, aircraft_tail_number, mission_start_ts, flight_time, pax, total_reward")
    .gte("mission_start_ts", new Date(earliestWeekStart).toISOString());
 
+ // Budujemy filtr OR na bazie pewnych danych z frontu
  if (myAircraftIds.length > 0) {
-   /* 
-     ZGODNIE ZE SPECYFIKACJĄ SUPABASE DLA OPERATORA OR + IN:
-     Identyfikatory UUID przekazujemy jako czysty ciąg tekstowy rozdzielony przecinkami 
-     zamknięty wewnątrz nawiasów klamrowych: .in.({id1,id2,id3})
-   */
    const formattedIds = myAircraftIds.join(",");
    query = query.or(`username.eq.${username},aircraft_id.in.({${formattedIds}})`);
  } else {
    query = query.eq("username", username);
  }
-
-
 
  const { data: rowsRaw, error } = await query.order("mission_start_ts", { ascending: true });
  if (error) throw new Error(`Aircraft utilization query failed: ${error.message}`);
@@ -139,11 +128,24 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
    }
  }
 
- for (const r of rows) {
-   const aid = r.aircraft_id;
-   if (!aid) continue;
-   // ZABEZPIECZENIE: Odrzucamy loty na samolotach "generic", których nie ma w Twojej prawdziwej flocie
-   if (!aircraftInfo.has(aid)) continue;
+   for (const r of rows) {
+    const aid = r.aircraft_id;
+    if (!aid) continue;
+
+    // PRODUKCYJNE I DYNAMICZNE FILTROWANIE GENERIC:
+    // Jeśli samolotu z lotu nie ma na liście Twojej prawdziwej floty z frontu — odrzucamy!
+    if (!data.aircraftIds?.includes(aid)) continue;
+
+    // Dynamicznie uzupełniamy dane informacyjne o maszynie z historii lotu
+    if (!aircraftInfo.has(aid)) {
+      aircraftInfo.set(aid, {
+        aircraftId: aid,
+        name: r.aircraft ?? "",
+        icao: r.aircraft_icao ?? "",
+        tailNumber: r.aircraft_tail_number ?? "",
+      });
+    }
+
 
    const ts = r.mission_start_ts ? Date.parse(r.mission_start_ts) : NaN;
    if (!Number.isFinite(ts)) continue;
