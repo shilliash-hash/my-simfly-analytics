@@ -7,6 +7,7 @@ import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AircraftExt, MyLiveFlight } from "@/lib/types";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { Search, Plane } from "lucide-react";
+import { AircraftUtilizationTimeline } from "@/components/aircraft-utilization-timeline";
 
 export const Route = createFileRoute("/aircraft")({
   component: AircraftPage,
@@ -179,6 +180,7 @@ function AircraftPage() {
           </table>
         </div>
       </div>
+      <AircraftUtilizationTimeline ownedAircraft={data.airplanes} liveByTail={liveByTail} />
     </AppShell>
   );
 }
