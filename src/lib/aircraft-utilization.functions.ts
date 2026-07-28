@@ -93,10 +93,13 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
    .gte("mission_start_ts", new Date(earliestWeekStart).toISOString());
 
  if (myAircraftIds.length > 0) {
-   query = query.or(`username.eq.${username},aircraft_id.in.(${myAircraftIds.join(",")})`);
+   // Każde UUID musi być otoczone cudzysłowem, aby Postgres poprawnie sparsował tablicę w zapytaniu OR
+   const formattedIds = myAircraftIds.map(id => `"${id}"`).join(",");
+   query = query.or(`username.eq.${username},aircraft_id.in.(${formattedIds})`);
  } else {
    query = query.eq("username", username);
  }
+
 
  const { data: rowsRaw, error } = await query.order("mission_start_ts", { ascending: true });
  if (error) throw new Error(`Aircraft utilization query failed: ${error.message}`);
