@@ -89,15 +89,16 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
 
  if (myAircraftIds.length > 0) {
    /* 
-     PANCERNY I OFICJALNY FILTR RAW POSTGRES DLA SUPABASE JS:
-     Używamy uniwersalnej metody .filter() z operatorem 'or', przekazując tablicę 
-     identyfikatorów poprawnie sformatowaną jako tablica tekstowa Postgres: ARRAY[...]
+     BEZBŁĘDNA STRUKTURA SUPABASE OR:
+     Łączymy warunek username z listą prostych warunków aircraft_id.eq, 
+     co daje idealny ciąg: username.eq.shill,aircraft_id.eq.id1,aircraft_id.eq.id2
    */
-   const pgArray = `ARRAY[${myAircraftIds.map(id => `'${id}'`).join(",")}]::uuid[]`;
-   query = query.filter("or", `(username = '${username}' OR aircraft_id = ANY(${pgArray}))`);
+   const aircraftConditions = myAircraftIds.map(id => `aircraft_id.eq.${id}`).join(",");
+   query = query.or(`username.eq.${username},${aircraftConditions}`);
  } else {
    query = query.eq("username", username);
  }
+
 
 
 
