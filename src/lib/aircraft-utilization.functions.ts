@@ -89,15 +89,16 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
 
  if (myAircraftIds.length > 0) {
    /* 
-     POPRAWNA SKŁADNIA DLA OPERATORA OR + IN W SUPABASE JS:
-     Wewnątrz ciągu tekstowego .or() lista identyfikatorów dla operatora .in.
-     musi być bezwzględnie zamknięta w zwykłych nawiasach okrągłych: .in.(id1,id2,id3)
+     PANCERNY I OFICJALNY FILTR RAW POSTGRES DLA SUPABASE JS:
+     Używamy uniwersalnej metody .filter() z operatorem 'or', przekazując tablicę 
+     identyfikatorów poprawnie sformatowaną jako tablica tekstowa Postgres: ARRAY[...]
    */
-   const formattedIds = myAircraftIds.join(",");
-   query = query.or(`username.eq.${username},aircraft_id.in.(${formattedIds})`);
+   const pgArray = `ARRAY[${myAircraftIds.map(id => `'${id}'`).join(",")}]::uuid[]`;
+   query = query.filter("or", `(username = '${username}' OR aircraft_id = ANY(${pgArray}))`);
  } else {
    query = query.eq("username", username);
  }
+
 
 
  const { data: rowsRaw, error } = await query.order("mission_start_ts", { ascending: true });
