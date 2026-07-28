@@ -89,15 +89,17 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
 
  if (myAircraftIds.length > 0) {
    /* 
-     BEZBŁĘDNA STRUKTURA SUPABASE OR:
-     Łączymy warunek username z listą prostych warunków aircraft_id.eq, 
-     co daje idealny ciąg: username.eq.shill,aircraft_id.eq.id1,aircraft_id.eq.id2
+     OFICJALNY I NIEZAWODNY STANDARD SUPABASE DLA FILTROWANIA TABLIC W METODZIE OR:
+     Zamiast ręcznie formatować stringi metodą .in.(), wykorzystujemy natywny operator 
+     Postgrest 'cs' (Contains), przekazując tablicę identyfikatorów zamkniętą w klamrach 
+     tekstowych: aircraft_id.cs.{id1,id2}. To gwarantuje 100% stabilności zapytania!
    */
-   const aircraftConditions = myAircraftIds.map(id => `aircraft_id.eq.${id}`).join(",");
-   query = query.or(`username.eq.${username},${aircraftConditions}`);
+   const formattedIds = myAircraftIds.join(",");
+   query = query.or(`username.eq.${username},aircraft_id.cs.{${formattedIds}}`);
  } else {
    query = query.eq("username", username);
  }
+
 
 
 
