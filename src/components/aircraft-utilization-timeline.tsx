@@ -56,11 +56,22 @@ export function AircraftUtilizationTimeline({
   const fn = useServerFn(getAircraftUtilizationTimeline);
   const { keyTag, payload } = useSimflyArgs();
 
+  const myIdsForBackend = useMemo(() => {
+    return ownedAircraft?.map((a) => a.aircraftId).filter(Boolean) || [];
+  }, [ownedAircraft]);
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["aircraft-utilization", keyTag],
-    queryFn: () => fn(payload ? { data: payload } : undefined),
+    queryKey: ["aircraft-utilization", keyTag, myIdsForBackend],
+    queryFn: () => fn({ 
+      data: { 
+        username: payload?.username ?? undefined,
+        weeks: 26, 
+        aircraftIds: myIdsForBackend 
+      } 
+    }),
     staleTime: 15 * 60_000,
   });
+
 
   const WINDOW_SIZE = 7;
   const [offset, setOffset] = useState(0);
