@@ -93,12 +93,17 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
    .gte("mission_start_ts", new Date(earliestWeekStart).toISOString());
 
  if (myAircraftIds.length > 0) {
-   // Każde UUID musi być otoczone cudzysłowem, aby Postgres poprawnie sparsował tablicę w zapytaniu OR
-   const formattedIds = myAircraftIds.map(id => `"${id}"`).join(",");
-   query = query.or(`username.eq.${username},aircraft_id.in.(${formattedIds})`);
+   /* 
+     ZGODNIE ZE SPECYFIKACJĄ SUPABASE DLA OPERATORA OR + IN:
+     Identyfikatory UUID przekazujemy jako czysty ciąg tekstowy rozdzielony przecinkami 
+     zamknięty wewnątrz nawiasów klamrowych: .in.({id1,id2,id3})
+   */
+   const formattedIds = myAircraftIds.join(",");
+   query = query.or(`username.eq.${username},aircraft_id.in.({${formattedIds}})`);
  } else {
    query = query.eq("username", username);
  }
+
 
 
  const { data: rowsRaw, error } = await query.order("mission_start_ts", { ascending: true });
