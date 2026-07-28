@@ -77,13 +77,11 @@ export function AircraftUtilizationTimeline({
 
   const timelineAircraftIds = useMemo(() => (data ? data.aircraft.map((a) => a.aircraftId) : []), [data]);
 
-  // Union: everything owned now + anything with historical evidence.
-  const allIds = useMemo(() => {
-    const s = new Set<string>();
-    for (const a of ownedAircraft) s.add(a.aircraftId);
-    for (const id of timelineAircraftIds) s.add(id);
-    return Array.from(s);
-  }, [ownedAircraft, timelineAircraftIds]);
+   // Blokujemy listę wyboru wyłącznie do identyfikatorów Twoich prawilnych, aktualnie posiadanych maszyn
+ const allIds = useMemo(() => {
+   return ownedAircraft.map((a) => a.aircraftId).filter(Boolean);
+ }, [ownedAircraft]);
+
 
   const labelFor = (id: string): string => {
     const own = ownedById.get(id);
@@ -94,27 +92,12 @@ export function AircraftUtilizationTimeline({
 
   // Selection: default to top 6 by trailing utilization (recomputed once data loads).
   const [selected, setSelected] = useState<string[] | null>(null);
-  const effectiveSelected = useMemo(() => {
-    if (selected) return selected;
-    if (!data) return [];
-    const scored = allIds.map((id) => {
-      const perWeek = data.cells[id];
-      if (!perWeek) return { id, u: 0 };
-      const weeks = data.weeks.slice(-4);
-      let s = 0,
-        n = 0;
-      for (const w of weeks) {
-        const c = perWeek[w.weekStartIso];
-        if (c) {
-          s += c.utilization;
-          n += 1;
-        }
-      }
-      return { id, u: n > 0 ? s / n : 0 };
-    });
-    scored.sort((a, b) => b.u - a.u);
-    return scored.slice(0, Math.min(6, scored.length)).map((x) => x.id);
-  }, [selected, data, allIds]);
+   const effectiveSelected = useMemo(() => {
+   // Jeśli użytkownik dokonał manualnego wyboru, zwracamy jego wybór
+   if (selected) return selected;
+   // W przeciwnym wypadku (czysty start strony) nie zaznaczamy domyślnie żadnego samolotu
+   return [];
+ }, [selected]);
 
   // Weekly windowed data for the chart.
   const chartData = useMemo(() => {
@@ -345,11 +328,12 @@ export function AircraftUtilizationTimeline({
         </div>
       )}
 
-      {totalWeeks > 0 && (
-        <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
-          <div className="mono text-[10px] uppercase tracking-widest">
-            {chartData.length > 0 ? `Weeks ${chartData[0].week} – ${chartData[chartData.length - 1].week}` : "—"}
-          </div>
+     {totalWeeks > 0 && (
+ <div className="mb-2 flex items-center justify-between gap-2 text-xs 
+ text-muted-foreground">
+ <div className="mono text-[10px] uppercase tracking-widest text-runway">
+ Visualisation of last 7 weeks for airplanes of choice
+ </div>
           <div className="flex items-center gap-1">
             <button
               type="button"
