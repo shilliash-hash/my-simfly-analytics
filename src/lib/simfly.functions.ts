@@ -1090,9 +1090,24 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // the dashboard response on a Postgres round-trip.
     if (p1?.flights?.length) {
       const total = p1.flights.length;
-      const fresh = p1.flights.map((f, index) =>
-        sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username),
-      );
+
+      
+     // Snapshot each owned aircraft's live post-flight cooldown so historical
+      // utilization can distinguish "grounded" from "idle" going forward.
+      // Rows written before this snapshot leave grounded_until NULL (partial evidence).
+      const groundedByAircraftId = new Map<string, string | null>();
+      for (const it of assets?.items ?? []) {
+        if (it.type === "Airplane") {
+          const gu = it.timers?.inGroundOperationUntil ?? null;
+          if (it.aircraftId) groundedByAircraftId.set(String(it.aircraftId), gu);
+        }
+      }
+      const fresh = p1.flights.map((f, index) => {
+        const row = sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username);
+        const aid = f.aircraftId ? String(f.aircraftId) : null;
+        row.grounded_until = aid && groundedByAircraftId.has(aid) ? groundedByAircraftId.get(aid) ?? null : null;
+        return row;
+      });
       void supabaseAdmin
         .from("simfly_flights")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1102,6 +1117,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         });
     }
 
+    
     const flights: RawFlightLite[] = Array.from(
       new Map(
         [...cachedFlights, ...(p1?.flights ?? [])].map((flight) => [flight.id, flight]),
