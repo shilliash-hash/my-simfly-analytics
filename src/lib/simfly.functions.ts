@@ -1086,7 +1086,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       rowToRawFlight,
     );
 
-    // Snapshot each owned aircraft's live post-flight cooldown so historical
+   // Snapshot each owned aircraft's live post-flight cooldown so historical
     // utilization can distinguish "grounded" from "idle". Cooldown is an
     // AIRCRAFT property, not a pilot property — the map is keyed on
     // aircraft_id and applied regardless of who flew the tail.
@@ -1098,12 +1098,11 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       }
     }
 
-   
     // Upsert page-1 freshness into the cache. Fire-and-forget — never block
     // the dashboard response on a Postgres round-trip.
     if (p1?.flights?.length) {
       const total = p1.flights.length;
-        const fresh = p1.flights.map((f, index) => {
+      const fresh = p1.flights.map((f, index) => {
         const row = sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username);
         const aid = f.aircraftId ? String(f.aircraftId) : null;
         const gu = aid ? groundedByAircraftId.get(aid) : undefined;
@@ -1113,7 +1112,14 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
         else delete (row as Record<string, unknown>).grounded_until;
         return row;
       });
-      }
+      void supabaseAdmin
+        .from("simfly_flights")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true })
+        .then(({ error }) => {
+          if (error) console.warn("[simfly] page-1 upsert failed", error);
+        });
+    }
 
     // Aircraft-keyed cooldown reconciliation.
     // LastFlightOnTail → aircraft snapshot → fill grounded_until.
@@ -1173,6 +1179,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
           }
         }
       })();
+
     }
 
 
