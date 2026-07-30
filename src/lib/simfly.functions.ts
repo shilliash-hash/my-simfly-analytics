@@ -1086,38 +1086,97 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       rowToRawFlight,
     );
 
+    // Snapshot each owned aircraft's live post-flight cooldown so historical
+    // utilization can distinguish "grounded" from "idle". Cooldown is an
+    // AIRCRAFT property, not a pilot property — the map is keyed on
+    // aircraft_id and applied regardless of who flew the tail.
+    const groundedByAircraftId = new Map<string, string>();
+    for (const it of assets?.items ?? []) {
+      if (it.type === "Airplane") {
+        const gu = it.timers?.inGroundOperationUntil ?? null;
+        if (it.aircraftId && gu) groundedByAircraftId.set(String(it.aircraftId), gu);
+      }
+    }
+
+   
     // Upsert page-1 freshness into the cache. Fire-and-forget — never block
     // the dashboard response on a Postgres round-trip.
     if (p1?.flights?.length) {
       const total = p1.flights.length;
-
-      
-     // Snapshot each owned aircraft's live post-flight cooldown so historical
-      // utilization can distinguish "grounded" from "idle" going forward.
-      // Rows written before this snapshot leave grounded_until NULL (partial evidence).
-      const groundedByAircraftId = new Map<string, string | null>();
-      for (const it of assets?.items ?? []) {
-        if (it.type === "Airplane") {
-          const gu = it.timers?.inGroundOperationUntil ?? null;
-          if (it.aircraftId) groundedByAircraftId.set(String(it.aircraftId), gu);
-        }
-      }
-      const fresh = p1.flights.map((f, index) => {
+        const fresh = p1.flights.map((f, index) => {
         const row = sanitiseFlightRowForDb(flightToRow(username, f, { page: 1, index, total }), username);
         const aid = f.aircraftId ? String(f.aircraftId) : null;
-        row.grounded_until = aid && groundedByAircraftId.has(aid) ? groundedByAircraftId.get(aid) ?? null : null;
+        const gu = aid ? groundedByAircraftId.get(aid) : undefined;
+        // Only write when the snapshot actually knows the cooldown. Never
+        // overwrite an unknown with an explicit NULL.
+        if (gu) row.grounded_until = gu;
+        else delete (row as Record<string, unknown>).grounded_until;
         return row;
       });
-      void supabaseAdmin
-        .from("simfly_flights")
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        .upsert(fresh as any, { onConflict: "username,flight_id", ignoreDuplicates: true })
-        .then(({ error }) => {
-          if (error) console.warn("[simfly] page-1 upsert failed", error);
-        });
+      }
+
+    // Aircraft-keyed cooldown reconciliation.
+    // LastFlightOnTail → aircraft snapshot → fill grounded_until.
+    // The owner's session is the only one that can see its tails' live timers,
+    // so it repairs rows imported by ANY pilot who flew an owned aircraft.
+    // Strictly bounded so a live timer can never be attributed to an older
+    // flight: only the tail's single most recent flight is eligible, the timer
+    // must still be running, and it must start at that flight's end.
+    if (groundedByAircraftId.size > 0) {
+      void (async () => {
+        const nowMs = Date.now();
+        for (const [aircraftId, guIso] of groundedByAircraftId) {
+          try {
+            const guMs = Date.parse(guIso);
+            // Timer must be live — an expired timer says nothing about which
+            // flight it belonged to.
+            if (!Number.isFinite(guMs) || guMs <= nowMs) continue;
+
+            // The tail's most recent flight, whoever flew it. NOT "most recent
+            // row missing grounded_until" — that would walk backwards through
+            // history on repeat loads and stamp old flights with this timer.
+            const { data: candidate } = await supabaseAdmin
+              .from("simfly_flights")
+              .select("username, flight_id, mission_start_ts, flight_time, grounded_until")
+              .eq("aircraft_id", aircraftId)
+              .order("mission_start_ts", { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            if (!candidate?.flight_id || !candidate.mission_start_ts) continue;
+            if (candidate.grounded_until) continue; // already observed — never overwrite
+
+            const startMs = Date.parse(candidate.mission_start_ts);
+            if (!Number.isFinite(startMs)) continue;
+            const parts = String(candidate.flight_time ?? "").split(":").map(Number);
+            const mins = parts.length === 3 && parts.every(Number.isFinite)
+              ? parts[0] * 60 + parts[1] + parts[2] / 60
+              : 0;
+            const endMs = startMs + mins * 60_000;
+            // Cooldown runs from touchdown and is already underway: it must end
+            // in the future but cannot have started more than 24h ago.
+            if (endMs >= guMs) continue;
+            if (endMs < nowMs - 86_400_000) continue;
+
+            const { error } = await supabaseAdmin
+              .from("simfly_flights")
+              .update({ grounded_until: guIso })
+              .eq("username", candidate.username)
+              .eq("flight_id", candidate.flight_id)
+              .is("grounded_until", null);
+            if (error) console.warn("[simfly] grounded reconcile failed", aircraftId, error.message);
+          } catch (err) {
+            console.warn(
+              "[simfly] grounded reconcile error",
+              aircraftId,
+              err instanceof Error ? err.message : String(err),
+            );
+          }
+        }
+      })();
     }
 
-    
+
+                                     
     const flights: RawFlightLite[] = Array.from(
       new Map(
         [...cachedFlights, ...(p1?.flights ?? [])].map((flight) => [flight.id, flight]),
