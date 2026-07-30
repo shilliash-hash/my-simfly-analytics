@@ -8,7 +8,53 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
- {
+   {
+  id: "1",
+  version: "v 1.01 EXPERIMENTAL 30.Jul.26",
+  type: ["FEATURE", "FIX"],
+  text: `• A brand-new analytics module focused on fleet efficiency rather than income.
+• Predicts expected PAX before departure.
+Features include:
+• Weekly Aircraft Utilization dashboard
+• Fleet Operational Utilization
+• Flight Activity vs Operational Utilization comparison
+• Aircraft rotation tracking
+• Flight hours per aircraft
+• Fleet summary cards
+• Aircraft classification:
+- Workhorse
+- Active
+= Underused
+- Grounded
+- Idle
+• Detailed evidence popover for every aircraft
+• 7-week utilization timeline
+• Fleet-wide utilization statistics
+Improvements (Fixes)
+• Airport Utilization
+• Numerous performance improvements
+• Improved utilization calculations
+• Better historical accuracy
+UI refinements/upgrades
+• Aircraft Analytics
+• Added Grounded Time support for utilization calculations
+• Improved operational utilization algorithm
+• Added partial-evidence handling for historical data
+• Removed misleading XP values from utilization tables
+• Improved owned-aircraft filtering
+General
+• Various backend optimizations
+• Improved data consistency
+• Better caching behaviour
+• Additional stability improvements
+
+Notes
+• Aircraft Utilization is currently released as Beta.
+• Historical operational utilization becomes progressively more accurate as Grounded Time data is collected automatically from new flights. No user action is required.
+`
+},     
+  
+  {
   id: "1",
   version: "v 1.0 FULL RELEASE 25.Jul.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
