@@ -514,7 +514,7 @@ function UpgradeProgress({ row }: { row: AdvisorRow }) {
     : p.etaDays === null
       ? "No activity"
       : p.etaDays < 1
-        ? "< 1 day"
+        ? "Upgradeable now"
         : `~${Math.round(p.etaDays)} days`;
 
   return (
