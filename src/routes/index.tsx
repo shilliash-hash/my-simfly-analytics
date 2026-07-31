@@ -950,9 +950,9 @@ function PilotSwitcher({ current }: { current: string | null }) {
         @{current ?? "you"}
       </button>
       {open && (
-        <form
+          <form
           onSubmit={apply}
-          className="panel absolute right-0 z-30 mt-2 w-72 rounded-xl p-4 shadow-xl"
+          className="absolute right-0 z-50 mt-2 w-72 rounded-xl p-4 bg-[#0c101b] border border-border/60 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-100"
         >
           <div className="mb-2 flex items-center justify-between">
             <div className="mono text-[10px] uppercase tracking-widest text-runway">View as pilot</div>
@@ -968,8 +968,8 @@ function PilotSwitcher({ current }: { current: string | null }) {
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder="e.g. shill"
-            className="mono w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-sm outline-none focus:border-runway"
-          />
+          className="mono w-full rounded-md border border-border/40 bg-[#141a29] px-2.5 py-1.5 text-sm outline-none focus:border-runway text-foreground placeholder:text-muted-foreground/30"
+        />
           <div className="mt-3 flex items-center justify-between gap-2">
             <button
               type="button"
