@@ -58,3 +58,63 @@ export function ratingForPaybackDays(days: number): {
   if (days <= 240) return { stars: 2, label: "Long payback" };
   return { stars: 1, label: "Poor investment" };
 }
+
+
+export const MAX_AIRPORT_LEVEL = 10;
+
+export type UpgradeProgressEstimate = {
+  /** 0–100, clamped. */
+  percent: number;
+  remainingPercent: number;
+  nextLevel: number;
+  atMaxLevel: boolean;
+  /** Days until the airport becomes upgradeable at current traffic, or null. */
+  etaDays: number | null;
+};
+
+/**
+ * Percent-based upgrade progress estimate.
+ *
+ * Uses the constant-XP-per-operation rule: lifetime rotations spread across
+ * completed level-equivalents give an average operations-per-level, which
+ * converts the existing arrivals/day metric into progress-percent/day.
+ * Purely presentational — no financial value is derived from this.
+ */
+export function estimateUpgradeProgress(input: {
+  level: number;
+  levelProgress?: number | null;
+  totalRotations?: number | null;
+  arrivalsPerDay?: number | null;
+}): UpgradeProgressEstimate {
+  const level = Math.max(1, Math.round(input.level || 1));
+  const raw = Number(input.levelProgress ?? 0);
+  const percent = Number.isFinite(raw) ? Math.max(0, Math.min(100, raw)) : 0;
+  const atMaxLevel = level >= MAX_AIRPORT_LEVEL;
+  const remainingPercent = atMaxLevel ? 0 : Math.max(0, 100 - percent);
+
+  const rotations = Number(input.totalRotations ?? 0);
+  const perDay = Number(input.arrivalsPerDay ?? 0);
+  const levelEquivalents = level - 1 + percent / 100;
+
+  let etaDays: number | null = null;
+  if (
+    !atMaxLevel &&
+    Number.isFinite(rotations) && rotations > 0 &&
+    Number.isFinite(perDay) && perDay > 0 &&
+    levelEquivalents > 0
+  ) {
+    const opsPerLevel = rotations / levelEquivalents;
+    if (opsPerLevel > 0) {
+      const percentPerDay = (perDay / opsPerLevel) * 100;
+      if (percentPerDay > 0) etaDays = remainingPercent / percentPerDay;
+    }
+  }
+
+  return {
+    percent,
+    remainingPercent,
+    nextLevel: Math.min(MAX_AIRPORT_LEVEL, level + 1),
+    atMaxLevel,
+    etaDays,
+  };
+}
