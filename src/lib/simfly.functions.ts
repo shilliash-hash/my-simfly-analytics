@@ -3085,6 +3085,10 @@ export type UpgradeAdvisorRow = {
   paybackDays: number; // Infinity-ish → -1 sentinel for JSON
   stars: 1 | 2 | 3 | 4 | 5;
   ratingLabel: string;
+  /** Live level progress toward the next level, 0–100. Overlaid, never cached-stale. */
+  levelProgress?: number;
+  /** Lifetime completed operations (rotations) on this airport. */
+  totalRotations?: number;
 };
 
 export type UpgradeAdvisorRowMeta = {
@@ -3171,7 +3175,15 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
   .inputValidator(
     (d: {
       username?: string;
-      airports: { icao: string; name: string; tier: number; level: number; percToUser: number }[];
+            airports: {
+        icao: string;
+        name: string;
+        tier: number;
+        level: number;
+        percToUser: number;
+        levelProgress?: number;
+        totalRotations?: number;
+      }[];
       windowDays?: number;
       forceIcaos?: string[]; // admin-only forced refresh subset (validated in handler)
       adminToken?: string;
@@ -3323,6 +3335,12 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
             last_manual_refresh_at: string | null;
           }
         | undefined;
+      // Live progress fields are always overlaid from the current payload so
+      // they never go stale behind the long-lived ROI cache.
+      const live = {
+        levelProgress: a.levelProgress,
+        totalRotations: a.totalRotations,
+      };
       if (!c) {
         // Should not happen (we just upserted stale ones), but fail safe.
         const row = computeAdvisorRow(a, [], windowDays, {
@@ -3331,6 +3349,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
         });
         return {
           ...row,
+          ...live,
           meta: {
             generatedAt: generatedAtIso,
             refreshAfter: refreshAfterIso,
@@ -3341,6 +3360,7 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
       }
       return {
         ...c.row,
+        ...live,
         meta: {
           generatedAt: c.generated_at,
           refreshAfter: c.refresh_after,
