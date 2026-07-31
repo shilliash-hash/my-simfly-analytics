@@ -3324,6 +3324,32 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
       }),
     );
 
+    // Lifetime rotations are not always present on the `assets/all` payload,
+    // but the public airport detail endpoint always returns them. Backfill only
+    // the airports that are missing the value so the upgrade-progress ETA has
+    // a velocity basis (purely presentational — no ROI input).
+    const detailFix = new Map<string, { totalRotations?: number; levelProgress?: number }>();
+    await Promise.all(
+      data.airports
+        .filter((a) => !(Number(a.totalRotations) > 0))
+        .map(async (a) => {
+          const icao = (a.icao || "").toUpperCase();
+          try {
+            const raw = await fetchJSON<RawAssetAirport>(
+              `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`,
+            );
+            if (raw && raw.type === "Airport") {
+              detailFix.set(icao, {
+                totalRotations: Number(raw.totalRotations) || undefined,
+                levelProgress: Number.isFinite(Number(raw.level_progress))
+                  ? Number(raw.level_progress)
+                  : undefined,
+              });
+            }
+          } catch { /* best effort */ }
+        }),
+    );
+
     const out = data.airports.map((a) => {
       const icao = (a.icao || "").toUpperCase();
       const key = `${icao}|${a.tier}|${a.level}`;
@@ -3337,10 +3363,14 @@ export const getUpgradeAdvisor = createServerFn({ method: "GET" })
         | undefined;
       // Live progress fields are always overlaid from the current payload so
       // they never go stale behind the long-lived ROI cache.
+      const fix = detailFix.get(icao);
       const live = {
-        levelProgress: a.levelProgress,
-        totalRotations: a.totalRotations,
+               levelProgress:
+          Number(a.levelProgress) > 0 ? a.levelProgress : fix?.levelProgress ?? a.levelProgress,
+        totalRotations:
+          Number(a.totalRotations) > 0 ? a.totalRotations : fix?.totalRotations ?? a.totalRotations,
       };
+
       if (!c) {
         // Should not happen (we just upserted stale ones), but fail safe.
         const row = computeAdvisorRow(a, [], windowDays, {
