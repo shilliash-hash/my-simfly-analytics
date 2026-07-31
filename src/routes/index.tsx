@@ -952,7 +952,7 @@ function PilotSwitcher({ current }: { current: string | null }) {
       {open && (
           <form
           onSubmit={apply}
-          className="absolute right-0 z-50 mt-2 w-72 rounded-xl p-4 bg-[#0c101b]/70 border border-border/60 shadow-2xl animate-in fade-in slide-in-from-top-1 duration-100"
+          className="absolute right-0 z-50 mt-2 w-72 rounded-xl p-4 bg-zinc-900/70 border border-zinc-800/80 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-1 duration-100"
         >
           <div className="mb-2 flex items-center justify-between">
             <div className="mono text-[10px] uppercase tracking-widest text-runway">View as pilot</div>
