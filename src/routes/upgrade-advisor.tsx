@@ -16,6 +16,7 @@ import { HubSupportGate } from "@/components/hub-support";
 import { cn } from "@/lib/utils";
 import { RefreshCw } from "lucide-react";
 import { UpgradeAdvisorLegend, TowerRating } from "@/components/upgrade-advisor-legend";
+import { estimateUpgradeProgress } from "@/lib/airport-upgrade-costs";
 
 export const Route = createFileRoute("/upgrade-advisor")({
   component: UpgradeAdvisorPage,
@@ -69,6 +70,8 @@ function UpgradeAdvisorPage() {
         tier: a.category,
         level: a.level,
         percToUser: a.percToUser ?? 0,
+        levelProgress: a.levelProgress ?? 0,
+        totalRotations: a.totalRotations ?? 0,
       })),
     [data.airports],
   );
@@ -417,6 +420,8 @@ function AdvisorCard({
         />
       </dl>
 
+       <UpgradeProgress row={row} />
+
       <footer className="flex items-center justify-between pt-2 border-t border-border/60">
         <Stars stars={row.stars} />
         <div className="text-right text-[11px]">
@@ -495,4 +500,65 @@ function Stars({ stars }: { stars: 1 | 2 | 3 | 4 | 5 }) {
             ? "text-tier-silver"
             : "text-muted-foreground";
   return <TowerRating count={stars} toneClass={tone} />;
+}
+
+function UpgradeProgress({ row }: { row: AdvisorRow }) {
+  const p = estimateUpgradeProgress({
+    level: row.level,
+    levelProgress: row.levelProgress,
+    totalRotations: row.totalRotations,
+    arrivalsPerDay: row.arrivalsPerDay,
+  });
+  const eta = p.atMaxLevel
+    ? "Max level"
+    : p.etaDays === null
+      ? "No activity"
+      : p.etaDays < 1
+        ? "< 1 day"
+        : `~${Math.round(p.etaDays)} days`;
+
+  return (
+    <section className="border-t border-border/60 pt-3">
+      <div className="mono mb-2 flex items-baseline justify-between text-[10px] uppercase tracking-widest text-foreground/50">
+        <span>Upgrade progress</span>
+        <span className="text-instrument">{Math.round(p.percent)}%</span>
+      </div>
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-border/60"
+        role="progressbar"
+        aria-valuenow={Math.round(p.percent)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={`Progress to level ${p.nextLevel}`}
+      >
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-runway to-instrument transition-all"
+          style={{ width: `${Math.max(2, p.percent)}%` }}
+        />
+      </div>
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+        <div>
+          <div className="mono text-[10px] uppercase tracking-widest text-foreground/50">
+            Remaining
+          </div>
+          <div className="mono font-semibold text-foreground">
+            {p.atMaxLevel ? "—" : `${Math.round(p.remainingPercent)}% to L${p.nextLevel}`}
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="mono text-[10px] uppercase tracking-widest text-foreground/50">
+            At current traffic
+          </div>
+          <div
+            className={cn(
+              "mono font-semibold",
+              p.etaDays === null || p.atMaxLevel ? "text-foreground/50" : "text-runway",
+            )}
+          >
+            {eta}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
 }
