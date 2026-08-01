@@ -43,9 +43,9 @@ function colorFor(id: string): string {
 }
 
 const CLASS_STYLES: Record<UtilizationClass, { label: string; cls: string; hint: string }> = {
-  WORKHORSE: { label: "Workhorse",  cls: "bg-runway/20 text-runway",           hint: "≥30% operational utilization (trailing 4w)" },
-  ACTIVE:    { label: "Active",     cls: "bg-primary/15 text-primary",         hint: "10–30% operational utilization" },
-  UNDERUSED: { label: "Underused",  cls: "bg-instrument/15 text-instrument",   hint: "2–10% operational utilization" },
+  WORKHORSE: { label: "Workhorse",  cls: "bg-runway/20 text-runway",           hint: "≥15% operational utilization (trailing 4w)" },
+  ACTIVE:    { label: "Active",     cls: "bg-primary/15 text-primary",         hint: "5–15% operational utilization" },
+  UNDERUSED: { label: "Underused",  cls: "bg-instrument/15 text-instrument",   hint: "2–5% operational utilization" },
   IDLE:      { label: "Idle",       cls: "bg-destructive/15 text-destructive", hint: "Available for weeks but virtually unused" },
   GROUNDED:  { label: "Grounded",   cls: "bg-muted text-foreground/80",        hint: "Currently on post-flight cooldown — neutral" },
   AIRBORNE:  { label: "Airborne",   cls: "bg-primary/15 text-primary",         hint: "Currently in the air" },
