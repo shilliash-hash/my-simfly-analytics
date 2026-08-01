@@ -301,8 +301,8 @@ export type UtilizationClass =
   | "WORKHORSE" | "ACTIVE" | "UNDERUSED" | "IDLE"
   | "GROUNDED" | "AIRBORNE" | "UNKNOWN";
 export const UTIL_THRESHOLDS_V1 = {
-  workhorse: 0.30,
-  active: 0.10,
+  workhorse: 0.15,
+  active: 0.05,
   underused: 0.02,
 } as const;
 
