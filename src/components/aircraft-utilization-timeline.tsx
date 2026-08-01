@@ -506,6 +506,12 @@ export function AircraftUtilizationTimeline({
         Operational utilization = active flight time ÷ (observed week minutes − grounded minutes).
         Weeks without cooldown snapshots are shown as flight activity (marked *). Aircraft currently on
         a post-flight timer are labelled <span className="mono">GROUNDED</span> (neutral), never Idle.
+        Large airliners naturally achieve lower Operational Utilization than light aircraft because they spend
+        significantly longer on mandatory post-flight ground operations. Aircraft upgrades reduce this downtime, 
+        making higher-level aircraft easier to keep highly utilized. This is expected behaviour and reflects the 
+        actual SimFly operating model.This is an efficiency metric, not a productivity metric. A long-haul aircraft 
+        flying one 8-hour mission may be operating at peak efficiency even though its utilization percentage is lower 
+        than that of a frequently flown light aircraft.
       </p>
     </section>
   );
