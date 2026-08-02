@@ -97,11 +97,10 @@ export function CapacityUtilizationTimeline({
         weekNumber: w.weekNumber,
         weekStartIso: w.weekStartIso,
       };
-     for (const b of w.byAirport) {
-      row[`${b.icao}__cap`] = b.capacity;
-      // Wstrzykujemy b.rotation — dokładnie tę samą właściwość, która karmi poprawną tabelę na dole!
-      row[`${b.icao}__used`] = b.rotation ?? b.used;
-    }
+       for (const b of w.byAirport) {
+        row[`${b.icao}__cap`] = b.capacity;
+        row[`${b.icao}__used`] = b.used;
+      }
       return row;
     });
   }, [data]);
