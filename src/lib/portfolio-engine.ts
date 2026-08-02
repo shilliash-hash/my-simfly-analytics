@@ -17,8 +17,8 @@
 //   composition: normalising published values into 0..100 composite scores,
 //   banding them, and evaluating rules over them.
 
-export const PORTFOLIO_WEIGHTS_VERSION = "2.0.0";
-export const PORTFOLIO_RULE_REGISTRY_VERSION = "2.0.0";
+export const PORTFOLIO_WEIGHTS_VERSION = "2.1.0";
+export const PORTFOLIO_RULE_REGISTRY_VERSION = "2.1.0";
 
 /** One number pulled verbatim from an upstream intelligence module. */
 export type MetricContribution = {
@@ -39,8 +39,16 @@ export type SourceState = "ok" | "degraded" | "unavailable";
 export type CompositeScore = {
   id: string;
   label: string;
-  score: number | null;        // 0..100 or null when inputs missing
+  score: number | null;        // domain-specific scale — see scaleLabel
   band: "strong" | "healthy" | "watch" | "weak" | "unknown";
+  /** What the score number actually measures, in domain language. */
+  scaleLabel: string;
+  /** Domain wording for the band ("Active utilization", "Typical traffic"). */
+  bandLabel: string;
+  /** Unit suffix rendered next to the score, if any. */
+  scoreUnit?: string;
+  /** Structured explainer so no score is a mystery. */
+  rationale: { measured: string; good: string; why: string };
   state: SourceState;
   contributions: MetricContribution[];
   explanation: string;
@@ -132,6 +140,8 @@ export type EngineInputs = {
         airports: {
           icao: string;
           name: string;
+          /** Airport tier (category) as published by the airport module. */
+          tier: number;
           capacity: number;
           usedAvg: number;
           /** usedAvg / capacity as published by the timeline (0..n). */
@@ -166,123 +176,210 @@ export type EngineInputs = {
 // Composites
 // ---------------------------------------------------------------------------
 
-function bandForScore(score: number | null): CompositeScore["band"] {
-  if (score == null) return "unknown";
-  if (score >= 85) return "strong";
-  if (score >= 65) return "healthy";
-  if (score >= 40) return "watch";
-  return "weak";
-}
-
 function pct(n: number): number {
   return Math.round(n * 1000) / 10;
 }
 
+/**
+ * Thresholds mirrored from the Aircraft Utilization module's published
+ * UTIL_THRESHOLDS_V1. Portfolio does not invent its own utilization scale —
+ * these are the same cut points the owning module publishes.
+ */
+const UTIL_SCALE = { workhorse: 0.3, active: 0.1, underused: 0.02 } as const;
+
+function unavailableComposite(
+  id: string,
+  label: string,
+  scaleLabel: string,
+  state: SourceState,
+  measured: string,
+  reason: string,
+): CompositeScore {
+  return {
+    id,
+    label,
+    score: null,
+    band: "unknown",
+    scaleLabel,
+    bandLabel: "Not available",
+    rationale: {
+      measured,
+      good: "—",
+      why: reason,
+    },
+    state,
+    contributions: [],
+    explanation: reason,
+  };
+}
+
+// --- Aircraft Health -------------------------------------------------------
+// Domain scale: fleet Operational Utilization, banded on the published
+// WORKHORSE / ACTIVE / UNDERUSED thresholds. Readiness is supporting evidence.
+
 function composeAssetHealth(inputs: EngineInputs): CompositeScore {
-  if (inputs.fleet.state !== "ok") {
-    return {
-      id: "asset-health",
-      label: "Asset Health",
-      score: null,
-      band: "unknown",
-      state: inputs.fleet.state,
-      contributions: [],
-      explanation: "Fleet readiness signal is temporarily unavailable.",
-    };
-  }
-  const { ready, total, sourceVersion } = inputs.fleet;
-  const readinessScore = total > 0 ? (ready / total) * 100 : null;
-
-  const contributions: MetricContribution[] = [
-    {
-      id: "ready-status.ready_aircraft.v1",
-      sourceModule: "ready-status",
-      sourceVersion,
-      value: ready,
-      label: "Ready aircraft",
-      unit: "count",
-    },
-    {
-      id: "ready-status.owned_aircraft.v1",
-      sourceModule: "ready-status",
-      sourceVersion,
-      value: total,
-      label: "Owned aircraft",
-      unit: "count",
-    },
-  ];
-
   const util = inputs.fleetUtilization;
-  let score = readinessScore == null ? null : Math.round(readinessScore);
-  let explanation =
-    total > 0
-      ? `${ready} of ${total} owned aircraft are ready to depart right now.`
-      : "No owned aircraft yet — Asset Health will activate once you own at least one aircraft.";
+  const fleet = inputs.fleet;
 
-  if (util.state === "ok" && total > 0) {
-    // Utilization scale published by the Aircraft Utilization module: its
-    // WORKHORSE threshold (0.30 operational) is the top of the useful band, so
-    // 30%+ operational utilization maps to a full utilization sub-score.
+  if (util.state !== "ok" && fleet.state !== "ok") {
+    return unavailableComposite(
+      "asset-health",
+      "Aircraft Health",
+      "Fleet operational utilization",
+      util.state,
+      "Share of available aircraft-time actually spent flying, averaged across the fleet.",
+      "Aircraft Intelligence is temporarily unavailable, so no fleet score is shown.",
+    );
+  }
+
+  const contributions: MetricContribution[] = [];
+  if (fleet.state === "ok") {
+    contributions.push(
+      {
+        id: "ready-status.ready_aircraft.v1",
+        sourceModule: "ready-status",
+        sourceVersion: fleet.sourceVersion,
+        value: fleet.ready,
+        label: "Ready to depart now",
+        unit: "count",
+      },
+      {
+        id: "ready-status.owned_aircraft.v1",
+        sourceModule: "ready-status",
+        sourceVersion: fleet.sourceVersion,
+        value: fleet.total,
+        label: "Owned aircraft",
+        unit: "count",
+      },
+    );
+  }
+
+  // Utilization-led path.
+  if (util.state === "ok") {
     const opRaw = util.fleetOperational ?? util.fleetFlightActivity;
+    const idle = util.aircraft.filter((a) => a.cls === "IDLE").length;
+    const workhorses = util.aircraft.filter((a) => a.cls === "WORKHORSE").length;
+    const active = util.aircraft.filter((a) => a.cls === "ACTIVE").length;
+
     if (opRaw != null) {
-      const utilScore = Math.max(0, Math.min(100, (opRaw / 0.3) * 100));
-      score = Math.round((readinessScore ?? 0) * 0.5 + utilScore * 0.5);
-      const idle = util.aircraft.filter((a) => a.cls === "IDLE").length;
-      const workhorses = util.aircraft.filter((a) => a.cls === "WORKHORSE").length;
-      explanation =
-        `${ready} of ${total} aircraft ready to depart. Fleet operational utilization ` +
-        `over the last ${util.trailingWeeks} weeks: ${pct(opRaw)}%` +
-        (workhorses > 0 ? ` · ${workhorses} workhorse${workhorses === 1 ? "" : "s"}` : "") +
-        (idle > 0 ? ` · ${idle} idle tail${idle === 1 ? "" : "s"}` : "") +
-        ".";
+      const band: CompositeScore["band"] =
+        opRaw >= UTIL_SCALE.workhorse
+          ? "strong"
+          : opRaw >= UTIL_SCALE.active
+          ? "healthy"
+          : opRaw >= UTIL_SCALE.underused
+          ? "watch"
+          : "weak";
+      const bandLabel =
+        band === "strong"
+          ? "Workhorse utilization"
+          : band === "healthy"
+          ? "Active utilization"
+          : band === "watch"
+          ? "Underused fleet"
+          : "Idle fleet";
+
+      contributions.unshift({
+        id: "aircraft-utilization.fleet_operational.v1",
+        sourceModule: "aircraft-utilization",
+        sourceVersion: util.sourceVersion,
+        value: pct(opRaw),
+        label: `Fleet operational utilization (${util.trailingWeeks}w)`,
+        unit: "%",
+      });
       contributions.push(
         {
-          id: "aircraft-utilization.fleet_operational.v1",
+          id: "aircraft-utilization.workhorse_aircraft.v1",
           sourceModule: "aircraft-utilization",
           sourceVersion: util.sourceVersion,
-          value: pct(opRaw),
-          label: `Fleet operational utilization (${util.trailingWeeks}w)`,
-          unit: "%",
+          value: workhorses,
+          label: "Workhorse tails",
+          unit: "count",
         },
         {
           id: "aircraft-utilization.idle_aircraft.v1",
           sourceModule: "aircraft-utilization",
           sourceVersion: util.sourceVersion,
           value: idle,
-          label: "Idle aircraft",
+          label: "Idle tails (supporting)",
           unit: "count",
         },
       );
+
+      return {
+        id: "asset-health",
+        label: "Aircraft Health",
+        score: pct(opRaw),
+        scoreUnit: "%",
+        band,
+        scaleLabel: `Fleet operational utilization · ${util.trailingWeeks}w`,
+        bandLabel,
+        rationale: {
+          measured:
+            "Operational utilization — the share of available aircraft-time (excluding cooldowns and grounding) that your fleet actually spent flying, averaged over the trailing window.",
+          good: `${pct(UTIL_SCALE.active)}%+ is an Active fleet and ${pct(UTIL_SCALE.workhorse)}%+ is Workhorse territory. Large aircraft naturally land lower: longer flights and much longer cooldowns cap what any owner can reach, so ~12% is a genuinely well-run fleet, not a shortfall.`,
+          why: `Your fleet averaged ${pct(opRaw)}% over the last ${util.trailingWeeks} weeks, which sits in the ${bandLabel} band${workhorses > 0 ? ` — carried by ${workhorses} workhorse tail${workhorses === 1 ? "" : "s"}` : ""}${active > 0 ? ` and ${active} active tail${active === 1 ? "" : "s"}` : ""}.`,
+        },
+        state: "ok",
+        contributions,
+        explanation: `This fleet is operating at a ${bandLabel.replace(" utilization", "").replace(" fleet", "")} utilization level — ${pct(opRaw)}% operational utilization over ${util.trailingWeeks} weeks${idle > 0 ? `, with ${idle} idle tail${idle === 1 ? "" : "s"} as supporting detail` : ""}.`,
+      };
     }
   }
 
+  // Readiness-only fallback: utilization has no usable window yet.
+  const total = fleet.state === "ok" ? fleet.total : 0;
+  const ready = fleet.state === "ok" ? fleet.ready : 0;
+  const readiness = total > 0 ? Math.round((ready / total) * 100) : null;
   return {
     id: "asset-health",
-    label: "Asset Health",
-    score,
-    band: bandForScore(score),
+    label: "Aircraft Health",
+    score: readiness,
+    scoreUnit: "%",
+    band:
+      readiness == null
+        ? "unknown"
+        : readiness >= 80
+        ? "healthy"
+        : readiness >= 40
+        ? "watch"
+        : "weak",
+    scaleLabel: "Live readiness (no utilization window yet)",
+    bandLabel: readiness == null ? "No fleet" : "Readiness only",
+    rationale: {
+      measured:
+        "Share of owned aircraft available to depart right now. Utilization history is not deep enough yet to score fleet quality.",
+      good: "Readiness naturally dips while aircraft are on cooldown; it is a snapshot, not a performance measure.",
+      why:
+        total > 0
+          ? `${ready} of ${total} owned aircraft are ready to depart at this moment.`
+          : "You do not own any aircraft yet.",
+    },
     state: "ok",
     contributions,
-    explanation,
+    explanation:
+      total > 0
+        ? `${ready} of ${total} owned aircraft are ready to depart right now. Fly a few more weeks and this card switches to operational utilization.`
+        : "No owned aircraft yet — Aircraft Health activates once you own at least one aircraft.",
   };
 }
+
+// --- Income Health ---------------------------------------------------------
+// Domain scale: diversification and passive stability, not raw earnings.
 
 function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
   const income = inputs.income;
   if (income.state !== "ok") {
-    return {
-      id: "income-health",
-      label: "Income Health",
-      score: null,
-      band: "unknown",
-      state: income.state,
-      contributions: [],
-      explanation: "Income Intelligence is temporarily unavailable.",
-    };
+    return unavailableComposite(
+      "income-health",
+      "Income Health",
+      "Diversification & passive stability",
+      income.state,
+      "How much of your income keeps arriving when you are not flying, and how widely it is spread.",
+      "Income Intelligence is temporarily unavailable.",
+    );
   }
 
-  // Composition only: passive share (target 40%), diversification (1 - HHI),
-  // and momentum (30d vs previous 30d) all arrive published by Income.
   const shareScore = Math.max(0, Math.min(100, (income.passiveShare / 0.4) * 100));
   const diversificationScore = Math.max(0, Math.min(100, (1 - income.concentration) * 100));
   const momentumScore =
@@ -290,11 +387,48 @@ function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
       ? null
       : Math.max(0, Math.min(100, income.passiveMomentum * 60));
 
-  const parts: number[] = [shareScore * 0.4, diversificationScore * 0.4];
-  parts.push((momentumScore ?? 60) * 0.2);
-  const score = income.total30d > 0 ? Math.round(parts.reduce((a, b) => a + b, 0)) : null;
+  const score =
+    income.total30d > 0
+      ? Math.round(shareScore * 0.4 + diversificationScore * 0.4 + (momentumScore ?? 60) * 0.2)
+      : null;
+
+  const band: CompositeScore["band"] =
+    score == null
+      ? "unknown"
+      : score >= 75
+      ? "strong"
+      : score >= 55
+      ? "healthy"
+      : score >= 35
+      ? "watch"
+      : "weak";
+  const bandLabel =
+    band === "strong"
+      ? "Diversified & self-sustaining"
+      : band === "healthy"
+      ? "Stable mix"
+      : band === "watch"
+      ? "Flying-dependent"
+      : band === "weak"
+      ? "Concentrated / flying-only"
+      : "No income yet";
 
   const contributions: MetricContribution[] = [
+    {
+      id: "income.passive_share.v1",
+      sourceModule: "income",
+      sourceVersion: income.sourceVersion,
+      value: pct(income.passiveShare),
+      label: "Passive share (30d)",
+      unit: "%",
+    },
+    {
+      id: "income.concentration.v1",
+      sourceModule: "income",
+      sourceVersion: income.sourceVersion,
+      value: Math.round(income.concentration * 1000) / 1000,
+      label: "Passive concentration (HHI)",
+    },
     {
       id: "income.total_30d.v1",
       sourceModule: "income",
@@ -310,21 +444,6 @@ function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
       value: Math.round(income.passive30d),
       label: "Passive income (30d)",
       unit: "PAX",
-    },
-    {
-      id: "income.passive_share.v1",
-      sourceModule: "income",
-      sourceVersion: income.sourceVersion,
-      value: pct(income.passiveShare),
-      label: "Passive share",
-      unit: "%",
-    },
-    {
-      id: "income.concentration.v1",
-      sourceModule: "income",
-      sourceVersion: income.sourceVersion,
-      value: Math.round(income.concentration * 1000) / 1000,
-      label: "Passive concentration (HHI)",
     },
   ];
   if (income.passiveMomentum != null) {
@@ -342,7 +461,18 @@ function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
     id: "income-health",
     label: "Income Health",
     score,
-    band: bandForScore(score),
+    band,
+    scaleLabel: "Diversification & passive stability index",
+    bandLabel,
+    rationale: {
+      measured:
+        "Three published Income Intelligence values combined: passive share of the last 30 days (40%), how evenly that passive income is spread across hubs (40%), and its momentum against the prior 30 days (20%).",
+      good: "A 40% passive share with income spread across several hubs and flat-or-rising momentum reads as fully healthy. Below roughly 35 means the portfolio only earns while you personally fly.",
+      why:
+        income.total30d > 0
+          ? `Passive share is ${pct(income.passiveShare)}%, concentration (HHI) is ${Math.round(income.concentration * 100) / 100}${income.passiveMomentum != null ? `, momentum ${Math.round(income.passiveMomentum * 100) / 100}x` : ""} — which lands in the ${bandLabel} band.`
+          : "No income recorded in the last 30 days, so no band can be assigned.",
+    },
     state: "ok",
     contributions,
     explanation:
@@ -352,96 +482,156 @@ function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
   };
 }
 
+// --- Hub Capacity Health ---------------------------------------------------
+// Domain scale: tier-relative traffic. An airport is judged against your other
+// owned airports in the same tier, never against a theoretical 100% capacity —
+// owners cannot force ecosystem traffic, and low tiers are naturally quiet.
+
 function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
   const cap = inputs.hubCapacity;
   if (cap.state !== "ok") {
-    return {
-      id: "hub-capacity-health",
-      label: "Hub Capacity Health",
-      score: null,
-      band: "unknown",
-      state: cap.state,
-      contributions: [],
-      explanation: "Airport capacity utilization is temporarily unavailable.",
-    };
+    return unavailableComposite(
+      "hub-capacity-health",
+      "Airport Health",
+      "Tier-relative traffic index",
+      cap.state,
+      "How your owned airports perform against comparable airports of the same tier.",
+      "Airport Intelligence is temporarily unavailable.",
+    );
   }
   const rated = cap.airports.filter((a) => a.utilization != null);
   if (rated.length === 0) {
-    return {
-      id: "hub-capacity-health",
-      label: "Hub Capacity Health",
-      score: null,
-      band: "unknown",
-      state: "ok",
-      contributions: [],
-      explanation:
-        "No owned airport has enough observed weeks yet to rate capacity utilization.",
-    };
+    return unavailableComposite(
+      "hub-capacity-health",
+      "Airport Health",
+      "Tier-relative traffic index",
+      "ok",
+      "How your owned airports perform against comparable airports of the same tier.",
+      "No owned airport has enough observed weeks yet to rate traffic.",
+    );
   }
-  // Composition only: the timeline publishes used/capacity per airport-week.
-  // A healthy hub sits near — but not above — its weekly capacity.
-  const mean =
-    rated.reduce((s, a) => s + (a.utilization as number), 0) / rated.length;
-  const score = Math.round(Math.max(0, Math.min(100, mean * 100)));
-  const saturated = rated.filter((a) => (a.utilization as number) >= 0.95).length;
-  const starved = rated.filter((a) => (a.utilization as number) < 0.3).length;
 
-  const top = [...rated].sort(
-    (a, b) => (b.utilization as number) - (a.utilization as number),
-  )[0];
+  // Peer groups: your own owned airports sharing a tier.
+  const byTier = new Map<number, typeof rated>();
+  for (const a of rated) {
+    const list = byTier.get(a.tier) ?? [];
+    list.push(a);
+    byTier.set(a.tier, list);
+  }
+
+  const peerRatios: { icao: string; tier: number; ratio: number; util: number }[] = [];
+  for (const [tier, group] of byTier) {
+    if (group.length < 2) continue;
+    const mean =
+      group.reduce((s, a) => s + (a.utilization as number), 0) / group.length;
+    if (mean <= 0) continue;
+    for (const a of group) {
+      peerRatios.push({
+        icao: a.icao,
+        tier,
+        ratio: (a.utilization as number) / mean,
+        util: a.utilization as number,
+      });
+    }
+  }
+
+  const saturated = rated.filter((a) => (a.utilization as number) >= 0.95);
+  const rawMean =
+    rated.reduce((s, a) => s + (a.utilization as number), 0) / rated.length;
 
   const contributions: MetricContribution[] = [
     {
       id: "airport-utilization.mean_utilization.v1",
       sourceModule: "airport-utilization",
       sourceVersion: cap.sourceVersion,
-      value: pct(mean),
-      label: `Mean capacity utilization (${cap.weeksObserved}w)`,
+      value: pct(rawMean),
+      label: `Raw capacity fill (${cap.weeksObserved}w)`,
       unit: "%",
     },
     {
       id: "airport-utilization.saturated_airports.v1",
       sourceModule: "airport-utilization",
       sourceVersion: cap.sourceVersion,
-      value: saturated,
+      value: saturated.length,
       label: "Airports at/over capacity",
       unit: "count",
     },
-    {
-      id: "airport-utilization.starved_airports.v1",
-      sourceModule: "airport-utilization",
-      sourceVersion: cap.sourceVersion,
-      value: starved,
-      label: "Airports under 30% capacity",
-      unit: "count",
-    },
   ];
-  if (top) {
+  for (const p of peerRatios) {
     contributions.push({
-      id: "airport-utilization.top_airport_utilization.v1",
+      id: `airport-utilization.tier_index.${p.icao}.v1`,
       sourceModule: "airport-utilization",
       sourceVersion: cap.sourceVersion,
-      value: pct(top.utilization as number),
-      label: `Busiest hub (${top.icao})`,
-      unit: "%",
-      ref: { icao: top.icao },
+      value: Math.round(p.ratio * 100),
+      label: `${p.icao} vs Tier ${p.tier} peers (100 = typical)`,
+      ref: { icao: p.icao, tier: p.tier },
     });
   }
 
+  if (peerRatios.length === 0) {
+    return {
+      id: "hub-capacity-health",
+      label: "Airport Health",
+      score: null,
+      band: "unknown",
+      scaleLabel: "Tier-relative traffic index",
+      bandLabel: saturated.length > 0 ? "At capacity" : "No peer benchmark",
+      rationale: {
+        measured:
+          "Each owned airport is compared against your other owned airports in the same tier — traffic depends on the SimFly ecosystem, so an airport is judged against comparable airports, not against theoretical full capacity.",
+        good: "An index of 100 means typical for its tier; above 115 is above average, below 85 is below average.",
+        why: "You own at most one airport per tier, so there is no comparable peer group yet. No verdict is invented — raw fill is shown as evidence only.",
+      },
+      state: "ok",
+      contributions,
+      explanation:
+        `Owned airports averaged ${pct(rawMean)}% of their weekly slots over ${cap.weeksObserved} weeks. No tier peer group exists yet, so no above/below-average verdict is claimed` +
+        (saturated.length > 0
+          ? ` — but ${saturated.length} hub${saturated.length === 1 ? " is" : "s are"} at or over capacity and losing traffic.`
+          : "."),
+    };
+  }
+
+  const indexMean =
+    (peerRatios.reduce((s, p) => s + p.ratio, 0) / peerRatios.length) * 100;
+  const score = Math.round(indexMean);
+  const above = peerRatios.filter((p) => p.ratio >= 1.15);
+  const below = peerRatios.filter((p) => p.ratio < 0.85);
+  const band: CompositeScore["band"] =
+    score >= 115 ? "strong" : score >= 100 ? "healthy" : score >= 85 ? "watch" : "weak";
+  const bandLabel =
+    band === "strong"
+      ? "Above tier average"
+      : band === "healthy"
+      ? "Typical traffic"
+      : band === "watch"
+      ? "Slightly below tier average"
+      : "Below tier average";
+
   return {
     id: "hub-capacity-health",
-    label: "Hub Capacity Health",
+    label: "Airport Health",
     score,
-    band: bandForScore(score),
+    band,
+    scaleLabel: "Tier-relative traffic index (100 = typical for its tier)",
+    bandLabel,
+    rationale: {
+      measured:
+        "Weekly arrivals against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",
+      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
+      why:
+        `Across ${peerRatios.length} airports with tier peers the index averages ${score}` +
+        (above.length > 0 ? ` — ${above.map((p) => p.icao).join(", ")} above average` : "") +
+        (below.length > 0 ? ` — ${below.map((p) => p.icao).join(", ")} below average` : "") +
+        ".",
+    },
     state: "ok",
     contributions,
     explanation:
-      `Owned airports fill ${pct(mean)}% of their weekly capacity on average over the last ${cap.weeksObserved} weeks` +
-      (saturated > 0
-        ? ` — ${saturated} hub${saturated === 1 ? " is" : "s are"} at or over capacity and losing traffic.`
-        : starved > 0
-        ? ` — ${starved} hub${starved === 1 ? " is" : "s are"} well below the capacity you already pay for.`
-        : "."),
+      `Your hubs draw ${score}% of the traffic that comparable airports in the same tier draw (100 = typical), on ${cap.weeksObserved} weeks of data.` +
+      (saturated.length > 0
+        ? ` ${saturated.length} hub${saturated.length === 1 ? " is" : "s are"} at or over capacity and losing traffic — that is an upgrade signal.`
+        : ""),
   };
 }
 
