@@ -42,7 +42,64 @@ function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
   });
 }
 
-export const getPortfolioReport = createServerFn({ method: "GET" })
+/**
+ * Read-only: returns the persisted snapshot for the current week, or null when
+ * the pilot has not run an analysis this week. Never fans out, never computes.
+ */
+export const getPortfolioSnapshot = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string }) => d ?? {})
+  .handler(async ({ data }): Promise<PortfolioReport | null> => {
+    const { getSessionIdentity } = await import("./identity.server");
+    const { username } = await getSessionIdentity({ username: data.username });
+
+    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
+    if (!(await hasWeeklyHubSupport(username))) {
+      throw new Error("HUB_SUPPORT_REQUIRED");
+    }
+
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const weekIso = weekStartUtcIso();
+    const { data: row } = await supabaseAdmin
+      .from("portfolio_snapshot_week")
+      .select(
+        "week_start_utc, weights_version, rule_registry_version, composites, recommendations, degraded_sources, source_versions, created_at",
+      )
+      .eq("username", username)
+      .eq("week_start_utc", weekIso)
+      .maybeSingle();
+    if (!row) return null;
+
+    const { data: horizon } = await supabaseAdmin
+      .from("portfolio_horizon")
+      .select("horizon_started_at")
+      .eq("username", username)
+      .maybeSingle();
+
+    const composites = (row.composites ?? []) as unknown as PortfolioReport["composites"];
+    const sourceStates: Record<string, SourceState> = {};
+    for (const key of Object.keys(
+      (row.source_versions ?? {}) as Record<string, string>,
+    )) {
+      sourceStates[key] = "ok";
+    }
+    for (const key of row.degraded_sources ?? []) sourceStates[key] = "unavailable";
+
+    return {
+      weightsVersion: row.weights_version,
+      ruleRegistryVersion: row.rule_registry_version,
+      generatedAtIso: row.created_at,
+      weekStartUtcIso: row.week_start_utc,
+      horizonStartedAtIso: horizon?.horizon_started_at ?? row.created_at,
+      isFirstGeneration: false,
+      composites,
+      recommendations: (row.recommendations ??
+        []) as unknown as PortfolioReport["recommendations"],
+      sourceStates,
+      degradedSources: row.degraded_sources ?? [],
+    };
+  });
+
+export const runPortfolioAnalysis = createServerFn({ method: "POST" })
   .inputValidator((d?: { username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<PortfolioReport> => {
     const { getSessionIdentity } = await import("./identity.server");
@@ -222,6 +279,7 @@ export const getPortfolioReport = createServerFn({ method: "GET" })
               return {
                 icao: m.icao,
                 name: m.name,
+                tier: m.category,
                 capacity: Math.round(capAvg),
                 usedAvg,
                 utilization: used.length > 0 && capAvg > 0 ? usedAvg / capAvg : null,
@@ -308,7 +366,8 @@ export const getPortfolioReport = createServerFn({ method: "GET" })
     });
 
     // Weekly snapshot — only persist when no source is degraded, so history
-    // never records a half-computed week. First write wins.
+    // never records a half-computed week. An explicit re-run overwrites the
+    // current week; earlier weeks are never touched.
     if (report.degradedSources.length === 0) {
       const inputsFrozen = {
         fleet,
@@ -337,8 +396,9 @@ export const getPortfolioReport = createServerFn({ method: "GET" })
             inputs_frozen: inputsFrozen as never,
             source_versions: sourceVersions,
             degraded_sources: report.degradedSources,
+            created_at: report.generatedAtIso,
           },
-          { onConflict: "username,week_start_utc", ignoreDuplicates: true },
+          { onConflict: "username,week_start_utc" },
         );
     }
 
