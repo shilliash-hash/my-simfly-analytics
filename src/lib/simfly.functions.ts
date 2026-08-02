@@ -2687,7 +2687,9 @@ if (scope.length === 0) {
    }
    
    // Unifikujemy po unikalnym ID lotu, aby zapobiec podwójnemu naliczaniu
-   const uniqueFlightId = r.flightId || r.id || `${r.tsMs}-${r.role}`;
+   const flightUniqueKey = r.flightId ? `${r.flightId}-${r.role}` : (r.id ? `${r.id}-${r.role}` : `${r.tsMs}-${r.role}`);
+   const uniqueFlightId = flightUniqueKey;
+
    flightsByWeekSet.get(ws)!.add(uniqueFlightId);
 
   }
