@@ -2336,18 +2336,8 @@ export type AirportHistoryRow = {
   ownerCredit: number;
 };
 
-
-/**
- * A single airport movement. An arrival and a departure each count as one
- * operation; a flight that both departs from and arrives at the same airport
- * yields two movements. Unlike `rows`, movements are NOT filtered by earned
- * PAX or aircraft metadata — a zero-payout flight is still an operation.
- */
-export type AirportMovement = { tsMs: number; role: "takeoff" | "landing" };
-
 export type AirportHistoryResult = {
   rows: AirportHistoryRow[];
-  movements: AirportMovement[];
   pagesFetched: number;
   sampled: number;
   excluded: number;
@@ -2366,8 +2356,6 @@ async function collectAirportHistoryFlights(
   );
   const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
   const rows: AirportHistoryRow[] = [];
-  const movements: AirportMovement[] = [];
-
   let sampled = 0;
   let excluded = 0;
   let consecutiveEmpty = 0;
@@ -2384,23 +2372,7 @@ async function collectAirportHistoryFlights(
     for (const f of r.flights as RawAirportHistFlight[]) {
       sampled++;
       const isOrigin = f.origin?.icao === icao;
-      const isDestination = f.destination?.icao === icao;
       const side = isOrigin ? f.origin : f.destination;
-
-      const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "";
-      const tsMs = ts ? Date.parse(ts) : NaN;
-      const inWindow = !(sinceMs > 0 && Number.isFinite(tsMs) && tsMs < sinceMs);
-      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs >= sinceMs) {
-        pageAllOutside = false;
-      }
-
-      // Airport operations: every movement counts, regardless of payout or
-      // aircraft metadata. Departure = 1 operation, arrival = 1 operation.
-      if (inWindow && Number.isFinite(tsMs)) {
-        if (isOrigin) movements.push({ tsMs, role: "takeoff" });
-        if (isDestination) movements.push({ tsMs, role: "landing" });
-      }
-
       if (!side) { excluded++; continue; }
 
       const bonus = side.bonusPax ?? 0;
@@ -2414,10 +2386,14 @@ async function collectAirportHistoryFlights(
       const level = f.airplane?.level;
       if (!tier || !level) { excluded++; continue; }
 
-      if (!inWindow) {
+      const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "";
+      const tsMs = ts ? Date.parse(ts) : NaN;
+      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs >= sinceMs) {
+        pageAllOutside = false;
+      }
+      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs < sinceMs) {
         continue;
       }
-
 
       rows.push({
         flightId: f.flightID,
@@ -2443,7 +2419,7 @@ async function collectAirportHistoryFlights(
     }
   }
 
-  return { rows, movements, pagesFetched: maxPages, sampled, excluded };
+  return { rows, pagesFetched: maxPages, sampled, excluded };
 }
 
 
@@ -2513,90 +2489,83 @@ export const getAirportPayoutMatrix = createServerFn({ method: "GET" })
     };
   });
 
-export type AirportPayoutMatricesBundle = {
-  matrices: AirportPayoutMatrix[];
-  fetchedAt: string;
-};
 
-export const getAllAirportPayoutMatrices = createServerFn({ method: "GET" })
-  .inputValidator((d?: { pages?: number; username?: string; adminToken?: string }) => d ?? {})
-  .handler(async ({ data }): Promise<AirportPayoutMatricesBundle> => {
-    const { username, nonce } = await resolveIdentity({ username: data.username });
-    const { hasWeeklyHubSupport } = await import("./hub-support.functions");
-    if (!(await hasWeeklyHubSupport(username, { adminToken: data.adminToken }))) {
-      throw new Error("HUB_SUPPORT_REQUIRED");
-    }
 
-    const assets = await fetchJSON<RawAssetsAll>(
-      `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
-    );
-    const icaos = (assets?.items ?? [])
-      .filter((it): it is RawAssetAirport => it.type === "Airport")
-      .map((it) => it.icao);
-
-    const maxPages = Math.min(Math.max(data.pages ?? 63, 1), 120);
-
-    const matrices = await Promise.all(
-      icaos.map(async (icao): Promise<AirportPayoutMatrix> => {
-        const { rows, pagesFetched, sampled, excluded } =
-          await collectAirportHistoryFlights(icao, username, nonce, { maxPages });
-
-        type Bucket = { sum: number; n: number; samples: PayoutMatrixFlight[] };
-        const buckets = new Map<string, Bucket>();
-        const tierSet = new Set<number>();
-        const levelSet = new Set<number>();
-
-        for (const row of rows) {
-          const tier = row.aircraftTier!;
-          const level = row.aircraftLevel!;
-          tierSet.add(tier);
-          levelSet.add(level);
-          const key = `${tier}:${level}`;
-          const b = buckets.get(key) ?? { sum: 0, n: 0, samples: [] };
-          b.sum += row.basePax;
-          b.n += 1;
-          b.samples.push({
-            flightId: row.flightId,
-            ts: row.ts,
-            role: row.role,
-            otherIcao: row.otherIcao,
-            distanceNm: row.distanceNm,
-            aircraftName: row.aircraftName,
-            tailNumber: row.tailNumber,
-            pilot: row.pilot,
-            basePax: row.basePax,
-            bonusPax: row.bonusPax,
-            totalPax: row.ownerCredit,
-          });
-          buckets.set(key, b);
-        }
-
-        const cells: PayoutMatrixCell[] = [];
-        for (const [key, b] of buckets) {
-          const [tier, level] = key.split(":").map(Number);
-          const samples = b.samples
-            .sort((a, b) => (b.ts > a.ts ? 1 : b.ts < a.ts ? -1 : 0))
-            .slice(0, 200);
-          cells.push({ tier, level, avgPax: b.sum / b.n, flights: b.n, samples });
-        }
-
-        return {
-          icao,
-          pagesFetched,
-          flightsSampled: sampled,
-          flightsUsed: rows.length,
-          flightsExcluded: excluded,
-          tiers: [...tierSet].sort((a, b) => a - b),
-          levels: [...levelSet].sort((a, b) => a - b),
-          cells,
-          fetchedAt: new Date().toISOString(),
-        };
-      }),
-    );
-
-    return { matrices, fetchedAt: new Date().toISOString() };
+/**
+ * Lightweight estimate of how big the historical backfill will be.
+ * Hits page 1 of the logbook and the assets list (both cheap) to compute
+ * total logbook pages and the number of owned airplanes the heavy backfill
+ * will scan. Used by the client to render an import-progress indicator
+ * while getSimflyPayload is in flight.
+ */
+export const getBackfillEstimate = createServerFn({ method: "GET" })
+  .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
+  .handler(async ({ data }) => {
+    const { username, nonce } = await resolveIdentity(data);
+    const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
+    const [p1, assets] = await Promise.all([
+      fetchJSON<RawFlightsPage>(`${SIMFLY_BASE}/user/flights?${qs}&fpage=1`),
+      fetchJSON<RawAssetsAll>(`${SIMFLY_BASE}/user/assets/all?${qs}`),
+    ]);
+    const logbookPages = Math.max(1, Math.min(1000, Number(p1?.totalPages) || 1));
+    const airplanes = (assets?.items ?? []).filter((a) => a?.type === "Airplane").length;
+    // Heavy backfill scans up to AIRCRAFT_BACKFILL_PAGE_LIMIT pages per plane,
+    // but most planes finish far earlier. Use a soft estimate of ~12 pages/plane
+    // for time projection only — pagesTotal exposes the true ceiling.
+    const aircraftPagesEstimate = airplanes * 12;
+    return {
+      username,
+      logbookPages,
+      airplanes,
+      aircraftPagesEstimate,
+      pagesTotal: logbookPages + aircraftPagesEstimate,
+      fetchedAt: new Date().toISOString(),
+    };
   });
 
+// ===== Compare-hubs: lookup any airport in SimFly by ICAO =====
+
+/** Suggest airports by ICAO prefix or name substring from the OpenFlights geo dataset. */
+export const searchAirports = createServerFn({ method: "GET" })
+  .inputValidator((d: { query: string; limit?: number }) => d)
+  .handler(async ({ data }): Promise<{ icao: string; name: string }[]> => {
+    const q = (data.query ?? "").trim().toUpperCase();
+    if (q.length < 1) return [];
+    const limit = Math.min(Math.max(data.limit ?? 8, 1), 25);
+    const map = await loadGeo();
+    const prefix: { icao: string; name: string }[] = [];
+    const contains: { icao: string; name: string }[] = [];
+    for (const g of map.values()) {
+      const icao = g.icao.toUpperCase();
+      if (icao.startsWith(q)) prefix.push({ icao, name: g.name });
+      else if (icao.includes(q) || g.name.toUpperCase().includes(q))
+        contains.push({ icao, name: g.name });
+      if (prefix.length >= limit) break;
+    }
+    return [...prefix, ...contains].slice(0, limit);
+  });
+
+/** Fetch any SimFly airport (owned or not) and return an AirportExt shell.
+ * 7d/30d roll-ups are zero because they require the viewer's per-flight log. */
+export const getAirportSummary = createServerFn({ method: "GET" })
+  .inputValidator((d: { icao: string }) => d)
+  .handler(async ({ data }): Promise<AirportExt | null> => {
+    const icao = (data.icao ?? "").trim().toUpperCase();
+    if (!/^[A-Z0-9]{4}$/.test(icao)) return null;
+    const url = `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`;
+    const res = await fetch(url, { headers: { Accept: "application/json" } });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`SimFly airport lookup failed (${res.status})`);
+    const text = await res.text();
+    let raw: RawAssetAirport;
+    try {
+      raw = JSON.parse(text) as RawAssetAirport;
+    } catch {
+      return null;
+    }
+    if (!raw || raw.type !== "Airport" || !raw.icao) return null;
+    return mapAirport(raw, []);
+  });
 
 // ===== Airport Capacity Utilization Timeline =====
 export type UtilizationWeekAirport = { icao: string; capacity: number; used: number };
@@ -2610,12 +2579,10 @@ export type UtilizationTimeline = {
   airportMeta: { icao: string; name: string; category: number; level: number; capacity: number }[];
   fetchedAt: string;
 };
-
 // SimFly week epoch: Monday UTC 2022-08-15 => Week 1. Adjustable if the real
 // SimFly numbering diverges; the goal here is a stable monotonic label.
 const SIMFLY_WEEK_EPOCH_MS = Date.UTC(2022, 7, 15, 0, 0, 0);
 const MS_PER_WEEK = 7 * 24 * 60 * 60 * 1000;
-
 function weekStartUtcMs(tsMs: number): number {
   const d = new Date(tsMs);
   const day = d.getUTCDay();
@@ -2625,17 +2592,14 @@ function weekStartUtcMs(tsMs: number): number {
 function simflyWeekNumber(weekStartMs: number): number {
   return Math.max(1, Math.round((weekStartMs - SIMFLY_WEEK_EPOCH_MS) / MS_PER_WEEK) + 1);
 }
-
 export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
   .inputValidator((d?: { icaos?: string[]; pages?: number; username?: string }) => d ?? {})
   .handler(async ({ data }): Promise<UtilizationTimeline> => {
     const { username, nonce } = await resolveIdentity({ username: data.username });
     const maxPages = Math.min(Math.max(data.pages ?? 63, 1), 120);
     const cacheKey = `util:${username}:${(data.icaos ?? []).slice().sort().join(",")}:${maxPages}`;
-
-    return memo(cacheKey, 30_000, async () => {
+   return memo(cacheKey, 30_000, async () => {
       const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
       const assets = await fetchJSON<RawAssetsAll>(
         `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
       );
@@ -2646,7 +2610,6 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
       const scope = requested.size
         ? ownedAirports.filter((a) => requested.has(a.icao.toUpperCase()))
         : ownedAirports;
-
       const airportMeta = scope.map((a) => ({
         icao: a.icao,
         name: a.name ?? a.icao,
@@ -2654,14 +2617,11 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         level: a.level ?? 0,
         capacity: a.maxRotation ?? 0,
       }));
-
-      if (scope.length === 0) {
+if (scope.length === 0) {
         return { weeks: [], airportMeta, fetchedAt: new Date().toISOString() };
       }
-
       const currentWeekStart = weekStartUtcMs(Date.now());
       const icaos = scope.map((a) => a.icao);
-
       // Load cached completed weeks for the scoped airports.
       type CachedRow = {
         icao: string;
@@ -2675,7 +2635,6 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         .eq("username", username)
         .in("icao", icaos);
       const cachedRows = (cachedRowsRaw ?? []) as CachedRow[];
-
       // Per-airport: cached week map + last cached week start.
       const cachedByAirport = new Map<string, Map<number, { capacity: number; used: number }>>();
       const lastCachedWeek = new Map<string, number>();
@@ -2689,7 +2648,6 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         cachedByAirport.get(row.icao)?.set(ws, { capacity: row.capacity, used: row.used });
         if (ws > (lastCachedWeek.get(row.icao) ?? 0)) lastCachedWeek.set(row.icao, ws);
       }
-
       // Per-airport live buckets (fetched only where needed).
       const liveByAirport = new Map<string, Map<number, number>>();
       type UpsertRow = {
@@ -2701,29 +2659,42 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         used: number;
       };
       const toInsert: UpsertRow[] = [];
-
       await Promise.all(
         scope.map(async (a) => {
-          const last = lastCachedWeek.get(a.icao) ?? 0;
+           const last = lastCachedWeek.get(a.icao) ?? 0;
           // If we have cache coverage, we only need to fetch from the first
           // uncached week onward (which at minimum is the current week).
           // Otherwise, do a full historical scan.
           const hasCache = last > 0;
           const sinceMs = hasCache ? Math.min(currentWeekStart, last + MS_PER_WEEK) : 0;
           const pages = hasCache ? Math.min(maxPages, 8) : maxPages;
-
-          const { movements } = await collectAirportHistoryFlights(a.icao, username, nonce, {
-            maxPages: pages,
+          const { rows } = await collectAirportHistoryFlights(a.icao, username, nonce, {
+             maxPages: pages,
             sinceMs,
           });
-          // Airport utilization = total operations: arrivals + departures.
-          // Every movement counts as 1, regardless of role or payout.
           const perWeek = new Map<number, number>();
-          for (const m of movements) {
-            if (!m.tsMs) continue;
-            const ws = weekStartUtcMs(m.tsMs);
-            perWeek.set(ws, (perWeek.get(ws) ?? 0) + 1);
-          }
+          const flightsByWeekSet = new Map<number, Set<string>>();
+
+ for (const r of rows) {
+   // Akceptujemy ZARÓWNO lądowania (landing) jak i odloty (takeoff)
+   if (r.role !== "landing" && r.role !== "takeoff") continue;
+   if (!r.tsMs) continue;
+
+   const ws = weekStartUtcMs(r.tsMs);
+   
+   if (!flightsByWeekSet.has(ws)) {
+     flightsByWeekSet.set(ws, new Set<string>());
+   }
+   
+   // Unifikujemy po unikalnym ID lotu, aby zapobiec podwójnemu naliczaniu
+    const uniqueFlightId = r.flightId || r.id || `${r.tsMs}-${r.role}`;
+   flightsByWeekSet.get(ws)!.add(uniqueFlightId);
+
+  }
+
+ for (const [ws, flightSet] of flightsByWeekSet.entries()) {
+   perWeek.set(ws, flightSet.size);
+ }
 
           liveByAirport.set(a.icao, perWeek);
           // Every completed week we just observed AND that isn't already cached → upsert.
