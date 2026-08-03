@@ -153,6 +153,10 @@ export async function getSessionIdentity(override?: {
         { username, nonce: nonceStr, resolved_at: new Date().toISOString() },
         { onConflict: "username" },
       );
+    // Enter the background-sync rotation so this pilot's flights keep
+    // importing without anyone opening the Hub.
+    const { registerPilotForSync } = await import("./simfly-sync.server");
+    await registerPilotForSync(username);
   } catch (err) {
     console.log(
       `[Identity] Pilot: ${username} | upsert pilot_nonces failed: ${err instanceof Error ? err.message : String(err)}`,
