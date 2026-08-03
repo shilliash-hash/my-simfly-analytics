@@ -114,9 +114,9 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
     const { getSimflyPayload, getUpgradeAdvisor, getAirportUtilizationTimeline } =
       await import("./simfly.functions");
     const { getIncomeSummary } = await import("./income.functions");
-    const { getAircraftUtilizationTimeline, classifyAircraft } = await import(
-      "./aircraft-utilization.functions"
-    );
+    const { getAircraftUtilizationTimeline, rateAircraftUtilization, aircraftAvailability } =
+      await import("./aircraft-utilization.functions");
+
 
     // Fan out. SimFly payload feeds fleet + is required to compute advisor
     // inputs, so we await it first then run the rest in parallel.
@@ -206,14 +206,13 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
               return {
                 aircraftId: info.aircraftId,
                 label: info.tailNumber || info.name || info.aircraftId,
-                cls: classifyAircraft(
-                  trailingOperational,
-                  trailingFlights,
-                  liveById.get(info.aircraftId) ?? null,
-                ),
+                // Rating is statistical only — live cooldown no longer masks it.
+                cls: rateAircraftUtilization(trailingOperational, trailingFlights),
+                availability: aircraftAvailability(liveById.get(info.aircraftId) ?? null),
                 trailingOperational,
                 trailingFlights,
               };
+
             });
             const fleetKeys = weeks.map((w) => w.weekStartIso);
             const fleetOpVals = fleetKeys
@@ -255,8 +254,9 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
           }
         : { state: "unavailable" };
 
-     // Airport Capacity Utilization — capacity/used (operations = arrivals +
+    // Airport Capacity Utilization — capacity/used (operations = arrivals +
     // departures) are read verbatim from the published timeline.
+
     const hubCapacity: EngineInputs["hubCapacity"] =
       airportUtilRes.status === "fulfilled" && airportUtilRes.value
         ? (() => {
