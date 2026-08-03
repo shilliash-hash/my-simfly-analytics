@@ -46,9 +46,9 @@ function colorFor(id: string): string {
 }
 
 const RATING_STYLES: Record<UtilizationRating, { label: string; cls: string; hint: string }> = {
-  WORKHORSE: { label: "Workhorse",  cls: "text-runway",           hint: "≥15% operational utilization (trailing 4w)" },
-  ACTIVE:    { label: "Active",     cls: "text-primary",          hint: "5-15% operational utilization" },
-  UNDERUSED: { label: "Underused",  cls: "text-instrument",       hint: "2–5% operational utilization" },
+  WORKHORSE: { label: "Workhorse",  cls: "text-runway",           hint: "≥30% operational utilization (trailing 4w)" },
+  ACTIVE:    { label: "Active",     cls: "text-primary",          hint: "10–30% operational utilization" },
+  UNDERUSED: { label: "Underused",  cls: "text-instrument",       hint: "2–10% operational utilization" },
   IDLE:      { label: "Idle",       cls: "text-destructive",      hint: "Virtually unused over the trailing window" },
   UNKNOWN:   { label: "Unknown",    cls: "text-muted-foreground", hint: "Insufficient data" },
 };
@@ -58,6 +58,7 @@ const AVAIL_STYLES: Record<AircraftAvailability, { label: string; cls: string; h
   GROUNDED: { label: "Grounded", cls: "text-foreground/70",    hint: "On post-flight cooldown — neutral" },
   READY:    { label: "Ready",    cls: "text-runway/80",        hint: "Available to dispatch right now" },
 };
+
 
 type SortKey = "utilization" | "activity" | "flights" | "hours" | "tier" | "level";
 type ChartMetric = "operational" | "activity";
@@ -184,6 +185,7 @@ export function AircraftUtilizationTimeline({
     flightHours: number;
     rating: UtilizationRating;
     availability: AircraftAvailability;
+
     airborne: boolean;
     grounded: boolean;
     weekCell: AircraftWeekCell;
@@ -201,7 +203,7 @@ export function AircraftUtilizationTimeline({
         grounded: a.inGroundOperation,
         airborne,
       });
-      
+
       const flightMinutes = cell?.activeMinutes ?? 0;
       const operationalCurrent = cell?.operationalUtilization ?? trailing.op;
       const activityCurrent = cell?.flightActivity ?? null;
@@ -217,7 +219,9 @@ export function AircraftUtilizationTimeline({
         hasEvidence: cell?.hasGroundedEvidence ?? trailing.hasEvidence,
         flights: cell?.flights ?? 0,
         flightHours: flightMinutes / 60,
-        cls,
+        rating,
+        availability,
+
         airborne,
         grounded: a.inGroundOperation,
         weekCell: cell ?? null,
@@ -244,6 +248,7 @@ export function AircraftUtilizationTimeline({
   const idleCount = rows.filter((r) => r.rating === "IDLE").length;
   const groundedCount = rows.filter((r) => r.availability === "GROUNDED").length;
   const readyCount = rows.filter((r) => r.availability === "READY").length;
+
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -354,7 +359,7 @@ export function AircraftUtilizationTimeline({
           value={String(idleCount)}
           sub={`${readyCount} ready · ${groundedCount} on cooldown`}
           tone={idleCount > 0 ? "instrument" : undefined}
-          
+
         />
         <Tile
           label="Fleet rotations"
@@ -480,7 +485,7 @@ export function AircraftUtilizationTimeline({
                     <td className="px-4 py-2">
                       <Popover>
                         <PopoverTrigger asChild>
-                                                   <button
+                          <button
                             type="button"
                             className="mono inline-flex items-center overflow-hidden rounded-md border border-border/70 bg-secondary/30 text-[10px] uppercase tracking-widest transition-colors hover:bg-secondary/60"
                           >
@@ -505,7 +510,7 @@ export function AircraftUtilizationTimeline({
                           <div className="mono mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
                             Availability
                           </div>
-                                                    <div className={cn("font-medium", avail.cls)}>{avail.label}</div>
+                          <div className={cn("font-medium", avail.cls)}>{avail.label}</div>
                           <div className="mt-1 text-muted-foreground">{avail.hint}</div>
 
                           <div className="mono mb-1 mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -526,7 +531,7 @@ export function AircraftUtilizationTimeline({
                       </Popover>
                     </td>
                   </tr>
-                  
+
                 );
               })}
               {sortedRows.length === 0 && (
@@ -538,25 +543,13 @@ export function AircraftUtilizationTimeline({
       </div>
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
-  Operational utilization = active flight time ÷ (observed week minutes − grounded minutes).
-          Weeks without cooldown snapshots are shown as flight activity (marked *). Status is two
+        Operational utilization = active flight time ÷ (observed week minutes − grounded minutes).
+        Weeks without cooldown snapshots are shown as flight activity (marked *). Status is two
         independent readings: live availability (<span className="mono">READY</span> ·{" "}
         <span className="mono">GROUNDED</span> · <span className="mono">AIRBORNE</span>) and the
         trailing 4-week utilization rating — a cooldown no longer hides the rating.
-</p>
+      </p>
 
-<p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-  Large airliners naturally achieve lower Operational Utilization than light aircraft because they
-  spend significantly longer on mandatory post-flight ground operations. Aircraft upgrades reduce
-  this downtime, making higher-level aircraft easier to keep highly utilized.
-</p>
-
-<p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-  This reflects the actual SimFly operating model. Operational Utilization is an efficiency metric,
-  not a productivity metric. A long-haul aircraft flying one 8-hour mission may operate at peak
-  efficiency even though its utilization percentage is lower than that of a frequently flown light
-  aircraft.
-</p>
     </section>
   );
 }
