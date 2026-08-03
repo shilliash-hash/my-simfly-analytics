@@ -188,7 +188,7 @@ function pct(n: number): number {
  * UTIL_THRESHOLDS_V1. Portfolio does not invent its own utilization scale —
  * these are the same cut points the owning module publishes.
  */
-const UTIL_SCALE = { workhorse: 0.15, active: 0.5, underused: 0.02 } as const;
+const UTIL_SCALE = { workhorse: 0.3, active: 0.1, underused: 0.02 } as const;
 
 function unavailableComposite(
   id: string,
