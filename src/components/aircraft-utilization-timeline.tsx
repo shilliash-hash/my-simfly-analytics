@@ -14,10 +14,13 @@ import { Check, ChevronDown, ChevronLeft, ChevronRight, Info, Search } from "luc
 
 import {
   getAircraftUtilizationTimeline,
-  classifyAircraft,
-  type UtilizationClass,
+  rateAircraftUtilization,
+  aircraftAvailability,
+  type UtilizationRating,
+  type AircraftAvailability,
   type AircraftWeekCell,
 } from "@/lib/aircraft-utilization.functions";
+
 import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AircraftExt, MyLiveFlight } from "@/lib/types";
 import {
@@ -42,14 +45,18 @@ function colorFor(id: string): string {
   return PALETTE[h % PALETTE.length];
 }
 
-const CLASS_STYLES: Record<UtilizationClass, { label: string; cls: string; hint: string }> = {
-  WORKHORSE: { label: "Workhorse",  cls: "bg-runway/20 text-runway",           hint: "≥15% operational utilization (trailing 4w)" },
-  ACTIVE:    { label: "Active",     cls: "bg-primary/15 text-primary",         hint: "5–15% operational utilization" },
-  UNDERUSED: { label: "Underused",  cls: "bg-instrument/15 text-instrument",   hint: "2–5% operational utilization" },
-  IDLE:      { label: "Idle",       cls: "bg-destructive/15 text-destructive", hint: "Available for weeks but virtually unused" },
-  GROUNDED:  { label: "Grounded",   cls: "bg-muted text-foreground/80",        hint: "Currently on post-flight cooldown — neutral" },
-  AIRBORNE:  { label: "Airborne",   cls: "bg-primary/15 text-primary",         hint: "Currently in the air" },
-  UNKNOWN:   { label: "Unknown",    cls: "bg-muted text-muted-foreground",     hint: "Insufficient data" },
+const RATING_STYLES: Record<UtilizationRating, { label: string; cls: string; hint: string }> = {
+  WORKHORSE: { label: "Workhorse",  cls: "text-runway",           hint: "≥15% operational utilization (trailing 4w)" },
+  ACTIVE:    { label: "Active",     cls: "text-primary",          hint: "5-15% operational utilization" },
+  UNDERUSED: { label: "Underused",  cls: "text-instrument",       hint: "2–5% operational utilization" },
+  IDLE:      { label: "Idle",       cls: "text-destructive",      hint: "Virtually unused over the trailing window" },
+  UNKNOWN:   { label: "Unknown",    cls: "text-muted-foreground", hint: "Insufficient data" },
+};
+
+const AVAIL_STYLES: Record<AircraftAvailability, { label: string; cls: string; hint: string }> = {
+  AIRBORNE: { label: "Airborne", cls: "text-runway",           hint: "Currently in the air" },
+  GROUNDED: { label: "Grounded", cls: "text-foreground/70",    hint: "On post-flight cooldown — neutral" },
+  READY:    { label: "Ready",    cls: "text-runway/80",        hint: "Available to dispatch right now" },
 };
 
 type SortKey = "utilization" | "activity" | "flights" | "hours" | "tier" | "level";
@@ -175,7 +182,8 @@ export function AircraftUtilizationTimeline({
     hasEvidence: boolean;
     flights: number;
     flightHours: number;
-    cls: UtilizationClass;
+    rating: UtilizationRating;
+    availability: AircraftAvailability;
     airborne: boolean;
     grounded: boolean;
     weekCell: AircraftWeekCell;
@@ -188,10 +196,12 @@ export function AircraftUtilizationTimeline({
       const airborne = a.tailNumber
         ? !!liveByTail.get(a.tailNumber.toLowerCase()) && !a.inGroundOperation
         : false;
-      const cls = classifyAircraft(trailing.op, trailing.flights, {
+      const rating = rateAircraftUtilization(trailing.op, trailing.flights);
+      const availability = aircraftAvailability({
         grounded: a.inGroundOperation,
         airborne,
       });
+      
       const flightMinutes = cell?.activeMinutes ?? 0;
       const operationalCurrent = cell?.operationalUtilization ?? trailing.op;
       const activityCurrent = cell?.flightActivity ?? null;
@@ -231,8 +241,9 @@ export function AircraftUtilizationTimeline({
   }, [rows, sortKey]);
 
   const totalOwned = ownedAircraft.length;
-  const idleCount = rows.filter((r) => r.cls === "IDLE").length;
-  const groundedCount = rows.filter((r) => r.cls === "GROUNDED").length;
+  const idleCount = rows.filter((r) => r.rating === "IDLE").length;
+  const groundedCount = rows.filter((r) => r.availability === "GROUNDED").length;
+  const readyCount = rows.filter((r) => r.availability === "READY").length;
 
   const toggle = (id: string) => {
     setSelected((prev) => {
@@ -341,8 +352,9 @@ export function AircraftUtilizationTimeline({
         <Tile
           label="Idle aircraft"
           value={String(idleCount)}
-          sub={`${groundedCount} on cooldown (neutral)`}
+          sub={`${readyCount} ready · ${groundedCount} on cooldown`}
           tone={idleCount > 0 ? "instrument" : undefined}
+          
         />
         <Tile
           label="Fleet rotations"
@@ -437,7 +449,8 @@ export function AircraftUtilizationTimeline({
             </thead>
             <tbody>
               {sortedRows.map((r) => {
-                const style = CLASS_STYLES[r.cls];
+                const rate = RATING_STYLES[r.rating];
+                const avail = AVAIL_STYLES[r.availability];
                 return (
                   <tr key={r.aircraftId} className="border-t border-border transition-colors hover:bg-secondary/30">
                     <td className="mono px-4 py-2 text-runway">{r.reg}</td>
@@ -467,18 +480,39 @@ export function AircraftUtilizationTimeline({
                     <td className="px-4 py-2">
                       <Popover>
                         <PopoverTrigger asChild>
-                          <button type="button"
-                            className={`mono inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] uppercase tracking-widest ${style.cls}`}>
-                            {style.label}
-                            <Info className="h-3 w-3 opacity-60" />
+                                                   <button
+                            type="button"
+                            className="mono inline-flex items-center overflow-hidden rounded-md border border-border/70 bg-secondary/30 text-[10px] uppercase tracking-widest transition-colors hover:bg-secondary/60"
+                          >
+                            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5", avail.cls)}>
+                              <span
+                                className={cn(
+                                  "h-1.5 w-1.5 rounded-full bg-current",
+                                  r.availability === "AIRBORNE" && "animate-pulse",
+                                  r.availability === "GROUNDED" && "opacity-50",
+                                )}
+                              />
+                              {avail.label}
+                            </span>
+                            <span className="h-3.5 w-px bg-border" />
+                            <span className={cn("inline-flex items-center gap-1 px-1.5 py-0.5", rate.cls)}>
+                              {rate.label}
+                              <Info className="h-3 w-3 opacity-60" />
+                            </span>
                           </button>
                         </PopoverTrigger>
                         <PopoverContent className="w-72 text-xs">
                           <div className="mono mb-1 text-[10px] uppercase tracking-widest text-muted-foreground">
-                            Classification evidence
+                            Availability
                           </div>
-                          <div className="font-medium">{style.label}</div>
-                          <div className="mt-1 text-muted-foreground">{style.hint}</div>
+                                                    <div className={cn("font-medium", avail.cls)}>{avail.label}</div>
+                          <div className="mt-1 text-muted-foreground">{avail.hint}</div>
+
+                          <div className="mono mb-1 mt-3 text-[10px] uppercase tracking-widest text-muted-foreground">
+                            Utilization rating
+                          </div>
+                          <div className={cn("font-medium", rate.cls)}>{rate.label}</div>
+                          <div className="mt-1 text-muted-foreground">{rate.hint}</div>
                           <div className="mt-2 space-y-0.5">
                             <div>Trailing 4w operational: {r.operational !== null ? `${(r.operational * 100).toFixed(1)}%` : "—"}</div>
                             <div>Trailing 4w activity: {r.activity !== null ? `${(r.activity * 100).toFixed(1)}%` : "—"}</div>
@@ -492,6 +526,7 @@ export function AircraftUtilizationTimeline({
                       </Popover>
                     </td>
                   </tr>
+                  
                 );
               })}
               {sortedRows.length === 0 && (
@@ -504,8 +539,10 @@ export function AircraftUtilizationTimeline({
 
       <p className="mt-3 text-[11px] leading-relaxed text-muted-foreground">
   Operational utilization = active flight time ÷ (observed week minutes − grounded minutes).
-  Weeks without cooldown snapshots are shown as flight activity (marked *). Aircraft currently on
-  a post-flight timer are labelled <span className="mono">GROUNDED</span> (neutral), never Idle.
+          Weeks without cooldown snapshots are shown as flight activity (marked *). Status is two
+        independent readings: live availability (<span className="mono">READY</span> ·{" "}
+        <span className="mono">GROUNDED</span> · <span className="mono">AIRBORNE</span>) and the
+        trailing 4-week utilization rating — a cooldown no longer hides the rating.
 </p>
 
 <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
