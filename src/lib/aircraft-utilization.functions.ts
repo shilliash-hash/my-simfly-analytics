@@ -320,6 +320,27 @@ export function classifyAircraft(
   // Current live state wins for neutral tiers.
   if (currentState?.airborne) return "AIRBORNE";
   if (currentState?.grounded) return "GROUNDED";
+    return rateAircraftUtilization(trailingOp, trailingFlights);
+}
+
+/** Availability is orthogonal to the statistical rating. */
+export type AircraftAvailability = "AIRBORNE" | "GROUNDED" | "READY";
+
+export function aircraftAvailability(
+  currentState: { grounded: boolean; airborne: boolean } | null,
+): AircraftAvailability {
+  if (currentState?.airborne) return "AIRBORNE";
+  if (currentState?.grounded) return "GROUNDED";
+  return "READY";
+}
+
+/** Statistical rating only — never masked by live availability. */
+export type UtilizationRating = "WORKHORSE" | "ACTIVE" | "UNDERUSED" | "IDLE" | "UNKNOWN";
+
+export function rateAircraftUtilization(
+  trailingOp: number | null,
+  trailingFlights: number,
+): UtilizationRating {
   if (trailingOp === null) return "UNKNOWN";
   if (trailingOp >= UTIL_THRESHOLDS_V1.workhorse) return "WORKHORSE";
   if (trailingOp >= UTIL_THRESHOLDS_V1.active) return "ACTIVE";
@@ -328,3 +349,4 @@ export function classifyAircraft(
   if (trailingFlights === 0) return "IDLE";
   return "UNDERUSED";
 }
+
