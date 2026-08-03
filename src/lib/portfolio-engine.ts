@@ -52,7 +52,21 @@ export type CompositeScore = {
   state: SourceState;
   contributions: MetricContribution[];
   explanation: string;
+  /**
+   * Optional presentation payload: per-item published values the UI can render
+   * directly (e.g. airport capacity bars). No analytics — verbatim upstream
+   * numbers, carried so the UI never recomputes anything.
+   */
+  breakdown?: {
+    key: string;
+    label: string;
+    sublabel?: string;
+    used: number;
+    capacity: number;
+    ratio: number;
+  }[];
 };
+
 
 export type RecommendationTier = "immediate" | "planned" | "consider";
 
@@ -188,7 +202,7 @@ function pct(n: number): number {
  * UTIL_THRESHOLDS_V1. Portfolio does not invent its own utilization scale —
  * these are the same cut points the owning module publishes.
  */
-const UTIL_SCALE = { workhorse: 0.3, active: 0.1, underused: 0.02 } as const;
+const UTIL_SCALE = { workhorse: 0.2, active: 0.075, underused: 0.02 } as const;
 
 function unavailableComposite(
   id: string,
@@ -486,9 +500,9 @@ function composeIncomeHealth(inputs: EngineInputs): CompositeScore {
 }
 
 // --- Hub Capacity Health ---------------------------------------------------
-// Domain scale: tier-relative traffic. An airport is judged against your other
-// owned airports in the same tier, never against a theoretical 100% capacity —
-// owners cannot force ecosystem traffic, and low tiers are naturally quiet.
+// Domain scale: capacity-weighted portfolio utilization. Every value below is
+// published by the airport module; the only logic owned here is the weighted
+// average (composition) and the banding.
 
 function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
   const cap = inputs.hubCapacity;
@@ -496,9 +510,9 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
     return unavailableComposite(
       "hub-capacity-health",
       "Airport Health",
-      "Tier-relative traffic index",
+      "Capacity-weighted portfolio utilization",
       cap.state,
-      "How your owned airports perform against comparable airports of the same tier.",
+      "How much of your owned airports' weekly capacity is actually used, weighted by airport size.",
       "Airport Intelligence is temporarily unavailable.",
     );
   }
@@ -507,14 +521,15 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
     return unavailableComposite(
       "hub-capacity-health",
       "Airport Health",
-      "Tier-relative traffic index",
+      "Capacity-weighted portfolio utilization",
       "ok",
-      "How your owned airports perform against comparable airports of the same tier.",
+      "How much of your owned airports' weekly capacity is actually used, weighted by airport size.",
       "No owned airport has enough observed weeks yet to rate traffic.",
     );
   }
 
-  // Peer groups: your own owned airports sharing a tier.
+  // Peer groups: your own owned airports sharing a tier. Only meaningful when
+  // at least two airports share a tier — solo tiers produce no index at all.
   const byTier = new Map<number, typeof rated>();
   for (const a of rated) {
     const list = byTier.get(a.tier) ?? [];
@@ -539,17 +554,41 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
   }
 
   const saturated = rated.filter((a) => (a.utilization as number) >= 0.95);
-  const rawMean =
-    rated.reduce((s, a) => s + (a.utilization as number), 0) / rated.length;
+
+  // Capacity-weighted portfolio utilization: larger airports carry more weight
+  // than small fields, so the summary reflects operational importance.
+  const totalCapacity = rated.reduce((s, a) => s + a.capacity, 0);
+  const totalUsed = rated.reduce((s, a) => s + a.usedAvg, 0);
+  const weighted = totalCapacity > 0 ? totalUsed / totalCapacity : 0;
+  const score = Math.round(pct(weighted));
+
+  const breakdown = [...rated]
+    .sort((a, b) => b.capacity - a.capacity)
+    .map((a) => ({
+      key: a.icao,
+      label: a.icao,
+      sublabel: `Tier ${a.tier} · ${cap.weeksObserved}w avg ops/wk`,
+      used: Math.round(a.usedAvg),
+      capacity: a.capacity,
+      ratio: a.utilization as number,
+    }));
 
   const contributions: MetricContribution[] = [
     {
-      id: "airport-utilization.mean_utilization.v1",
+      id: "airport-utilization.weighted_utilization.v1",
       sourceModule: "airport-utilization",
       sourceVersion: cap.sourceVersion,
-      value: pct(rawMean),
-      label: `Raw capacity fill (${cap.weeksObserved}w)`,
+      value: score,
+      label: `Capacity-weighted portfolio utilization (${cap.weeksObserved}w)`,
       unit: "%",
+    },
+    {
+      id: "airport-utilization.portfolio_capacity.v1",
+      sourceModule: "airport-utilization",
+      sourceVersion: cap.sourceVersion,
+      value: totalCapacity,
+      label: "Total weekly capacity across owned airports",
+      unit: "ops",
     },
     {
       id: "airport-utilization.saturated_airports.v1",
@@ -560,6 +599,18 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
       unit: "count",
     },
   ];
+  for (const a of breakdown) {
+    contributions.push({
+      id: `airport-utilization.raw_fill.${a.key}.v1`,
+      sourceModule: "airport-utilization",
+      sourceVersion: cap.sourceVersion,
+      value: pct(a.ratio),
+      label: `${a.key} avg weekly operations (${a.used}/${a.capacity} ops · ${cap.weeksObserved}w avg, arrivals + departures)`,
+      unit: "%",
+      ref: { icao: a.key },
+    });
+  }
+  // Peer indexes are appended only where a real peer group exists.
   for (const p of peerRatios) {
     contributions.push({
       id: `airport-utilization.tier_index.${p.icao}.v1`,
@@ -570,91 +621,52 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
       ref: { icao: p.icao, tier: p.tier },
     });
   }
-  // Airports that are the only owned airport in their tier have no peer group,
-  // so they carry no index and never enter the score. They are still listed as
-  // evidence with their raw fill so no owned airport silently disappears.
-  const indexedIcaos = new Set(peerRatios.map((p) => p.icao));
-  for (const a of rated) {
-    if (indexedIcaos.has(a.icao)) continue;
-    contributions.push({
-      id: `airport-utilization.raw_fill.${a.icao}.v1`,
-      sourceModule: "airport-utilization",
-      sourceVersion: cap.sourceVersion,
-      value: pct(a.utilization as number),
-      label: `${a.icao} capacity fill (Tier ${a.tier} — no peer, not scored)`,
-      unit: "%",
-      ref: { icao: a.icao, tier: a.tier },
-    });
-  }
 
-
-  if (peerRatios.length === 0) {
-    return {
-      id: "hub-capacity-health",
-      label: "Airport Health",
-      score: null,
-      band: "unknown",
-      scaleLabel: "Tier-relative traffic index",
-      bandLabel: saturated.length > 0 ? "At capacity" : "No peer benchmark",
-      rationale: {
-        measured:
-          "Each owned airport is compared against your other owned airports in the same tier — traffic depends on the SimFly ecosystem, so an airport is judged against comparable airports, not against theoretical full capacity.",
-        good: "An index of 100 means typical for its tier; above 115 is above average, below 85 is below average.",
-        why: "You own at most one airport per tier, so there is no comparable peer group yet. No verdict is invented — raw fill is shown as evidence only.",
-      },
-      state: "ok",
-      contributions,
-      explanation:
-        `Owned airports averaged ${pct(rawMean)}% of their weekly slots over ${cap.weeksObserved} weeks. No tier peer group exists yet, so no above/below-average verdict is claimed` +
-        (saturated.length > 0
-          ? ` — but ${saturated.length} hub${saturated.length === 1 ? " is" : "s are"} at or over capacity and losing traffic.`
-          : "."),
-    };
-  }
-
-  const indexMean =
-    (peerRatios.reduce((s, p) => s + p.ratio, 0) / peerRatios.length) * 100;
-  const score = Math.round(indexMean);
-  const above = peerRatios.filter((p) => p.ratio >= 1.15);
-  const below = peerRatios.filter((p) => p.ratio < 0.85);
   const band: CompositeScore["band"] =
-    score >= 115 ? "strong" : score >= 100 ? "healthy" : score >= 85 ? "watch" : "weak";
+    score >= 90 ? "watch" : score >= 70 ? "strong" : score >= 40 ? "healthy" : "watch";
   const bandLabel =
-    band === "strong"
-      ? "Above tier average"
-      : band === "healthy"
-      ? "Typical traffic"
-      : band === "watch"
-      ? "Slightly below tier average"
-      : "Below tier average";
+    score >= 90
+      ? "At capacity"
+      : score >= 70
+        ? "Busy"
+        : score >= 40
+          ? "Healthy utilization"
+          : "Spare capacity";
+
+  const busiest = breakdown.reduce((best, a) => (a.ratio > best.ratio ? a : best), breakdown[0]);
+  const quietest = breakdown.reduce((low, a) => (a.ratio < low.ratio ? a : low), breakdown[0]);
 
   return {
     id: "hub-capacity-health",
     label: "Airport Health",
     score,
     band,
-    scaleLabel: "Tier-relative traffic index (100 = typical for its tier)",
+    scoreUnit: "%",
+    scaleLabel: "Capacity-weighted portfolio utilization",
     bandLabel,
     rationale: {
       measured:
-        "Weekly airport operations (arrivals + departures) against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",
-
-      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
+        "Weekly airport operations (arrivals + departures) against capacity for each owned airport, combined into one portfolio figure weighted by each airport's capacity — a large hub moves the number more than a small field.",
+      good: "Roughly 40–70% is healthy headroom. Above 90% the portfolio is turning traffic away and upgrades pay off; below 40% there is substantial spare capacity.",
       why:
-        `Across ${peerRatios.length} airports with tier peers the index averages ${score}` +
-        (above.length > 0 ? ` — ${above.map((p) => p.icao).join(", ")} above average` : "") +
-        (below.length > 0 ? ` — ${below.map((p) => p.icao).join(", ")} below average` : "") +
+        `Across ${breakdown.length} owned airport${breakdown.length === 1 ? "" : "s"} the portfolio uses ${totalUsed.toFixed(0)} of ${totalCapacity} weekly slots` +
+        (busiest ? ` — busiest ${busiest.key} at ${pct(busiest.ratio)}%` : "") +
+        (quietest && quietest.key !== busiest?.key
+          ? `, quietest ${quietest.key} at ${pct(quietest.ratio)}%`
+          : "") +
         ".",
     },
     state: "ok",
     contributions,
+    breakdown,
     explanation:
-      `Your hubs draw ${score}% of the traffic that comparable airports in the same tier draw (100 = typical), on ${cap.weeksObserved} weeks of data.` +
+      `Your airports use ${score}% of their combined weekly capacity over ${cap.weeksObserved} weeks, weighted by airport size.` +
       (saturated.length > 0
         ? ` ${saturated.length} hub${saturated.length === 1 ? " is" : "s are"} at or over capacity and losing traffic — that is an upgrade signal.`
         : ""),
   };
 }
+
 
 // ---------------------------------------------------------------------------
 // Rule pack — adding rules is additive: append to the list, declare
