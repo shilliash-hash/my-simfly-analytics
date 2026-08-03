@@ -154,28 +154,36 @@ export function MetricTable({
     );
   }
   return (
-    <ul className="divide-y divide-border/40 rounded-xl border border-border/50 bg-background/40">
-      {metrics.map((m) => (
-        <li
-          key={m.id}
-          className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm"
-        >
-          <span className="min-w-0 truncate text-muted-foreground">
-            {m.label}
-            {showSource && (
-              <span className="ml-1.5 text-[11px] opacity-60">
-                · {m.sourceModule}
-              </span>
-            )}
-          </span>
-          <span className="shrink-0 font-medium tabular-nums text-foreground">
-            {typeof m.value === "number"
-              ? Math.round(m.value * 100) / 100
-              : (m.value ?? "—")}
-            {m.unit ? ` ${m.unit}` : ""}
-          </span>
-        </li>
-      ))}
-    </ul>
+    <div
+      className={cn(
+        "rounded-xl border border-border/50 bg-background/40",
+        metrics.length > 8 && "max-h-[42vh] overflow-y-auto",
+      )}
+    >
+      <ul className="divide-y divide-border/40">
+        {metrics.map((m) => (
+          <li
+            key={m.id}
+            className="flex items-center justify-between gap-4 px-4 py-2.5 text-sm"
+          >
+            <span className="min-w-0 truncate text-muted-foreground">
+              {m.label}
+              {showSource && (
+                <span className="ml-1.5 text-[11px] opacity-60">
+                  · {m.sourceModule}
+                </span>
+              )}
+            </span>
+            <span className="shrink-0 font-medium tabular-nums text-foreground">
+              {typeof m.value === "number"
+                ? Math.round(m.value * 100) / 100
+                : (m.value ?? "—")}
+              {m.unit ? ` ${m.unit}` : ""}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
+
 }
