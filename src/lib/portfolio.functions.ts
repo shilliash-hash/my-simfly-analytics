@@ -261,7 +261,8 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
       airportUtilRes.status === "fulfilled" && airportUtilRes.value
         ? (() => {
             const t = airportUtilRes.value;
-            const TRAILING = 6;
+            // Same trailing window as Aircraft Utilization (4 weeks).
+            const TRAILING = 4;
             // Exclude the in-progress current week: it always looks starved.
             const weeks = t.weeks.slice(-(TRAILING + 1), -1);
             const airports = t.airportMeta.map((m) => {
