@@ -1,13 +1,16 @@
-// Server-only flight ingestion. This is the SINGLE implementation of "pull the
-// pilot's freshest logbook page into `simfly_flights` and reconcile aircraft
-// cooldowns". It is called from two places:
+// Server-only flight ingestion + SESSION CATCH-UP.
 //
-//   1. `getSimflyPayload` (Hub load) — fire-and-forget, with the assets/page-1
-//      payloads it already fetched, so the dashboard costs no extra requests.
-//   2. `/api/public/hooks/sync-tick` (pg_cron worker) — awaited, so ingestion
-//      no longer depends on anyone opening the Hub.
+// Synchronisation is session-driven: there is no scheduler and no cron. When a
+// Hub user opens the Hub, `runSessionCatchUp` probes that user's own assets for
+// movements by ANY pilot (including pilots who never use the Hub), ingests the
+// pilots involved, then refreshes the user's own logbook and reconciles
+// aircraft cooldowns.
+//
+// `ingestPilotFlights` remains the SINGLE implementation of "pull a pilot's
+// freshest logbook page into `simfly_flights` and reconcile aircraft cooldowns".
 //
 // Filename ends in `.server.ts` so it can never reach the client bundle.
+
 
 const SIMFLY_BASE = "https://simfly.io/api";
 const FETCH_TIMEOUT_MS = 12_000;
@@ -170,8 +173,8 @@ export async function ingestPilotFlights(
   return { username, imported, reconciled, latestFlightAt };
 }
 
-/** Register a pilot in the background-sync rotation (idempotent, best effort). */
-export async function registerPilotForSync(username: string): Promise<void> {
+/** Record that a pilot has been seen by the Hub (idempotent, best effort). */
+export async function recordPilotSeen(username: string): Promise<void> {
   try {
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     await supabaseAdmin
@@ -179,153 +182,184 @@ export async function registerPilotForSync(username: string): Promise<void> {
       .upsert({ username }, { onConflict: "username", ignoreDuplicates: true });
   } catch (err) {
     console.warn(
-      "[simfly-sync] registerPilotForSync failed",
+      "[simfly-sync] recordPilotSeen failed",
       username,
       err instanceof Error ? err.message : String(err),
     );
   }
 }
 
-const BASE_INTERVAL_MS = 5 * 60_000;
-const IDLE_INTERVAL_MS = 60 * 60_000;
-const BACKOFF_MS = [5 * 60_000, 15 * 60_000, 60 * 60_000];
+/** Don't re-run a catch-up more often than this for the same pilot. */
+export const CATCH_UP_COOLDOWN_MS = 3 * 60_000;
+/** Max third-party pilots ingested in one catch-up. */
+const MAX_DISCOVERED_PILOTS = 12;
+/** Concurrency for third-party logbook ingestion. */
+const PILOT_CONCURRENCY = 3;
 
-type SyncRow = {
+export type CatchUpResult = {
   username: string;
-  consecutive_failures: number | null;
-  last_flight_at: string | null;
-};
-
-export type TickPilotResult = {
-  username: string;
+  ran: boolean;
+  reason?: string;
   imported: number;
-  reconciled?: number;
-  error?: string;
+  reconciled: number;
+  pilotsSynced: number;
+  assetsProbed: number;
+  assetsChanged: number;
+  durationMs: number;
 };
 
 /**
-One scheduler slice.
+ * SESSION CATCH-UP — the only synchronisation path.
  *
- * Phase A (asset watch, optional): probe Hub-owned airports and aircraft for
- * new activity. Any pilot seen on a Hub asset — including pilots who never use
- * the Hub — is registered and marked due immediately.
+ * Runs when a Hub user opens the Hub. Everything a user's dashboards read is
+ * reachable from that user's own assets, so probing them covers 100% of what
+ * they will look at — no scheduler needed.
  *
- * Phase B (unchanged): pick the pilots that are due, ingest each with the
- * shared helper, and record the outcome. Failures are isolated per pilot, and
- * the timer-based interval remains the safety net if the probe fails.
+ * Phase 1: probe the owner's airports (arrivals AND departures) and aircraft
+ *          against stored watermarks.
+ * Phase 2: ingest the logbook of every pilot seen on a changed asset, including
+ *          pilots who have never used the Hub.
+ * Phase 3: ingest the owner's own logbook and reconcile aircraft cooldowns.
+ *
+ * Every phase is failure-isolated: a phase that throws is logged and the rest
+ * still runs.
  */
-export async function runSyncTick(opts?: {
-  batch?: number;
-  budgetMs?: number;
-  probe?: boolean;
-  probeBudgetMs?: number;
-}): Promise<{
-  processed: number;
-  imported: number;
-  failed: number;
-  skipped: number;
-  durationMs: number;
-  pilots: TickPilotResult[];
-  probe?: import("./asset-watch.server").ProbeResult;
-}> {
+export async function runSessionCatchUp(
+  username: string,
+  nonce: string,
+  opts?: { assets?: unknown; page1?: unknown; force?: boolean; budgetMs?: number },
+): Promise<CatchUpResult> {
   const started = Date.now();
-  const batch = Math.max(1, Math.min(50, opts?.batch ?? 15));
-  const budgetMs = opts?.budgetMs ?? 15_000;
+  const budgetMs = opts?.budgetMs ?? 25_000;
+  const base: CatchUpResult = {
+    username,
+    ran: false,
+    imported: 0,
+    reconciled: 0,
+    pilotsSynced: 0,
+    assetsProbed: 0,
+    assetsChanged: 0,
+    durationMs: 0,
+  };
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { getSessionIdentity } = await import("./identity.server");
 
-    // Phase A — asset activity watch. Never allowed to abort the tick.
-  let probeResult: import("./asset-watch.server").ProbeResult | undefined;
-  if (opts?.probe !== false) {
-    try {
-      const { probeAssets, applyProbeEvidence } = await import("./asset-watch.server");
-      probeResult = await probeAssets({ budgetMs: opts?.probeBudgetMs ?? 10_000 });
-      await applyProbeEvidence(probeResult);
-    } catch (err) {
-      console.warn(
-        "[simfly-sync] asset probe failed",
-        err instanceof Error ? err.message : String(err),
-      );
+  // Cooldown gate — reopening pages must not re-run the whole catch-up.
+  if (!opts?.force) {
+    const { data: state } = await supabaseAdmin
+      .from("pilot_sync_state")
+      .select("last_synced_at")
+      .eq("username", username)
+      .maybeSingle();
+    const last = (state as { last_synced_at: string | null } | null)?.last_synced_at;
+    if (last && Date.now() - Date.parse(last) < CATCH_UP_COOLDOWN_MS) {
+      return { ...base, reason: "cooldown", durationMs: Date.now() - started };
     }
   }
 
-  // Phase B — ingestion. Its budget is measured from here so a slow probe
-  // never eats the ingestion window.
-  const ingestStarted = Date.now();
+  let imported = 0;
+  let reconciled = 0;
+  let pilotsSynced = 0;
+  let assetsProbed = 0;
+  let assetsChanged = 0;
+  let latestFlightAt: string | null = null;
+  const errors: string[] = [];
 
-  const { data: due } = await supabaseAdmin
-    .from("pilot_sync_state")
-    .select("username, consecutive_failures, last_flight_at")
-    .eq("enabled", true)
-    .lte("next_sync_after", new Date().toISOString())
-    .order("next_sync_after", { ascending: true })
-    .limit(batch);
+  // Phase 1 — asset activity watch.
+  let activePilots: string[] = [];
+  try {
+    const { probeOwnerAssets } = await import("./asset-watch.server");
+    const probe = await probeOwnerAssets(username, nonce, {
+      ...(opts?.assets !== undefined ? { assets: opts.assets } : {}),
+      budgetMs: Math.max(5_000, Math.floor(budgetMs * 0.6)),
+    });
+    assetsProbed = probe.assetsProbed;
+    assetsChanged = probe.assetsChanged;
+    activePilots = probe.activePilots.filter((p) => p !== username);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    errors.push(`probe: ${message}`);
+    console.warn("[simfly-sync] catch-up probe failed", username, message);
+  }
 
-  const rows = (due ?? []) as SyncRow[];
-  const pilots: TickPilotResult[] = [];
-  let skipped = 0;
+  // Phase 2 — ingest third-party pilots discovered on the owner's assets.
+  if (activePilots.length) {
+    const { getSessionIdentity } = await import("./identity.server");
+    const queue = [...new Set(activePilots)].slice(0, MAX_DISCOVERED_PILOTS);
 
-  const queue = [...rows];
-  const worker = async () => {
-    for (;;) {
-      const row = queue.shift();
-      if (!row) return;
-       if (Date.now() - ingestStarted > budgetMs) {
-         
-        skipped += 1;
-        continue;
+    const worker = async () => {
+      for (;;) {
+        const pilot = queue.shift();
+        if (!pilot) return;
+        if (Date.now() - started > budgetMs) return;
+        try {
+          await recordPilotSeen(pilot);
+          const { nonce: pilotNonce } = await getSessionIdentity({ username: pilot });
+          const res = await ingestPilotFlights(pilot, pilotNonce);
+          imported += res.imported;
+          reconciled += res.reconciled;
+          pilotsSynced += 1;
+          await supabaseAdmin
+            .from("pilot_sync_state")
+            .update({
+              last_synced_at: new Date().toISOString(),
+              last_imported_count: res.imported,
+              last_flight_at: res.latestFlightAt,
+              last_error: null,
+            })
+            .eq("username", pilot);
+        } catch (err) {
+          // A pilot we cannot resolve is normal (no nonce discoverable).
+          console.warn(
+            "[simfly-sync] discovered pilot ingest skipped",
+            pilot,
+            err instanceof Error ? err.message : String(err),
+          );
+        }
       }
-      try {
-        const { nonce } = await getSessionIdentity({ username: row.username });
-        const res = await ingestPilotFlights(row.username, nonce);
-        const idle =
-          res.latestFlightAt == null
-            ? row.last_flight_at == null
-            : Date.now() - Date.parse(res.latestFlightAt) > 7 * 86_400_000;
-        const nextMs = idle ? IDLE_INTERVAL_MS : BASE_INTERVAL_MS;
-        await supabaseAdmin
-          .from("pilot_sync_state")
-          .update({
-            last_synced_at: new Date().toISOString(),
-            next_sync_after: new Date(Date.now() + nextMs).toISOString(),
-            last_imported_count: res.imported,
-            last_flight_at: res.latestFlightAt ?? row.last_flight_at,
-            consecutive_failures: 0,
-            last_error: null,
-          })
-          .eq("username", row.username);
-        pilots.push({ username: row.username, imported: res.imported, reconciled: res.reconciled });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        const failures = (row.consecutive_failures ?? 0) + 1;
-        const delay = BACKOFF_MS[Math.min(failures - 1, BACKOFF_MS.length - 1)];
-        await supabaseAdmin
-          .from("pilot_sync_state")
-          .update({
-            next_sync_after: new Date(Date.now() + delay).toISOString(),
-            consecutive_failures: failures,
-            last_error: message.slice(0, 500),
-          })
-          .eq("username", row.username);
-        pilots.push({ username: row.username, imported: 0, error: message });
-      }
-    }
-  };
+    };
 
-  await Promise.allSettled([worker(), worker(), worker()]);
+    await Promise.allSettled(Array.from({ length: PILOT_CONCURRENCY }, () => worker()));
+  }
 
-  const failed = pilots.filter((p) => p.error).length;
-  const result = {
-    processed: pilots.length,
-    imported: pilots.reduce((s, p) => s + p.imported, 0),
-    failed,
-    skipped,
+  // Phase 3 — the session user's own logbook + cooldown reconciliation.
+  try {
+    const res = await ingestPilotFlights(username, nonce, {
+      ...(opts?.assets !== undefined ? { assets: opts.assets } : {}),
+      ...(opts?.page1 !== undefined ? { page1: opts.page1 } : {}),
+    });
+    imported += res.imported;
+    reconciled += res.reconciled;
+    latestFlightAt = res.latestFlightAt;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    errors.push(`self: ${message}`);
+    console.warn("[simfly-sync] catch-up self-ingest failed", username, message);
+  }
+
+  await supabaseAdmin.from("pilot_sync_state").upsert(
+    {
+      username,
+      last_synced_at: new Date().toISOString(),
+      last_imported_count: imported,
+      ...(latestFlightAt ? { last_flight_at: latestFlightAt } : {}),
+      last_error: errors.length ? errors.join(" | ").slice(0, 500) : null,
+    },
+    { onConflict: "username" },
+  );
+
+  const result: CatchUpResult = {
+    username,
+    ran: true,
+    imported,
+    reconciled,
+    pilotsSynced,
+    assetsProbed,
+    assetsChanged,
     durationMs: Date.now() - started,
-    pilots,
-   ...(probeResult ? { probe: probeResult } : {}),
+    ...(errors.length ? { reason: errors.join(" | ") } : {}),
   };
-  
-  console.log("[simfly-sync] tick", JSON.stringify(result));
+  console.log("[simfly-sync] catch-up", JSON.stringify(result));
   return result;
 }
+
