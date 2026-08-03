@@ -8,7 +8,18 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
-   {
+  {
+  id: "1",
+  version: "v 1.02 FIX 04.Aug.26",
+  type: ["FEATURE", "UPGRADE"],
+  text: `• Corrected the Airport Utilization engine to measure airport operations instead of arrivals only.
+  • Impact: The correction automatically improves, airport capacity utilization, 
+  • Dedicated airport movement aggregation (separate from payouts)
+  • Airport and aircraft income attribution.
+  • Historical Airport Utilization cache was rebuilt using the corrected methodology.
+  • The previous implementation systematically under-reported airport traffic by ignoring departures. The new methodology now reflects actual SimFly airport activity and provides a reliable foundation for all higher-level portfolio analytics.`
+},    
+  {
   id: "1",
   version: "v 1.01 EXPERIMENTAL 30.Jul.26",
   type: ["FEATURE", "FIX"],
