@@ -109,10 +109,13 @@ export type EngineInputs = {
         aircraft: {
           aircraftId: string;
           label: string;
-          /** Class as published by classifyAircraft — never re-derived here. */
+          /** Rating as published by rateAircraftUtilization — never re-derived here. */
           cls: PublishedAircraftClass;
+          /** Live availability, published separately from the rating. */
+          availability?: "AIRBORNE" | "GROUNDED" | "READY";
           trailingOperational: number | null;
           trailingFlights: number;
+
         }[];
         sourceVersion: string;
       }
@@ -185,7 +188,7 @@ function pct(n: number): number {
  * UTIL_THRESHOLDS_V1. Portfolio does not invent its own utilization scale —
  * these are the same cut points the owning module publishes.
  */
-const UTIL_SCALE = { workhorse: 0.3, active: 0.1, underused: 0.02 } as const;
+const UTIL_SCALE = { workhorse: 0.15, active: 0.5, underused: 0.02 } as const;
 
 function unavailableComposite(
   id: string,
@@ -567,6 +570,23 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
       ref: { icao: p.icao, tier: p.tier },
     });
   }
+  // Airports that are the only owned airport in their tier have no peer group,
+  // so they carry no index and never enter the score. They are still listed as
+  // evidence with their raw fill so no owned airport silently disappears.
+  const indexedIcaos = new Set(peerRatios.map((p) => p.icao));
+  for (const a of rated) {
+    if (indexedIcaos.has(a.icao)) continue;
+    contributions.push({
+      id: `airport-utilization.raw_fill.${a.icao}.v1`,
+      sourceModule: "airport-utilization",
+      sourceVersion: cap.sourceVersion,
+      value: pct(a.utilization as number),
+      label: `${a.icao} capacity fill (Tier ${a.tier} — no peer, not scored)`,
+      unit: "%",
+      ref: { icao: a.icao, tier: a.tier },
+    });
+  }
+
 
   if (peerRatios.length === 0) {
     return {
@@ -617,7 +637,9 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
     bandLabel,
     rationale: {
       measured:
-        "Weekly arrivals against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
+        "Weekly airport operations (arrivals + departures) against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",
+
+      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
       why:
         `Across ${peerRatios.length} airports with tier peers the index averages ${score}` +
         (above.length > 0 ? ` — ${above.map((p) => p.icao).join(", ")} above average` : "") +
@@ -807,7 +829,7 @@ const capacitySaturationRule: Rule = {
             label: "Average weekly operations",
             unit: "operations",
             ref: { icao: top.icao },
-            
+
           },
         ],
         requires: ["airport-utilization.weeks.v1"],
