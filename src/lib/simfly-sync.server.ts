@@ -204,12 +204,21 @@ export type TickPilotResult = {
 };
 
 /**
- * One scheduler slice: pick the pilots that are due, ingest each with the
- * shared helper, and record the outcome. Failures are isolated per pilot.
+One scheduler slice.
+ *
+ * Phase A (asset watch, optional): probe Hub-owned airports and aircraft for
+ * new activity. Any pilot seen on a Hub asset — including pilots who never use
+ * the Hub — is registered and marked due immediately.
+ *
+ * Phase B (unchanged): pick the pilots that are due, ingest each with the
+ * shared helper, and record the outcome. Failures are isolated per pilot, and
+ * the timer-based interval remains the safety net if the probe fails.
  */
 export async function runSyncTick(opts?: {
   batch?: number;
   budgetMs?: number;
+  probe?: boolean;
+  probeBudgetMs?: number;
 }): Promise<{
   processed: number;
   imported: number;
@@ -217,6 +226,7 @@ export async function runSyncTick(opts?: {
   skipped: number;
   durationMs: number;
   pilots: TickPilotResult[];
+  probe?: import("./asset-watch.server").ProbeResult;
 }> {
   const started = Date.now();
   const batch = Math.max(1, Math.min(50, opts?.batch ?? 15));
@@ -224,6 +234,25 @@ export async function runSyncTick(opts?: {
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { getSessionIdentity } = await import("./identity.server");
+
+    // Phase A — asset activity watch. Never allowed to abort the tick.
+  let probeResult: import("./asset-watch.server").ProbeResult | undefined;
+  if (opts?.probe !== false) {
+    try {
+      const { probeAssets, applyProbeEvidence } = await import("./asset-watch.server");
+      probeResult = await probeAssets({ budgetMs: opts?.probeBudgetMs ?? 10_000 });
+      await applyProbeEvidence(probeResult);
+    } catch (err) {
+      console.warn(
+        "[simfly-sync] asset probe failed",
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+  // Phase B — ingestion. Its budget is measured from here so a slow probe
+  // never eats the ingestion window.
+  const ingestStarted = Date.now();
 
   const { data: due } = await supabaseAdmin
     .from("pilot_sync_state")
@@ -242,7 +271,8 @@ export async function runSyncTick(opts?: {
     for (;;) {
       const row = queue.shift();
       if (!row) return;
-      if (Date.now() - started > budgetMs) {
+       if (Date.now() - ingestStarted > budgetMs) {
+         
         skipped += 1;
         continue;
       }
@@ -293,7 +323,9 @@ export async function runSyncTick(opts?: {
     skipped,
     durationMs: Date.now() - started,
     pilots,
+   ...(probeResult ? { probe: probeResult } : {}),
   };
+  
   console.log("[simfly-sync] tick", JSON.stringify(result));
   return result;
 }
