@@ -617,8 +617,7 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
     bandLabel,
     rationale: {
       measured:
-        "Weekly arrivals against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",
-      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
+        "Weekly arrivals against capacity for each owned airport, then indexed against your other owned airports in the same tier. Lower tiers are naturally quiet, so absolute fill is never the verdict.",      good: "100 is typical for the tier. Above 115 means the airport out-draws comparable airports; below 85 means it under-draws them. Being under theoretical capacity is normal and not a failure.",
       why:
         `Across ${peerRatios.length} airports with tier peers the index averages ${score}` +
         (above.length > 0 ? ` — ${above.map((p) => p.icao).join(", ")} above average` : "") +
@@ -792,7 +791,7 @@ const capacitySaturationRule: Rule = {
             ref: { icao: top.icao },
           },
           {
-            id: "airport-utilization.capacity.v1",
+            id: "airport-utilization.capacity.v2",
             sourceModule: "airport-utilization",
             sourceVersion: cap.sourceVersion,
             value: top.capacity,
@@ -801,13 +800,14 @@ const capacitySaturationRule: Rule = {
             ref: { icao: top.icao },
           },
           {
-            id: "airport-utilization.used_avg.v1",
+            id: "airport-utilization.used_avg.v2",
             sourceModule: "airport-utilization",
             sourceVersion: cap.sourceVersion,
             value: Math.round(top.usedAvg * 10) / 10,
-            label: "Average weekly arrivals",
-            unit: "arrivals",
+            label: "Average weekly operations",
+            unit: "operations",
             ref: { icao: top.icao },
+            
           },
         ],
         requires: ["airport-utilization.weeks.v1"],
