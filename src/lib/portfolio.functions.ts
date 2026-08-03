@@ -255,7 +255,8 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
           }
         : { state: "unavailable" };
 
-    // Airport Capacity Utilization — capacity/used are read verbatim.
+     // Airport Capacity Utilization — capacity/used (operations = arrivals +
+    // departures) are read verbatim from the published timeline.
     const hubCapacity: EngineInputs["hubCapacity"] =
       airportUtilRes.status === "fulfilled" && airportUtilRes.value
         ? (() => {
@@ -289,7 +290,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
               state: "ok" as const,
               weeksObserved: weeks.length,
               airports,
-              sourceVersion: "airport-utilization.v1",
+              sourceVersion: "airport-utilization.v2",
             };
           })()
         : { state: "unavailable" };
