@@ -13,10 +13,19 @@ import {
   Compass,
   Check,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { HubSupportGate } from "@/components/hub-support";
 import { PortfolioLoadingSequence } from "@/components/portfolio-loading-sequence";
+import {
+  PortfolioDetailDialog,
+  MethodologyBlock,
+  MetricTable,
+  Section,
+  ACCENT,
+  type AccentKey,
+} from "@/components/portfolio-detail-dialog";
 import { getHubSupportStatus } from "@/lib/hub-support.functions";
 import {
   getPortfolioSnapshot,
@@ -150,9 +159,7 @@ function PortfolioBody() {
           Orchestration console
         </div>
         <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Portfolio Intelligence does not create data of its own — it composes
-          the published output of the other intelligence modules. Refresh each
-          module below, then run the composition.
+          Refresh each module below, then run the composition.
         </p>
 
         <div className="mt-6 space-y-3">
@@ -334,19 +341,20 @@ function ReportView({
     <div className="mt-6 space-y-8">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/70 p-4 text-sm">
         <span className="text-muted-foreground">
-          {stored
-            ? "Stored weekly briefing — this assessment stays stable until you run a new analysis."
-            : "Fresh composition — saved as this week's briefing."}{" "}
-          Composed {new Date(report.generatedAtIso).toLocaleString()}.
+          {stored ? "Stored weekly briefing" : "Fresh composition"} ·{" "}
+          {new Date(report.generatedAtIso).toLocaleString()}
         </span>
-        <button
-          type="button"
-          onClick={onRerun}
-          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-background"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Re-run analysis
-        </button>
+        <div className="flex items-center gap-2">
+          <MethodologyButton report={report} />
+          <button
+            type="button"
+            onClick={onRerun}
+            className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-background"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Re-run analysis
+          </button>
+        </div>
       </div>
 
       <HorizonBanner
@@ -412,10 +420,6 @@ function ReportView({
         )}
       </section>
 
-      <footer className="pt-2 text-[11px] text-muted-foreground/70">
-        Engine v{report.weightsVersion} · Rules v{report.ruleRegistryVersion} ·
-        Week {report.weekStartUtcIso.slice(0, 10)}
-      </footer>
     </div>
   );
 }
@@ -454,127 +458,221 @@ function HorizonBanner({
   );
 }
 
-function CompositeTile({ composite }: { composite: CompositeScore }) {
-  const bandColor: Record<CompositeScore["band"], string> = {
-    strong: "text-emerald-300 border-emerald-500/40",
-    healthy: "text-cyan-300 border-cyan-500/40",
-    watch: "text-amber-300 border-amber-500/40",
-    weak: "text-rose-300 border-rose-500/40",
-    unknown: "text-muted-foreground border-border/50",
-  };
-  return (
-    <div
-      className={cn(
-        "flex flex-col rounded-2xl border bg-card/70 p-5 backdrop-blur",
-        bandColor[composite.band],
-      )}
-    >
-      <div className="text-xs uppercase tracking-wider text-muted-foreground">
-        {composite.label}
-      </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        <div className="text-4xl font-semibold tabular-nums">
-          {composite.score ?? "—"}
-          {composite.score != null && composite.scoreUnit ? (
-            <span className="text-xl">{composite.scoreUnit}</span>
-          ) : null}
-        </div>
-        <div className="text-xs font-medium uppercase tracking-wider">
-          {composite.bandLabel}
-        </div>
-      </div>
-      <div className="mt-1 text-[11px] text-muted-foreground/80">
-        {composite.scaleLabel}
-      </div>
-
-      <p className="mt-3 text-sm text-muted-foreground">{composite.explanation}</p>
-
-      <dl className="mt-4 space-y-2 border-t border-border/40 pt-3 text-xs">
-        <ExplainRow term="What is measured" desc={composite.rationale.measured} />
-        <ExplainRow term="What is good" desc={composite.rationale.good} />
-        <ExplainRow term="Why this band" desc={composite.rationale.why} />
-      </dl>
-
-      {composite.state !== "ok" && (
-        <div className="mt-3 flex items-center gap-2 rounded-lg border border-border/50 bg-background/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-          <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
-          Source module unavailable — no partial score is shown.
-        </div>
-      )}
-      {composite.contributions.length > 0 && (
-        <details className="mt-3 text-xs text-muted-foreground/80">
-          <summary className="cursor-pointer select-none">Evidence</summary>
-          <ul className="mt-2 space-y-1">
-            {composite.contributions.map((m) => (
-              <li key={m.id} className="flex justify-between gap-3">
-                <span className="truncate">{m.label}</span>
-                <span className="tabular-nums text-foreground/80">
-                  {m.value ?? "—"}
-                  {m.unit ? ` ${m.unit}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </div>
-  );
+function accentFor(id: string): AccentKey {
+  if (id.startsWith("income")) return "income";
+  if (id.startsWith("hub")) return "instrument";
+  if (id.startsWith("asset")) return "runway";
+  return "neutral";
 }
 
-function ExplainRow({ term, desc }: { term: string; desc: string }) {
+function CompositeTile({ composite }: { composite: CompositeScore }) {
+  const [open, setOpen] = useState(false);
+  const accent = composite.band === "unknown" ? "neutral" : accentFor(composite.id);
+  const a = ACCENT[accent];
+
   return (
-    <div>
-      <dt className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
-        {term}
-      </dt>
-      <dd className="text-muted-foreground">{desc}</dd>
-    </div>
+    <>
+      <div
+        className={cn(
+          "group relative flex flex-col overflow-hidden rounded-2xl border bg-card/70 p-6 backdrop-blur transition-colors",
+          a.border,
+          a.glow,
+        )}
+      >
+        <div className={cn("absolute inset-x-0 top-0 h-px", a.strip)} />
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
+          {composite.label}
+        </div>
+
+        <div className="mt-4 flex items-end gap-2">
+          <div className="text-5xl font-semibold leading-none tracking-tight tabular-nums text-foreground">
+            {composite.score ?? "—"}
+            {composite.score != null && composite.scoreUnit ? (
+              <span className="text-2xl text-muted-foreground">
+                {composite.scoreUnit}
+              </span>
+            ) : null}
+          </div>
+        </div>
+        <div
+          className={cn(
+            "mt-2 text-[11px] font-semibold uppercase tracking-[0.16em]",
+            a.text,
+          )}
+        >
+          {composite.bandLabel}
+        </div>
+
+        <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
+          {composite.explanation}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="mt-5 inline-flex items-center gap-1 self-end text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          View details
+          <ArrowRight className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <PortfolioDetailDialog
+        open={open}
+        onOpenChange={setOpen}
+        eyebrow={composite.label}
+        accent={accent}
+        title={`${composite.score ?? "—"}${composite.scoreUnit ?? ""} · ${composite.bandLabel}`}
+        subtitle={composite.scaleLabel}
+      >
+        <p className="text-sm text-muted-foreground">{composite.explanation}</p>
+
+        <Section title="Methodology">
+          <MethodologyBlock
+            measured={composite.rationale.measured}
+            good={composite.rationale.good}
+            why={composite.rationale.why}
+          />
+        </Section>
+
+        <Section title="Evidence">
+          <MetricTable metrics={composite.contributions} showSource />
+        </Section>
+
+        {composite.state !== "ok" && (
+          <div className="flex items-center gap-2 rounded-lg border border-border/50 bg-background/40 px-3 py-2 text-xs text-muted-foreground">
+            <ShieldAlert className="h-3.5 w-3.5 shrink-0" />
+            Source module unavailable — no partial score is shown.
+          </div>
+        )}
+      </PortfolioDetailDialog>
+    </>
   );
 }
 
 function RecommendationCard({ rec }: { rec: Recommendation }) {
-  const tierStyle: Record<RecommendationTier, string> = {
-    immediate: "border-rose-500/50 bg-rose-500/5",
-    planned: "border-amber-500/40 bg-amber-500/5",
-    consider: "border-cyan-500/40 bg-cyan-500/5",
+  const [open, setOpen] = useState(false);
+  const tierChip: Record<RecommendationTier, string> = {
+    immediate: "border-rose-500/40 bg-rose-500/10 text-rose-300",
+    planned: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+    consider: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300",
   };
+  const tierEdge: Record<RecommendationTier, string> = {
+    immediate: "bg-rose-400/70",
+    planned: "bg-amber-400/70",
+    consider: "bg-cyan-400/70",
+  };
+
   return (
-    <div className={cn("rounded-2xl border p-5 backdrop-blur", tierStyle[rec.tier])}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="text-[11px] font-semibold uppercase tracking-wider opacity-80">
-            {TIER_LABEL[rec.tier]}
-          </div>
-          <div className="mt-1 text-base font-semibold">{rec.title}</div>
-          <p className="mt-1 text-sm text-muted-foreground">{rec.detail}</p>
+    <>
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-card/70 p-5 backdrop-blur">
+        <div
+          className={cn("absolute inset-y-0 left-0 w-[2px]", tierEdge[rec.tier])}
+        />
+        <span
+          className={cn(
+            "inline-flex rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em]",
+            tierChip[rec.tier],
+          )}
+        >
+          {TIER_LABEL[rec.tier]}
+        </span>
+        <div className="mt-2 text-lg font-semibold tracking-tight text-foreground">
+          {rec.title}
         </div>
+        <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">
+          {rec.detail}
+        </p>
+        <div className="mt-4 flex items-center gap-3">
+          <Link
+            to={rec.actionRoute}
+            className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 px-4 py-1.5 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
+          >
+            {rec.actionLabel}
+            <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            View details
+          </button>
+        </div>
+      </div>
+
+      <PortfolioDetailDialog
+        open={open}
+        onOpenChange={setOpen}
+        eyebrow={TIER_LABEL[rec.tier]}
+        accent="neutral"
+        title={rec.title}
+      >
+        <p className="text-sm text-muted-foreground">{rec.detail}</p>
+
+        <Section title="Evidence">
+          <MetricTable metrics={rec.evidence} showSource />
+        </Section>
+
+        <Section title="Rule">
+          <p className="text-xs text-muted-foreground">
+            {rec.ruleId} · priority {rec.priority}
+          </p>
+        </Section>
+
         <Link
           to={rec.actionRoute}
-          className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-background"
+          className="inline-flex items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 px-4 py-2 text-xs font-semibold text-primary transition-colors hover:bg-primary/20"
         >
           {rec.actionLabel}
           <ArrowRight className="h-3.5 w-3.5" />
         </Link>
-      </div>
-      <details className="mt-3 text-xs text-muted-foreground/80">
-        <summary className="cursor-pointer select-none">Why this?</summary>
-        <ul className="mt-2 space-y-1">
-          {rec.evidence.map((m) => (
-            <li key={m.id} className="flex justify-between gap-3">
-              <span className="truncate">
-                {m.label}
-                <span className="ml-1 opacity-60">· {m.sourceModule}</span>
-              </span>
-              <span className="tabular-nums text-foreground/80">
-                {typeof m.value === "number"
-                  ? Math.round(m.value * 100) / 100
-                  : m.value ?? "—"}
-                {m.unit ? ` ${m.unit}` : ""}
-              </span>
-            </li>
-          ))}
-        </ul>
-      </details>
-    </div>
+      </PortfolioDetailDialog>
+    </>
+  );
+}
+
+function MethodologyButton({ report }: { report: PortfolioReport }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-border/60 bg-background/60 px-3 py-1.5 text-xs font-medium hover:bg-background"
+      >
+        <Info className="h-3.5 w-3.5" />
+        How is this calculated?
+      </button>
+      <PortfolioDetailDialog
+        open={open}
+        onOpenChange={setOpen}
+        eyebrow="Methodology"
+        title="How Portfolio Intelligence is calculated"
+        subtitle="Composition only — every number below is published by another module."
+      >
+        <p className="text-sm text-muted-foreground">
+          Portfolio Intelligence does not create data of its own. It composes the
+          published output of Aircraft Intelligence, Airport Intelligence and
+          Income Intelligence into composite scores, then applies a fixed rule
+          registry to rank the next actions. Each composite is scored on its own
+          domain scale — open a card's details to see what is measured, what a
+          good value looks like, and why it lands in its current band.
+        </p>
+        <Section title="Briefing stability">
+          <p className="text-sm text-muted-foreground">
+            The briefing is stored once per SimFly week and stays stable until you
+            re-run the analysis. Re-running overwrites this week's briefing only;
+            earlier weeks are never modified.
+          </p>
+        </Section>
+        <Section title="Versions">
+          <p className="text-xs text-muted-foreground">
+            Engine v{report.weightsVersion} · Rules v{report.ruleRegistryVersion} ·
+            Week {report.weekStartUtcIso.slice(0, 10)}
+          </p>
+        </Section>
+      </PortfolioDetailDialog>
+    </>
   );
 }
