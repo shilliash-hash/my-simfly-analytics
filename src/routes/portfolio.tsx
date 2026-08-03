@@ -18,6 +18,8 @@ import {
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { HubSupportGate } from "@/components/hub-support";
 import { PortfolioLoadingSequence } from "@/components/portfolio-loading-sequence";
+import { AirportUtilizationBars } from "@/components/airport-utilization-bars";
+
 import {
   PortfolioDetailDialog,
   MethodologyBlock,
@@ -432,7 +434,7 @@ function HorizonBanner({
   isFirstGeneration: boolean;
 }) {
   return (
-    <div className="flex items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm text-primary-foreground/90">
+    <div className="flex items-start gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-4 text-sm text-foreground/85">
       <Clock className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
       <div>
         {isFirstGeneration ? (
@@ -457,6 +459,7 @@ function HorizonBanner({
     </div>
   );
 }
+
 
 function accentFor(id: string): AccentKey {
   if (id.startsWith("income")) return "income";
@@ -506,6 +509,11 @@ function CompositeTile({ composite }: { composite: CompositeScore }) {
         <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">
           {composite.explanation}
         </p>
+
+        {composite.breakdown && composite.breakdown.length > 0 && (
+          <AirportUtilizationBars rows={composite.breakdown} />
+        )}
+
 
         <button
           type="button"
