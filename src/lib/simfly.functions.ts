@@ -2336,8 +2336,17 @@ export type AirportHistoryRow = {
   ownerCredit: number;
 };
 
+/**
+ * A single airport movement. An arrival and a departure each count as one
+ * operation; a flight that both departs from and arrives at the same airport
+ * yields two movements. Unlike `rows`, movements are NOT filtered by earned
+ * PAX or aircraft metadata — a zero-payout flight is still an operation.
+ */
+export type AirportMovement = { tsMs: number; role: "takeoff" | "landing" };
+
 export type AirportHistoryResult = {
   rows: AirportHistoryRow[];
+  movements: AirportMovement[];
   pagesFetched: number;
   sampled: number;
   excluded: number;
@@ -2356,6 +2365,7 @@ async function collectAirportHistoryFlights(
   );
   const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
   const rows: AirportHistoryRow[] = [];
+  const movements: AirportMovement[] = [];
   let sampled = 0;
   let excluded = 0;
   let consecutiveEmpty = 0;
@@ -2372,7 +2382,23 @@ async function collectAirportHistoryFlights(
     for (const f of r.flights as RawAirportHistFlight[]) {
       sampled++;
       const isOrigin = f.origin?.icao === icao;
+      const isDestination = f.destination?.icao === icao;
       const side = isOrigin ? f.origin : f.destination;
+
+            const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "";
+      const tsMs = ts ? Date.parse(ts) : NaN;
+      const inWindow = !(sinceMs > 0 && Number.isFinite(tsMs) && tsMs < sinceMs);
+      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs >= sinceMs) {
+        pageAllOutside = false;
+      }
+
+      // Airport operations: every movement counts, regardless of payout or
+      // aircraft metadata. Departure = 1 operation, arrival = 1 operation.
+      if (inWindow && Number.isFinite(tsMs)) {
+        if (isOrigin) movements.push({ tsMs, role: "takeoff" });
+        if (isDestination) movements.push({ tsMs, role: "landing" });
+      }
+      
       if (!side) { excluded++; continue; }
 
       const bonus = side.bonusPax ?? 0;
@@ -2386,12 +2412,7 @@ async function collectAirportHistoryFlights(
       const level = f.airplane?.level;
       if (!tier || !level) { excluded++; continue; }
 
-      const ts = f.landingTime ?? f.takeoffTime ?? f.departureTime ?? "";
-      const tsMs = ts ? Date.parse(ts) : NaN;
-      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs >= sinceMs) {
-        pageAllOutside = false;
-      }
-      if (sinceMs > 0 && Number.isFinite(tsMs) && tsMs < sinceMs) {
+      if (!inWindow) {
         continue;
       }
 
@@ -2419,7 +2440,7 @@ async function collectAirportHistoryFlights(
     }
   }
 
-  return { rows, pagesFetched: maxPages, sampled, excluded };
+  return { rows, movements, pagesFetched: maxPages, sampled, excluded };
 }
 
 
@@ -2668,19 +2689,18 @@ if (scope.length === 0) {
           const hasCache = last > 0;
           const sinceMs = hasCache ? Math.min(currentWeekStart, last + MS_PER_WEEK) : 0;
           const pages = hasCache ? Math.min(maxPages, 8) : maxPages;
-          const { rows } = await collectAirportHistoryFlights(a.icao, username, nonce, {
+          const { movements } = await collectAirportHistoryFlights(a.icao, username, nonce, {
              maxPages: pages,
             sinceMs,
           });
+          // Airport utilization = total operations: arrivals + departures.
+          // Every movement counts as 1, regardless of role or payout.
           const perWeek = new Map<number, number>();
           const flightsByWeekSet = new Map<number, Set<string>>();
 
- for (const r of rows) {
-   // Akceptujemy ZARÓWNO lądowania (landing) jak i odloty (takeoff)
-   if (r.role !== "landing" && r.role !== "takeoff") continue;
-   if (!r.tsMs) continue;
-
-   const ws = weekStartUtcMs(r.tsMs);
+           for (const m of movements) {
+            if (!m.tsMs) continue;
+            const ws = weekStartUtcMs(m.tsMs);
    
    if (!flightsByWeekSet.has(ws)) {
      flightsByWeekSet.set(ws, new Set<string>());
