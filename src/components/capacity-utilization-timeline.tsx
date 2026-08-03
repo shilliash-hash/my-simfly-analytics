@@ -128,12 +128,13 @@ export function CapacityUtilizationTimeline({
             Capacity utilization
           </div>
           <h2 className="font-display text-xl font-semibold">
-            Weekly arrivals vs capacity
+            Weekly airport operations vs capacity
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Bars show each airport's maximum weekly arrival slots. Lines show
-            actual completed arrivals per SimFly week.
+            Bars show each airport's maximum weekly operation slots. Lines show
+            actual airport operations — arrivals plus departures — per SimFly week.
           </p>
+          
         </div>
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -276,7 +277,7 @@ export function CapacityUtilizationTimeline({
         ) : isError ? (
           <EmptyState label="Failed to load utilization data." />
         ) : !chartData.length ? (
-          <EmptyState label="No historical arrivals recorded yet." />
+          <EmptyState label="No historical airport operations recorded yet." />
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
@@ -384,8 +385,9 @@ function UtilizationTooltip({
   return (
     <div className="rounded-lg border border-border bg-popover px-3 py-2 text-xs shadow-lg">
       <div className="mono mb-1.5 text-[10px] uppercase tracking-widest text-muted-foreground">
-        {typeof row.weekStartIso === "string" ? formatWeekRangeIso(row.weekStartIso) : String(label)}
+        {String(label)} · {typeof row.weekStartIso === "string" ? new Date(row.weekStartIso).toUTCString().slice(0, 16) : ""} · ops/slots
       </div>
+      
       <div className="space-y-1">
         {selected.map((icao) => {
           const cap = Number(row[`${icao}__cap`] ?? 0);
