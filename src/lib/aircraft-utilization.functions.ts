@@ -189,8 +189,10 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
       cell.pax += Number(r.pax ?? 0) || 0;
       cell.income += Number(r.total_reward ?? 0) || 0;
 
-      // Grounded evidence: post-flight cooldown snapshotted at write time.
-      // Historical rows without a snapshot leave the cell as partial evidence.
+      // Grounded evidence: post-flight cooldown snapshotted from the aircraft
+      // asset timer at ingest, or reconciled later from the owner's snapshot
+      // (aircraft-keyed, so third-party pilots' flights count identically).
+      // Rows never observed while their cooldown was live stay partial evidence.
       const guRaw = (r as { grounded_until?: string | null }).grounded_until;
       if (guRaw) {
         const guMs = Date.parse(guRaw);
@@ -320,7 +322,7 @@ export function classifyAircraft(
   // Current live state wins for neutral tiers.
   if (currentState?.airborne) return "AIRBORNE";
   if (currentState?.grounded) return "GROUNDED";
-    return rateAircraftUtilization(trailingOp, trailingFlights);
+  return rateAircraftUtilization(trailingOp, trailingFlights);
 }
 
 /** Availability is orthogonal to the statistical rating. */
