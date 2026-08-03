@@ -1089,16 +1089,17 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
   
 
 
-    // Ingest page-1 freshness + reconcile aircraft cooldowns through the
-    // shared importer (`simfly-sync.server.ts`) — the same code path the
-    // background scheduler runs. Fire-and-forget here: never block the
-    // dashboard response on Postgres round-trips.
+     // Session catch-up: probe this user's own assets for movements by ANY
+    // pilot, ingest whoever was involved, then ingest this user's own logbook
+    // and reconcile aircraft cooldowns (`simfly-sync.server.ts`).
+    // Fire-and-forget here: never block the dashboard response. The cooldown
+    // gate inside the catch-up keeps repeat page loads cheap.
     void (async () => {
       try {
-        const { ingestPilotFlights } = await import("./simfly-sync.server");
-        await ingestPilotFlights(username, nonce, { assets, page1: p1 });
+        const { runSessionCatchUp } = await import("./simfly-sync.server");
+        await runSessionCatchUp(username, nonce, { assets, page1: p1 });
       } catch (err) {
-        console.warn("[simfly] ingest failed", err instanceof Error ? err.message : String(err));
+        console.warn("[simfly] catch-up failed", err instanceof Error ? err.message : String(err));
       }
     })();
 
