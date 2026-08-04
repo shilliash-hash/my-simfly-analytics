@@ -44,7 +44,7 @@ const NAV = [
   { to: "/alliance", label: "Alliance", icon: Mountain },
   { to: "/income", label: "Income", icon: Coins },
   { to: "/mission", label: "Mission Prediction", icon: Rocket },
-  // { to: "/portfolio", label: "Portfolio", icon: Compass },
+  { to: "/portfolio", label: "Monthly Intelligence Brief", icon: Compass },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   //{ to: "/admin",       label: "Admin",       icon: Wrench },
