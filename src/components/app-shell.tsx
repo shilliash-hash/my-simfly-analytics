@@ -20,7 +20,8 @@ import {
   Coins,
   Rocket,
   Lock,
-  Compass
+  Compass,
+  Radar,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -29,6 +30,7 @@ import { useAdminToken } from "@/lib/admin-token";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
+  //{ to: "/radar", label: "Community Radar", icon: Radar },
   { to: "/airports",   label: "Airports",  icon: Building2 },
   { to: "/aircraft",   label: "Aircraft",  icon: Plane },
   { to: "/licenses",   label: "Licenses",  icon: IdCard },
