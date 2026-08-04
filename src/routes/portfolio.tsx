@@ -380,7 +380,7 @@ function ReportView({
         <h2 className="mb-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Composite scores
         </h2>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {report.composites.map((c) => (
             <CompositeTile key={c.id} composite={c} />
           ))}
