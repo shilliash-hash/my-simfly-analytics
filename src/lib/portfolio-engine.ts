@@ -17,8 +17,8 @@
 //   composition: normalising published values into 0..100 composite scores,
 //   banding them, and evaluating rules over them.
 
-export const PORTFOLIO_WEIGHTS_VERSION = "2.1.0";
-export const PORTFOLIO_RULE_REGISTRY_VERSION = "2.1.0";
+export const PORTFOLIO_WEIGHTS_VERSION = "2.2.0";
+export const PORTFOLIO_RULE_REGISTRY_VERSION = "2.2.0";
 
 /** One number pulled verbatim from an upstream intelligence module. */
 export type MetricContribution = {
@@ -64,6 +64,10 @@ export type CompositeScore = {
     used: number;
     capacity: number;
     ratio: number;
+    /** Unit suffix for used/capacity ("ops" when omitted). */
+    unit?: string;
+    /** When true, a high ratio is a good thing (licences) rather than saturation. */
+    highIsGood?: boolean;
   }[];
 };
 
@@ -164,6 +168,29 @@ export type EngineInputs = {
           /** usedAvg / capacity as published by the timeline (0..n). */
           utilization: number | null;
         }[];
+        sourceVersion: string;
+      }
+    | { state: "degraded" | "unavailable" };
+  /** Published output of the License Utilization module. */
+  licenseUtilization:
+    | {
+        state: "ok";
+        trailingWeeks: number;
+        licenses: {
+          code: string;
+          name: string;
+          level: number;
+          rankName: string;
+          /** Weekly accountable capacity in minutes, as published. */
+          weeklyCapacityMinutes: number;
+          /** Mean accountable minutes used per week over the trailing window. */
+          usedAvgMinutes: number;
+          /** usedAvgMinutes / weeklyCapacityMinutes (0..1). */
+          utilization: number;
+          /** Recommendation text owned by the Licenses module — never rewritten. */
+          recommendation: string;
+        }[];
+        inactiveCount: number;
         sourceVersion: string;
       }
     | { state: "degraded" | "unavailable" };
@@ -668,6 +695,148 @@ function composeHubCapacityHealth(inputs: EngineInputs): CompositeScore {
 }
 
 
+// --- License Utilization ---------------------------------------------------
+// Domain scale: capacity-weighted share of accountable flight time actually
+// used across activated licences. Every input value is published by the
+// License Utilization module; Portfolio only weights and bands them.
+
+function composeLicenseUtilization(inputs: EngineInputs): CompositeScore {
+  const lic = inputs.licenseUtilization;
+  if (lic.state !== "ok") {
+    return unavailableComposite(
+      "license-utilization",
+      "License Utilization",
+      "Capacity-weighted accountable time used",
+      lic.state,
+      "How much of your licences' weekly accountable flight time is actually used.",
+      "License Utilization is temporarily unavailable.",
+    );
+  }
+  if (lic.licenses.length === 0) {
+    return unavailableComposite(
+      "license-utilization",
+      "License Utilization",
+      "Capacity-weighted accountable time used",
+      "ok",
+      "How much of your licences' weekly accountable flight time is actually used.",
+      lic.inactiveCount > 0
+        ? `You hold ${lic.inactiveCount} licence${lic.inactiveCount === 1 ? "" : "s"} that ${lic.inactiveCount === 1 ? "has" : "have"} never been activated, so there is no utilization to measure yet.`
+        : "No activated licence has enough history yet.",
+    );
+  }
+
+  const totalCapacity = lic.licenses.reduce((s, l) => s + l.weeklyCapacityMinutes, 0);
+  const totalUsed = lic.licenses.reduce((s, l) => s + l.usedAvgMinutes, 0);
+  const weighted = totalCapacity > 0 ? totalUsed / totalCapacity : 0;
+  const score = Math.round(pct(weighted));
+
+  const fullyUtilized = lic.licenses.filter((l) => l.utilization >= 0.9).length;
+  const underutilized = lic.licenses.filter((l) => l.utilization <= 0.4).length;
+
+  const band: CompositeScore["band"] =
+    score >= 90 ? "strong" : score >= 70 ? "healthy" : score >= 40 ? "watch" : "weak";
+  const bandLabel =
+    score >= 90
+      ? "Highly Utilized"
+      : score >= 70
+        ? "Well Utilized"
+        : score >= 40
+          ? "Moderate Utilization"
+          : "Underutilized";
+
+  const breakdown = [...lic.licenses]
+    .sort((a, b) => b.weeklyCapacityMinutes - a.weeklyCapacityMinutes)
+    .map((l) => ({
+      key: l.code || l.name,
+      label: l.code || l.name,
+      sublabel: `L${l.level} · ${lic.trailingWeeks}w avg h/wk`,
+      used: Math.round((l.usedAvgMinutes / 60) * 10) / 10,
+      capacity: Math.round((l.weeklyCapacityMinutes / 60) * 10) / 10,
+      ratio: l.utilization,
+      unit: "h",
+      highIsGood: true,
+    }));
+
+  const contributions: MetricContribution[] = [
+    {
+      id: "license-utilization.weighted_utilization.v1",
+      sourceModule: "license-utilization",
+      sourceVersion: lic.sourceVersion,
+      value: score,
+      label: `Rolling licence utilization (${lic.trailingWeeks}w)`,
+      unit: "%",
+    },
+    {
+      id: "license-utilization.fully_utilized.v1",
+      sourceModule: "license-utilization",
+      sourceVersion: lic.sourceVersion,
+      value: fullyUtilized,
+      label: "Fully utilized licences",
+      unit: "count",
+    },
+    {
+      id: "license-utilization.underutilized.v1",
+      sourceModule: "license-utilization",
+      sourceVersion: lic.sourceVersion,
+      value: underutilized,
+      label: "Underutilized licences",
+      unit: "count",
+    },
+    {
+      id: "license-utilization.inactive.v1",
+      sourceModule: "license-utilization",
+      sourceVersion: lic.sourceVersion,
+      value: lic.inactiveCount,
+      label: "Inactive licences (not analysed)",
+      unit: "count",
+    },
+  ];
+  for (const l of lic.licenses) {
+    contributions.push({
+      id: `license-utilization.licence.${l.code || l.name}.v1`,
+      sourceModule: "license-utilization",
+      sourceVersion: lic.sourceVersion,
+      value: pct(l.utilization),
+      label: `${l.code || l.name} L${l.level} — ${(l.usedAvgMinutes / 60).toFixed(1)}h of ${(l.weeklyCapacityMinutes / 60).toFixed(1)}h weekly accountable time (${lic.trailingWeeks}w avg)`,
+      unit: "%",
+      ref: { code: l.code, level: l.level, rank: l.rankName },
+    });
+  }
+
+  const explanation =
+    score >= 90
+      ? "Your licenses are being used efficiently."
+      : score >= 70
+        ? "Most accountable flight time is being used each week."
+        : score >= 40
+          ? "Several licenses have unused accountable flight time."
+          : "Most accountable flight time goes unused each week.";
+
+  return {
+    id: "license-utilization",
+    label: "License Utilization",
+    score,
+    scoreUnit: "%",
+    band,
+    scaleLabel: `Accountable time used · ${lic.trailingWeeks}w`,
+    bandLabel,
+    rationale: {
+      measured:
+        "Accountable flight time flown against each activated licence's weekly allowance (two 84h cycles), combined into one figure weighted by licence capacity.",
+      good: "Above 90% means the licence window is essentially full and an upgrade unlocks more accountable time. Below 40% the current level already exceeds your flying.",
+      why:
+        `Across ${lic.licenses.length} activated licence${lic.licenses.length === 1 ? "" : "s"} you used ${(totalUsed / 60).toFixed(1)}h of ${(totalCapacity / 60).toFixed(1)}h weekly accountable time over ${lic.trailingWeeks} weeks` +
+        (lic.inactiveCount > 0
+          ? `. ${lic.inactiveCount} inactive licence${lic.inactiveCount === 1 ? " is" : "s are"} excluded.`
+          : "."),
+    },
+    state: "ok",
+    contributions,
+    breakdown,
+    explanation,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Rule pack — adding rules is additive: append to the list, declare
 // `requires`, return zero or more recommendations.
@@ -943,12 +1112,110 @@ const passiveShareLowRule: Rule = {
   },
 };
 
+// Licence recommendations are NOT generated here — the Licenses module owns
+// the advice text. This rule only surfaces it inside Next Actions.
+const licenseUtilizationRule: Rule = {
+  id: "license-utilization",
+  requires: ["license-utilization.licences.v1"],
+  evaluate: (inputs) => {
+    const lic = inputs.licenseUtilization;
+    if (lic.state !== "ok") return [];
+    const out: Recommendation[] = [];
+
+    const full = lic.licenses
+      .filter((l) => l.utilization >= 0.9)
+      .sort((a, b) => b.utilization - a.utilization)
+      .slice(0, 2);
+    for (const l of full) {
+      out.push({
+        id: `license-fully-utilized:${l.code || l.name}`,
+        ruleId: "license-utilization",
+        tier: "planned",
+        priority: 70,
+        title: `Upgrade licence — ${l.code || l.name} L${l.level}`,
+        detail: `${l.recommendation} ${(l.usedAvgMinutes / 60).toFixed(1)}h of ${(l.weeklyCapacityMinutes / 60).toFixed(1)}h weekly accountable time used over ${lic.trailingWeeks} weeks.`,
+        actionLabel: "Open Licenses",
+        actionRoute: "/licenses",
+        evidence: [
+          {
+            id: `license-utilization.licence.${l.code || l.name}.v1`,
+            sourceModule: "license-utilization",
+            sourceVersion: lic.sourceVersion,
+            value: pct(l.utilization),
+            label: `${l.code || l.name} utilization (${lic.trailingWeeks}w)`,
+            unit: "%",
+            ref: { code: l.code, level: l.level },
+          },
+        ],
+        requires: ["license-utilization.licences.v1"],
+      });
+    }
+
+    const under = lic.licenses
+      .filter((l) => l.utilization <= 0.4)
+      .sort((a, b) => a.utilization - b.utilization)
+      .slice(0, 2);
+    for (const l of under) {
+      out.push({
+        id: `license-underused:${l.code || l.name}`,
+        ruleId: "license-utilization",
+        tier: "consider",
+        priority: 25,
+        title: `Licence underused — ${l.code || l.name} L${l.level}`,
+        detail: `${l.recommendation} Only ${(l.usedAvgMinutes / 60).toFixed(1)}h of ${(l.weeklyCapacityMinutes / 60).toFixed(1)}h weekly accountable time was used over ${lic.trailingWeeks} weeks.`,
+        actionLabel: "Open Licenses",
+        actionRoute: "/licenses",
+        evidence: [
+          {
+            id: `license-utilization.licence.${l.code || l.name}.v1`,
+            sourceModule: "license-utilization",
+            sourceVersion: lic.sourceVersion,
+            value: pct(l.utilization),
+            label: `${l.code || l.name} utilization (${lic.trailingWeeks}w)`,
+            unit: "%",
+            ref: { code: l.code, level: l.level },
+          },
+        ],
+        requires: ["license-utilization.licences.v1"],
+      });
+    }
+
+    if (lic.inactiveCount > 0) {
+      out.push({
+        id: "license-inactive",
+        ruleId: "license-utilization",
+        tier: "consider",
+        priority: 20,
+        title: `${lic.inactiveCount} licence${lic.inactiveCount === 1 ? "" : "s"} never activated`,
+        detail:
+          "Not activated — activate to begin tracking. Inactive licences are excluded from every utilization figure until they have a timer to evaluate.",
+        actionLabel: "Open Licenses",
+        actionRoute: "/licenses",
+        evidence: [
+          {
+            id: "license-utilization.inactive.v1",
+            sourceModule: "license-utilization",
+            sourceVersion: lic.sourceVersion,
+            value: lic.inactiveCount,
+            label: "Inactive licences",
+            unit: "count",
+          },
+        ],
+        requires: ["license-utilization.licences.v1"],
+      });
+    }
+
+    return out;
+  },
+};
+
 const RULE_REGISTRY: Rule[] = [
   upgradePriorityRule,
   capacitySaturationRule,
   passiveShareLowRule,
   idleAssetRule,
   incomeConcentrationRule,
+  licenseUtilizationRule,
 ];
 
 // ---------------------------------------------------------------------------
@@ -960,6 +1227,7 @@ export function composePortfolioReport(inputs: EngineInputs): PortfolioReport {
     composeAssetHealth(inputs),
     composeIncomeHealth(inputs),
     composeHubCapacityHealth(inputs),
+    composeLicenseUtilization(inputs),
   ];
 
   const recommendations: Recommendation[] = [];
@@ -973,6 +1241,7 @@ export function composePortfolioReport(inputs: EngineInputs): PortfolioReport {
     fleetUtilization: inputs.fleetUtilization.state,
     income: inputs.income.state,
     hubCapacity: inputs.hubCapacity.state,
+    licenseUtilization: inputs.licenseUtilization.state,
     upgradeAdvisor: inputs.upgradeAdvisor.state,
   };
   const degradedSources = Object.entries(sourceStates)
