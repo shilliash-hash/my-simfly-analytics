@@ -8,9 +8,31 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
+ {
+  id: "1",
+  version: "v 1.03 FEATURE 04.Aug.26",
+  type: ["FEATURE", "UPGRADE", "FIX"],
+  text: `• Monthly Intelligence Brief (MIB). A new executive-level intelligence layer that combines Aircraft, Airport and Income Intelligence into a single strategic portfolio assessment.
+  • Executive summary dashboard,
+  • Composite portfolio scoring
+  • Individual score explanations with evidence popouts
+  • Strategic recommendations
+  • Manual report generation workflow
+  • Rolling 4-week analysis window
+  • Automatic Asset Synchronization
+  • Introduced intelligent session-based synchronization to keep aircraft, airport and pilot activity up to date without requiring manual logins from every pilot.
+  • Automatic synchronization when opening the Hub
+  • Automatic discovery of flights performed by other pilots using your aircraft or airports
+  • Improved aircraft Grounded Time synchronization
+  • Improved Aircraft Utilization table layout.
+  • Current aircraft state and operational utilization classification are now displayed simultaneously using dual status indicators.
+  • Better readability for grounded aircraft.`
+},     
+  
+  
   {
   id: "1",
-  version: "v 1.02 FIX 04.Aug.26",
+  version: "v 1.02 FIX 03.Aug.26",
   type: ["FEATURE", "UPGRADE"],
   text: `• Corrected the Airport Utilization engine to measure airport operations instead of arrivals only.
   • Impact: The correction automatically improves, airport capacity utilization, 
