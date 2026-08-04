@@ -33,6 +33,7 @@ type Movement = {
   origin: string | null;
   destination: string | null;
   aircraft: string | null;
+  source: "recorded" | "observed";
 };
 
 async function collectWeekMovements(weekStartMs: number): Promise<Movement[]> {
@@ -57,6 +58,7 @@ async function collectWeekMovements(weekStartMs: number): Promise<Movement[]> {
       origin: f.departure_icao ? f.departure_icao.toUpperCase() : null,
       destination: f.destination_icao ? f.destination_icao.toUpperCase() : null,
       aircraft: f.aircraft ?? f.aircraft_icao ?? null,
+      source: "recorded",
     });
   }
 
@@ -75,6 +77,7 @@ async function collectWeekMovements(weekStartMs: number): Promise<Movement[]> {
       origin: o.origin_icao ? o.origin_icao.toUpperCase() : null,
       destination: o.destination_icao ? o.destination_icao.toUpperCase() : null,
       aircraft: o.aircraft_name ?? o.aircraft_icao ?? null,
+      source: "observed",
     });
   }
 
@@ -193,6 +196,21 @@ export async function computeCommunityWeek(weekOffset: number): Promise<RadarWee
 
     airports.sort((a, b) => b.operations - a.operations);
 
+    // Coverage honesty: how much of the week came from the community layer.
+    let lastObservationAt: string | null = null;
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const { data: last } = await supabaseAdmin
+        .from("community_traffic_observation")
+        .select("first_seen_at")
+        .order("first_seen_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      lastObservationAt = last?.first_seen_at ?? null;
+    } catch {
+      lastObservationAt = null;
+    }
+
     return {
       weekOffset: offset,
       weekNumber: weekNumberOf(weekStart),
@@ -201,6 +219,9 @@ export async function computeCommunityWeek(weekOffset: number): Promise<RadarWee
       airports,
       routes: Array.from(routes.values()).sort((a, b) => b.count - a.count).slice(0, 25),
       totalFlights: movements.length,
+      recordedFlights: movements.filter((m) => m.source === "recorded").length,
+      observedFlights: movements.filter((m) => m.source === "observed").length,
+      lastObservationAt,
       totalPilots: allPilots.size,
       newAirports: airports.filter((a) => a.isNew).length,
       generatedAt: new Date().toISOString(),
