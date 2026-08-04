@@ -84,7 +84,7 @@ function PortfolioPage() {
     <AppShell>
       <PageHeader
         title="Monthly Intelligence Brief (MIB)"
-        description="Orchestration layer — composes every intelligence module into one strategic view. MIB uses a rolling 4-week analysis window rather than calendar months."
+        description="Orchestration layer — combines every intelligence module into a single strategic view. MIB uses a rolling 4-week analysis window rather than calendar months."
       />
       {supportQ.data?.active ? (
         <PortfolioBody />
@@ -660,18 +660,19 @@ function MethodologyButton({ report }: { report: PortfolioReport }) {
         subtitle="Composition only — every number below is published by another module."
       >
         <p className="text-sm text-muted-foreground">
-          Monthly Intelligence Bief does not create data of its own. It composes the
-          published output of Aircraft Intelligence, Airport Intelligence and
-          Income Intelligence into composite scores, then applies a fixed rule
-          registry to rank the next actions. Each composite is scored on its own
-          domain scale — open a card's details to see what is measured, what a
-          good value looks like, and why it lands in its current band.
+          Composition only — every number below is produced by another intelligence module.
+          Monthly Intelligence Brief does not generate data of its own. It combines the 
+          output of Aircraft Intelligence, Airport Intelligence and Income Intelligence
+          into composite portfolio scores, then applies a fixed ruleset to prioritize the
+          next recommended actions. Each composite is evaluated within its own domain.
+          Open any card to see exactly what is measured, how the score is derived, what
+          constitutes a strong result,and why it currently falls into its displayed band.
         </p>
         <Section title="Briefing stability">
           <p className="text-sm text-muted-foreground">
-            The briefing is stored once per SimFly week and stays stable until you
-            re-run the analysis. Re-running overwrites this week's briefing only;
-            earlier weeks are never modified.
+            The briefing is stored once per SimFly week and remains stable until re-run.
+            Running the analysis again overwrites only the current week's briefing;
+            historical weeks are never modified.
           </p>
         </Section>
         <Section title="Versions">
