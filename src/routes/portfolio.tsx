@@ -83,8 +83,8 @@ function PortfolioPage() {
   return (
     <AppShell>
       <PageHeader
-        title="Portfolio Intelligence"
-        description="Orchestration layer — composes every intelligence module into one strategic view."
+        title="Monthly Intelligence Brief (MIB)"
+        description="Orchestration layer — composes every intelligence module into one strategic view. MIB uses a rolling 4-week analysis window rather than calendar months."
       />
       {supportQ.data?.active ? (
         <PortfolioBody />
@@ -656,11 +656,11 @@ function MethodologyButton({ report }: { report: PortfolioReport }) {
         open={open}
         onOpenChange={setOpen}
         eyebrow="Methodology"
-        title="How Portfolio Intelligence is calculated"
+        title="How MIB is calculated"
         subtitle="Composition only — every number below is published by another module."
       >
         <p className="text-sm text-muted-foreground">
-          Portfolio Intelligence does not create data of its own. It composes the
+          Monthly Intelligence Bief does not create data of its own. It composes the
           published output of Aircraft Intelligence, Airport Intelligence and
           Income Intelligence into composite scores, then applies a fixed rule
           registry to rank the next actions. Each composite is scored on its own
