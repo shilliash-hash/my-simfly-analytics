@@ -12,6 +12,8 @@ export const RADAR_RETAINED_WEEKS = 4;
 
 type LiveFeedFlight = {
   id?: string;
+  /** Some live-feed entries carry only a `key` and no `id`. */
+  key?: string;
   username?: string;
   aircraftName?: string;
   aircraftICAO?: string;
@@ -47,13 +49,14 @@ export async function recordCommunityObservations(): Promise<{
 
   const now = Date.now();
   // Record EVERY airport visible in the feed — discovery is the point.
+  // Identity falls back to `key` because some entries carry no `id`.
   const rows = list
-    .filter((f) => f?.id && (f.originICAO || f.destinationICAO))
+    .filter((f) => (f?.id || f?.key) && (f.originICAO || f.destinationICAO))
     .map((f) => {
       const startMs = f.startTime ? Date.parse(f.startTime) : NaN;
       const ts = Number.isFinite(startMs) ? startMs : now;
       return {
-        flight_id: String(f.id),
+        flight_id: String(f.id ?? f.key),
         origin_icao: f.originICAO ? f.originICAO.toUpperCase() : null,
         destination_icao: f.destinationICAO ? f.destinationICAO.toUpperCase() : null,
         username: f.username ?? null,
