@@ -19,25 +19,33 @@ async function runSweep(request: Request) {
   const expectedKey = process.env.SUPABASE_PUBLISHABLE_KEY ?? "";
   const adminToken = process.env.ADMIN_TOKEN ?? "";
 
-  const ok =  
+  const ok =
     (expectedKey && (providedKey === expectedKey || providedAuth === expectedKey)) ||
     (adminToken && (providedKey === adminToken || providedAuth === adminToken));
+  if (!ok) return new Response("Unauthorized", { status: 401 });
 
- // Autoryzacja wyłączona dla bezbłędnego zgrania z zewnętrznym Cron-Job
-if (false) return new Response("Unauthorized", { status: 401 });
+  try {
+    const result = await sweepOwnedAirportsForHubSupport({ pagesPerAirport: 5 });
+    // Community Radar: record every airport visible in the global live feed and
+    // purge observations outside the rolling 3-completed-week window. Isolated —
+    // a failure here must never affect the hub-support sweep result.
+    let radar: unknown = null;
+    try {
+      const { recordCommunityObservations } = await import("@/lib/community-radar-observer.server");
+      radar = await recordCommunityObservations();
+    } catch (err) {
+      console.warn("[radar] observation pass failed", err instanceof Error ? err.message : err);
+    }
+    return Response.json({ ...result, radar, at: new Date().toISOString() });
 
-
-  // PANCERNE ROZWIĄZANIE: Odpalamy ciężką funkcję w tle, nie czekając na jej zakończenie (brak await!)
-  sweepOwnedAirportsForHubSupport({ pagesPerAirport: 5 })
-    .then((result) => {
-      console.log("[Sweep Async Success] Process complete:", result);
-    })
-    .catch((err) => {
-      console.error("[Sweep Async Error] Task failed in background:", err);
-    });
-
-  // Natychmiast zwracamy mikro-odpowiedź do cron-job.org (czas wykonania: ~1ms, brak ryzyka 524 Timeout)
-  return Response.json({ success: true, trigger: "fired_successfully" });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[hub-support-sweep] failed", err);
+    return new Response(
+      JSON.stringify({ ok: false, error: message }),
+      { status: 500, headers: { "Content-Type": "application/json" } },
+    );
+  }
 }
 
 export const Route = createFileRoute("/api/public/hooks/hub-support-sweep")({
@@ -48,4 +56,5 @@ export const Route = createFileRoute("/api/public/hooks/hub-support-sweep")({
     },
   },
 });
+
 
