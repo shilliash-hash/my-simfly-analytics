@@ -26,16 +26,9 @@ async function runSweep(request: Request) {
 
   try {
     const result = await sweepOwnedAirportsForHubSupport({ pagesPerAirport: 5 });
-    // Community Radar: record every airport visible in the global live feed and
-    // purge observations outside the rolling 3-completed-week window. Isolated —
-    // a failure here must never affect the hub-support sweep result.
-    let radar: unknown = null;
-    try {
-      const { recordCommunityObservations } = await import("@/lib/community-radar-observer.server");
-      radar = await recordCommunityObservations();
-    } catch (err) {
-      console.warn("[radar] observation pass failed", err instanceof Error ? err.message : err);
-    }
+    // Community Radar observations now run on their own 5-minute schedule at
+    // /api/public/hooks/radar-sweep — intentionally not piggybacked here.
+    return Response.json({ ...result, at: new Date().toISOString() });
     return Response.json({ ...result, radar, at: new Date().toISOString() });
 
   } catch (err) {
