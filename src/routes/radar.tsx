@@ -239,9 +239,17 @@ function CommunityRadar() {
                 {b.label}
               </span>
             ))}
-            <span className="text-muted-foreground/70">
-              · {formatNumber(data.totalFlights)} flights · {data.totalPilots} pilots ·{" "}
+              <span className="text-muted-foreground/70">
+              · {formatNumber(data.totalFlights)} flights ({formatNumber(data.recordedFlights)}{" "}
+              recorded / {formatNumber(data.observedFlights)} community) · {data.totalPilots} pilots
               {data.newAirports} new
+                            </span>
+            <span className="text-muted-foreground/70">
+              ·{" "}
+              {data.lastObservationAt
+                ? `community sweep ${new Date(data.lastObservationAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                : "community layer cold — hub flights only"}
+            </span>
             </span>
           </div>
         </div>
