@@ -660,7 +660,6 @@ function MethodologyButton({ report }: { report: PortfolioReport }) {
         subtitle="Composition only — every number below is published by another module."
       >
         <p className="text-sm text-muted-foreground">
-          Composition only — every number below is produced by another intelligence module.
           Monthly Intelligence Brief does not generate data of its own. It combines the 
           output of Aircraft Intelligence, Airport Intelligence and Income Intelligence
           into composite portfolio scores, then applies a fixed ruleset to prioritize the
