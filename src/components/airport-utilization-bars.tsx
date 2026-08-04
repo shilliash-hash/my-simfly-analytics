@@ -11,9 +11,19 @@ export type UtilizationBarRow = {
   used: number;
   capacity: number;
   ratio: number;
+    /** Unit suffix for used/capacity. Defaults to "ops". */
+  unit?: string;
+  /** When true, high ratios read as good (green) instead of saturated (red). */
+  highIsGood?: boolean;
 };
 
-function tone(ratio: number) {
+function tone(ratio: number, highIsGood = false) {
+  if (highIsGood) {
+    if (ratio >= 0.9) return { bar: "bg-emerald-400/70", text: "text-emerald-300" };
+    if (ratio >= 0.7) return { bar: "bg-teal-400/70", text: "text-teal-300" };
+    if (ratio >= 0.4) return { bar: "bg-amber-400/70", text: "text-amber-300" };
+    return { bar: "bg-rose-400/70", text: "text-rose-300" };
+  }
   if (ratio >= 0.9)
     return { bar: "bg-rose-400/70", text: "text-rose-300" };
   if (ratio >= 0.7)
@@ -37,7 +47,7 @@ export function AirportUtilizationBars({
       )}
     >
       {rows.map((r) => {
-        const t = tone(r.ratio);
+        const t = tone(r.ratio, r.highIsGood);
         const width = Math.max(2, Math.min(100, Math.round(r.ratio * 100)));
         return (
           <div key={r.key}>
@@ -51,7 +61,7 @@ export function AirportUtilizationBars({
                 )}
               </span>
               <span className="shrink-0 tabular-nums text-muted-foreground">
-                {r.used} / {r.capacity} ops
+               {r.used} / {r.capacity} {r.unit ?? "ops"}
                 <span className={cn("ml-2 font-semibold", t.text)}>
                   {Math.round(r.ratio * 100)}%
                 </span>
