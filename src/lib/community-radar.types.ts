@@ -25,6 +25,9 @@ export type RadarWeek = {
   airports: RadarAirport[];
   routes: RadarRoute[];
   totalFlights: number;
+  recordedFlights: number;
+  observedFlights: number;
+  lastObservationAt: string | null;
   totalPilots: number;
   newAirports: number;
   generatedAt: string;
