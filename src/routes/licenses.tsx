@@ -7,6 +7,7 @@ import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import type { LicenseTimer } from "@/lib/types";
 import { ShieldCheck, Timer, Plane } from "lucide-react";
 import { RouteChecker } from "@/components/route-checker";
+import { LicenseUtilization } from "@/components/license-utilization";
 
 function LevelBadge({ level }: { level: number }) {
   return (
