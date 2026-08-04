@@ -30,6 +30,7 @@ const SOURCE_TIMEOUTS_MS = {
   advisor: 20_000,
   aircraftUtil: 20_000,
   airportUtil: 20_000,
+  licenseUtil: 20_000,
 } as const;
 
 function withTimeout<T>(p: Promise<T>, ms: number, label: string): Promise<T> {
@@ -114,6 +115,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
     const { getSimflyPayload, getUpgradeAdvisor, getAirportUtilizationTimeline } =
       await import("./simfly.functions");
     const { getIncomeSummary } = await import("./income.functions");
+    const { getLicenseUtilization } = await import("./license-utilization.functions");
     const { getAircraftUtilizationTimeline, rateAircraftUtilization, aircraftAvailability } =
       await import("./aircraft-utilization.functions");
 
@@ -137,7 +139,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
       percToUser: a.percToUser,
     }));
 
-    const [incomeRes, advisorRes, aircraftUtilRes, airportUtilRes] =
+    const [incomeRes, advisorRes, aircraftUtilRes, airportUtilRes, licenseUtilRes] =
       await Promise.allSettled([
         withTimeout(
           getIncomeSummary({ data: { username, range: "30d" } }),
@@ -165,6 +167,11 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
               "airportUtil",
             )
           : Promise.resolve(null),
+          withTimeout(
+          getLicenseUtilization({ data: { username, weeks: 7 } }),
+          SOURCE_TIMEOUTS_MS.licenseUtil,
+          "licenseUtil",
+        ),
       ]);
 
     // Shape upstream results into engine inputs.
@@ -296,6 +303,44 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
           })()
         : { state: "unavailable" };
 
+        // License Utilization — published capacity/used minutes and the module's
+    // own recommendation text, read verbatim. Trailing 4 completed weeks,
+    // matching the aircraft/airport windows.
+    const licenseUtilization: EngineInputs["licenseUtilization"] =
+      licenseUtilRes.status === "fulfilled" && licenseUtilRes.value
+        ? (() => {
+            const t = licenseUtilRes.value;
+            const TRAILING = 4;
+            const weeks = t.weeks.filter((w) => !w.isCurrent).slice(-TRAILING);
+            const active = t.licenses.filter((l) => l.active);
+            const licenses = active.map((l) => {
+              const used =
+                weeks.length > 0
+                  ? weeks.reduce((s2, w) => s2 + (l.used[w.weekStartIso] ?? 0), 0) /
+                    weeks.length
+                  : 0;
+              return {
+                code: l.code,
+                name: l.name,
+                level: l.level,
+                rankName: l.rankName,
+                weeklyCapacityMinutes: l.weeklyCapacityMinutes,
+                usedAvgMinutes: used,
+                utilization:
+                  l.weeklyCapacityMinutes > 0 ? used / l.weeklyCapacityMinutes : 0,
+                recommendation: l.recommendation,
+              };
+            });
+            return {
+              state: "ok" as const,
+              trailingWeeks: weeks.length,
+              licenses,
+              inactiveCount: t.licenses.length - active.length,
+              sourceVersion: "license-utilization.v1",
+            };
+          })()
+        : { state: "unavailable" };
+
     const upgradeAdvisor: EngineInputs["upgradeAdvisor"] =
       advisorRes.status === "fulfilled" && advisorRes.value
         ? {
@@ -362,6 +407,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
       fleetUtilization,
       income,
       hubCapacity,
+      licenseUtilization,
       upgradeAdvisor,
       horizon: { startedAtIso: horizonStartedAtIso, isFirstGeneration },
       weekStartUtcIso: weekIso,
@@ -376,6 +422,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
         fleetUtilization,
         income,
         hubCapacity,
+        licenseUtilization,
         upgradeAdvisor,
       };
       const sourceVersions: Record<string, string> = {};
@@ -383,6 +430,7 @@ export const runPortfolioAnalysis = createServerFn({ method: "POST" })
       if (fleetUtilization.state === "ok") sourceVersions.fleetUtilization = fleetUtilization.sourceVersion;
       if (income.state === "ok") sourceVersions.income = income.sourceVersion;
       if (hubCapacity.state === "ok") sourceVersions.hubCapacity = hubCapacity.sourceVersion;
+      if (licenseUtilization.state === "ok") sourceVersions.licenseUtilization = licenseUtilization.sourceVersion;
       if (upgradeAdvisor.state === "ok") sourceVersions.upgradeAdvisor = upgradeAdvisor.sourceVersion;
 
       await supabaseAdmin
