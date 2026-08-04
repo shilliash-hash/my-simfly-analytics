@@ -250,7 +250,7 @@ function CommunityRadar() {
                 ? `community sweep ${new Date(data.lastObservationAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                 : "community layer cold — hub flights only"}
             </span>
-
+            </div>
           </div>
         </div>
 
