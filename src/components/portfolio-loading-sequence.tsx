@@ -21,6 +21,7 @@ const PHASES: Phase[] = [
   { label: "Collecting aircraft intelligence", icon: Plane, accent: "runway" },
   { label: "Collecting airport intelligence", icon: Building2, accent: "runway" },
   { label: "Analysing income", icon: Coins, accent: "runway" },
+  { label: "Collecting license utilization", icon: Gauge, accent: "runway" },
   { label: "Analysing utilization", icon: Gauge, accent: "instrument" },
   { label: "Generating recommendations", icon: ListChecks, accent: "instrument" },
   { label: "Composing final strategic view", icon: Compass, accent: "runway" },
