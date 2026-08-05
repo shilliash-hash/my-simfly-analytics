@@ -22,6 +22,7 @@ import {
   Lock,
   Compass,
   Radar,
+  Radio,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -32,6 +33,7 @@ const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
   { to: "/radar", label: "Community Radar", icon: Radar },
   { to: "/airports",   label: "Airports",  icon: Building2 },
+  // { to: "/airport-command", label: "Airport Command", icon: Radio },
   { to: "/aircraft",   label: "Aircraft",  icon: Plane },
   { to: "/licenses",   label: "Licenses",  icon: IdCard },
   { to: "/rankings",   label: "Rankings",  icon: Trophy },
