@@ -103,21 +103,27 @@ export type CommandValue = {
   generatedAt: string;
 };
 
-export type CommandLiveInbound = {
+export type CommandLiveMovement = {
   id: string;
   pilot: string;
   aircraftName: string;
   aircraftICAO: string;
   tailNumber?: string;
   origin: string;
+  destination: string;
   etaMs?: number;
+  departureMs?: number;
   distanceNm?: number;
   isOwnPilot: boolean;
 };
 
+/** @deprecated use CommandLiveMovement */
+export type CommandLiveInbound = CommandLiveMovement;
+
 export type CommandLive = {
   icao: string;
-  inbound: CommandLiveInbound[];
+  inbound: CommandLiveMovement[];
+  outbound: CommandLiveMovement[];
   fetchedAt: string;
 };
 
@@ -439,20 +445,28 @@ export const getCommandLive = createServerFn({ method: "GET" })
       }).catch(() => []),
     ]);
 
-    const inbound = new Map<string, CommandLiveInbound>();
+    const inbound = new Map<string, CommandLiveMovement>();
+    const outbound = new Map<string, CommandLiveMovement>();
+
+    const place = (m: CommandLiveMovement) => {
+      // Pattern work (origin === destination) counts once, as outbound.
+      if (m.origin.toUpperCase() === data.icao) outbound.set(m.id, m);
+      else if (m.destination.toUpperCase() === data.icao) inbound.set(m.id, m);
+    };
 
     for (const hub of hubs) {
       if (hub.icao.toUpperCase() !== data.icao) continue;
       for (const v of hub.visitors) {
-        if ((v.destination ?? "").toUpperCase() !== data.icao) continue;
-        inbound.set(v.id, {
+        place({
           id: v.id,
           pilot: v.username,
           aircraftName: v.aircraftName,
           aircraftICAO: v.aircraftICAO,
           tailNumber: v.tailNumber,
-          origin: v.origin,
+          origin: v.origin ?? "",
+          destination: v.destination ?? "",
           etaMs: v.etaMs,
+          departureMs: v.departureMs,
           distanceNm: v.distanceNm,
           isOwnPilot: false,
         });
@@ -460,15 +474,16 @@ export const getCommandLive = createServerFn({ method: "GET" })
     }
 
     for (const f of mine) {
-      if ((f.destination ?? "").toUpperCase() !== data.icao) continue;
-      inbound.set(f.id, {
+      place({
         id: f.id,
         pilot: f.pilotUsername ?? data.username ?? "—",
         aircraftName: f.aircraftName,
         aircraftICAO: f.aircraftICAO,
         tailNumber: f.tailNumber,
-        origin: f.origin,
+        origin: f.origin ?? "",
+        destination: f.destination ?? "",
         etaMs: f.etaMs,
+        departureMs: f.departureMs,
         distanceNm: f.distanceNm,
         isOwnPilot: true,
       });
@@ -478,6 +493,9 @@ export const getCommandLive = createServerFn({ method: "GET" })
       icao: data.icao,
       inbound: [...inbound.values()].sort(
         (a, b) => (a.etaMs ?? Number.MAX_SAFE_INTEGER) - (b.etaMs ?? Number.MAX_SAFE_INTEGER),
+      ),
+      outbound: [...outbound.values()].sort(
+        (a, b) => (b.departureMs ?? 0) - (a.departureMs ?? 0),
       ),
       fetchedAt: new Date().toISOString(),
     };
