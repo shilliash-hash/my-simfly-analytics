@@ -1,13 +1,14 @@
 // Airport Command Center — presentation panels.
 // Pure rendering of already-computed module outputs.
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { formatNumber } from "@/components/app-shell";
 import { SimbriefLink } from "@/components/simbrief-link";
 import type {
   CommandActivity,
   CommandLive,
+  CommandLiveMovement,
   CommandPulse,
   CommandValue,
 } from "@/lib/airport-command.functions";
@@ -165,7 +166,7 @@ function Metric({
 }
 
 // --------------------------------------------------------------------------
-// Live arrivals board
+// Live movements board (inbound + outbound)
 // --------------------------------------------------------------------------
 
 function etaLabel(etaMs?: number) {
@@ -176,49 +177,149 @@ function etaLabel(etaMs?: number) {
   return `${Math.floor(mins / 60)}h ${mins % 60}m`;
 }
 
+function airborneLabel(departureMs?: number) {
+  if (!departureMs) return "AIRBORNE";
+  const mins = Math.max(0, Math.round((Date.now() - departureMs) / 60_000));
+  if (mins < 60) return `${mins} min out`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m out`;
+}
+
+function MovementRow({
+  f,
+  icao,
+  direction,
+}: {
+  f: CommandLiveMovement;
+  icao: string;
+  direction: "in" | "out";
+}) {
+  const inbound = direction === "in";
+  return (
+    <li className="flex items-center justify-between gap-3 py-2.5 text-sm">
+      <div className="flex min-w-0 items-center gap-2.5">
+        {inbound ? (
+          <ArrowDownLeft className="size-4 shrink-0 text-runway" />
+        ) : (
+          <ArrowUpRight className="size-4 shrink-0 text-instrument" />
+        )}
+        <div className="min-w-0">
+          <div className="truncate font-medium">
+            {f.pilot}
+            {f.isOwnPilot && (
+              <span className="mono ml-2 text-[10px] uppercase tracking-widest text-runway">
+                you
+              </span>
+            )}
+          </div>
+          <div className="mono truncate text-xs text-muted-foreground">
+            {inbound
+              ? `${f.origin || "????"} → ${icao}`
+              : `${icao} → ${f.destination || "????"}`}{" "}
+            · {f.aircraftName || f.aircraftICAO}
+            {f.tailNumber ? ` · ${f.tailNumber}` : ""}
+          </div>
+        </div>
+      </div>
+      <div className="shrink-0 text-right">
+        <div className={cn("mono text-sm", inbound ? "text-instrument" : "text-runway")}>
+          {inbound ? etaLabel(f.etaMs) : airborneLabel(f.departureMs)}
+        </div>
+        <div className="mono text-[10px] text-muted-foreground">
+          {f.distanceNm ? `${Math.round(f.distanceNm)} nm` : "—"}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function LiveBoard({ live, loading }: { live?: CommandLive; loading: boolean }) {
+  const [mode, setMode] = useState<"all" | "in" | "out">("all");
+  const inbound = live?.inbound ?? [];
+  const outbound = live?.outbound ?? [];
+  const showIn = mode !== "out";
+  const showOut = mode !== "in";
+
   return (
     <Panel
-      title="Incoming traffic"
+      title="Live traffic"
       eyebrow="Live feed"
       icon={Timer}
       right={
         <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-          {loading ? "Scanning…" : `${live?.inbound.length ?? 0} inbound`}
+          {loading
+            ? "Scanning…"
+            : `${inbound.length} inbound · ${outbound.length} outbound`}
         </span>
       }
     >
+      <div className="mb-3 flex gap-1.5">
+        {(
+          [
+            ["all", "All"],
+            ["in", "Inbound"],
+            ["out", "Outbound"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setMode(key)}
+            className={cn(
+              "mono rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-widest transition-colors",
+              mode === key
+                ? "border-runway/60 bg-runway/10 text-runway"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {loading && <EmptyNote>Reading the live flight feed…</EmptyNote>}
-      {!loading && (live?.inbound.length ?? 0) === 0 && (
-        <EmptyNote>No aircraft currently inbound. The board fills as flights launch.</EmptyNote>
+
+      {!loading && inbound.length === 0 && outbound.length === 0 && (
+        <EmptyNote>No live movements at this airport. The board fills as flights launch.</EmptyNote>
       )}
-      {!loading && (live?.inbound.length ?? 0) > 0 && (
-        <ul className="divide-y divide-border/60">
-          {live!.inbound.map((f) => (
-            <li key={f.id} className="flex items-center justify-between gap-3 py-2.5 text-sm">
-              <div className="min-w-0">
-                <div className="truncate font-medium">
-                  {f.pilot}
-                  {f.isOwnPilot && (
-                    <span className="mono ml-2 text-[10px] uppercase tracking-widest text-runway">
-                      you
-                    </span>
-                  )}
+
+      {!loading && (inbound.length > 0 || outbound.length > 0) && (
+        <div className="space-y-4">
+          {showIn && (
+            <div>
+              {mode === "all" && (
+                <div className="mono mb-1 text-[10px] uppercase tracking-[0.2em] text-runway">
+                  Inbound
                 </div>
-                <div className="mono truncate text-xs text-muted-foreground">
-                  {f.origin || "????"} → {live!.icao} · {f.aircraftName || f.aircraftICAO}
-                  {f.tailNumber ? ` · ${f.tailNumber}` : ""}
+              )}
+              {inbound.length === 0 ? (
+                <EmptyNote>No aircraft currently inbound.</EmptyNote>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {inbound.map((f) => (
+                    <MovementRow key={f.id} f={f} icao={live!.icao} direction="in" />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+          {showOut && (
+            <div>
+              {mode === "all" && (
+                <div className="mono mb-1 text-[10px] uppercase tracking-[0.2em] text-instrument">
+                  Outbound
                 </div>
-              </div>
-              <div className="shrink-0 text-right">
-                <div className="mono text-sm text-instrument">{etaLabel(f.etaMs)}</div>
-                <div className="mono text-[10px] text-muted-foreground">
-                  {f.distanceNm ? `${Math.round(f.distanceNm)} nm` : "—"}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
+              )}
+              {outbound.length === 0 ? (
+                <EmptyNote>No aircraft currently outbound.</EmptyNote>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {outbound.map((f) => (
+                    <MovementRow key={f.id} f={f} icao={live!.icao} direction="out" />
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
       )}
     </Panel>
   );
