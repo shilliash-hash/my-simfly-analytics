@@ -80,18 +80,32 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
 
-    // Resolve owned aircraft IDs for the viewed pilot. Attribution is
-    // owner-based: any flight using one of these tails counts, regardless of
-    // which pilot operated it.
+    //  Resolve aircraft the pilot owns NOW or has owned in the past. Attribution
+    // is owner-based AND time-bounded: a flight only counts for this pilot when
+    // it happened inside one of their ownership periods for that tail.
     const { getSimflyPayload } = await import("./simfly.functions");
     const payload = await getSimflyPayload({ data: { username } });
-    const ownedAircraft = payload.airplanes.map((a) => ({
+    const liveAircraft = payload.airplanes.map((a) => ({
       aircraftId: a.aircraftId,
       name: a.name,
       icao: a.icao,
       tailNumber: a.tailNumber ?? "",
     }));
-    const ownedIds = ownedAircraft.map((a) => a.aircraftId).filter(Boolean);
+        const liveIds = liveAircraft.map((a) => a.aircraftId).filter(Boolean);
+
+    const { getOwnedAircraftWindows, ownedAt } = await import("./aircraft-ownership.server");
+    const ownership = await getOwnedAircraftWindows(username, liveIds);
+    const ownedAircraft = liveAircraft;
+    const ownedIds = ownership.aircraftIds;
+
+    /** Ownership overlaps any part of the week starting at `wsMs`. */
+    const ownedDuringWeek = (aid: string, wsMs: number): boolean =>
+      ownership.windows.some(
+        (w) =>
+          w.aircraftId === aid &&
+          w.fromMs < wsMs + MS_PER_WEEK &&
+          (w.toMs === null || w.toMs > wsMs),
+      );
 
     const now = Date.now();
     const currentWeekStart = weekStartUtcMs(now);
@@ -113,7 +127,8 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
     }
 
     // Attribution: owner-based via aircraft_id. NO username filter — visitors,
-    // renters, and any pilot operating an owned tail all count.
+    // renters, and any pilot operating an owned tail all count, but only while
+    // the tail actually belonged to this pilot.
     const { data: rowsRaw, error } = await supabaseAdmin
       .from("simfly_flights")
       .select(
@@ -161,6 +176,9 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
       if (!aid) continue;
       const ts = r.mission_start_ts ? Date.parse(r.mission_start_ts) : NaN;
       if (!Number.isFinite(ts)) continue;
+      // Time-bounded ownership: flights outside this pilot's ownership period
+      // for that tail belong to the previous (or next) owner.
+      if (!ownedAt(ownership.windows, aid, ts)) continue;
       const ws = weekStartUtcMs(ts);
       if (ws < earliestWeekStart || ws > currentWeekStart) continue;
 
@@ -230,6 +248,8 @@ export const getAircraftUtilizationTimeline = createServerFn({ method: "GET" })
       const perWeek: Record<string, AircraftWeekCell> = {};
       for (const w of weeks) {
         const wsMs = Date.parse(w.weekStartIso);
+        // Weeks outside every ownership period are not this pilot's history.
+        if (!ownedDuringWeek(aid, wsMs)) { perWeek[w.weekStartIso] = null; continue; }
         if (byWeek && wsMs < firstMs) { perWeek[w.weekStartIso] = null; continue; }
         const cell = byWeek?.get(w.weekStartIso);
         if (!cell) {
