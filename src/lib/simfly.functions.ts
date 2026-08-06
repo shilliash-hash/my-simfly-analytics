@@ -947,9 +947,22 @@ function buildIncomeLedger(args: {
   airports: AirportExt[];
   myAirportSlots: { flightId: string; airportIcao: string; paxAirport: number; ts: string }[];
   myAircraftSlots: { flightId: string; aircraftId: string; paxAircraft: number; ts: string }[];
+   /**
+ * Time-bounded ownership test. When absent (ledger not yet populated) we fall
+ * back to the live snapshot, i.e. the previous behaviour.
+ */
+ownedAircraftAt?: (aircraftId: string, tsMs: number) => boolean;
 }): IncomeLedger {
-  const { flights, uniqueVisitorFlights, airplanes, airports, myAirportSlots, myAircraftSlots } = args;
+  const { flights, uniqueVisitorFlights, airplanes, airports, myAirportSlots, myAircraftSlots, ownedAircraftAt } = args;
   const ownedAircraftIds = new Set(airplanes.map((p) => p.aircraftId).filter(Boolean) as string[]);
+  const isOwnAircraft = (aircraftId: string | null | undefined, ts: string | null | undefined): boolean => {
+ if (!aircraftId) return false;
+ if (!ownedAircraftAt) return ownedAircraftIds.has(aircraftId);
+ const tsMs = Date.parse(ts ?? "");
+ // Undated flight → fall back to the live snapshot rather than dropping it.
+if (!Number.isFinite(tsMs)) return ownedAircraftIds.has(aircraftId);
+return ownedAircraftAt(aircraftId, tsMs);
+};
   const ownedAircraftLabelById = new Map<string, string>(
     airplanes.map((p) => [p.aircraftId, p.tailNumber || p.icao || p.name || p.aircraftId]),
   );
@@ -973,7 +986,7 @@ function buildIncomeLedger(args: {
     const destUp = (f.destination_icao || "").toUpperCase();
     const ownOrigin = originUp !== "" && ownedIcaos.has(originUp);
     const ownDest = destUp !== "" && ownedIcaos.has(destUp);
-    const ownAircraft = !!f.aircraftId && ownedAircraftIds.has(f.aircraftId);
+    const ownAircraft = isOwnAircraft(f.aircraftId, f.mission_start_ts);
     const pax = Number(f.pax) || 0;
     const rawAircraft = ownAircraft ? (aircraftSlotByFlight.get(f.id) ?? 0) : 0;
     const rawAirport = ownOrigin || ownDest ? (airportSlotByFlight.get(f.id) ?? 0) : 0;
@@ -1447,6 +1460,19 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     // ignore this field, so every existing Stats value stays byte-identical.
     const myAirportSlotsAll = visitorPerAirport.flatMap((r) => r.myAirportSlots);
     const myAircraftSlotsAll = aircraftPerPlane.myOwnSlots;
+ // Ownership is time-bounded: a tail bought (or sold) mid-history must only
+ // credit the pilot for flights inside their ownership period.
+ let ownedAircraftAt: ((aircraftId: string, tsMs: number) => boolean) | undefined;
+ try {
+ const { getOwnedAircraftWindows, ownedAt } = await import("./aircraft-ownership.server");
+ const ownership = await getOwnedAircraftWindows(
+  username,
+  airplanes.map((p) => p.aircraftId).filter(Boolean),
+   );
+  ownedAircraftAt = (aircraftId, tsMs) => ownedAt(ownership.windows, aircraftId, tsMs);
+     } catch (err) {
+     console.warn("[simfly] ownership windows unavailable", err instanceof Error ? err.message : String(err));
+    }
     const incomeLedger = buildIncomeLedger({
       username,
       flights,
@@ -1455,6 +1481,7 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
       airports,
       myAirportSlots: myAirportSlotsAll,
       myAircraftSlots: myAircraftSlotsAll,
+      ...(ownedAircraftAt ? { ownedAircraftAt } : {}),
     });
     return {
       me,
