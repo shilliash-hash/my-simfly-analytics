@@ -168,3 +168,90 @@ export const adminBackfillAction = createServerFn({ method: "POST" })
 
     return { ok: true as const, affected: targets.length };
   });
+
+
+// ---------------------------------------------------------------------------
+// Aircraft ownership ledger (audit trail) — read-only admin view.
+// ---------------------------------------------------------------------------
+
+export type OwnershipPeriodRow = {
+  id: string;
+  aircraftId: string;
+  owner: string;
+  registration: string | null;
+  aircraftName: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  startInferred: boolean;
+  flights: number;
+};
+
+export const listOwnershipPeriods = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; aircraftId?: string; username?: string }) => d)
+  .handler(async ({ data }): Promise<OwnershipPeriodRow[]> => {
+    checkToken(data.token);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+
+    let q = supabaseAdmin
+      .from("aircraft_ownership_period")
+      .select("id, aircraft_id, owner_username, started_at, ended_at, start_inferred")
+      .order("aircraft_id", { ascending: true })
+      .order("started_at", { ascending: true })
+      .limit(500);
+    const aid = (data.aircraftId ?? "").trim();
+    const user = sanitiseUsername(data.username);
+    if (aid) q = q.eq("aircraft_id", aid);
+    if (user) q = q.eq("owner_username", user.toLowerCase());
+
+    const { data: rows, error } = await q;
+    if (error) throw new Error(error.message);
+    const periods = rows ?? [];
+    if (periods.length === 0) return [];
+
+    const aircraftIds = Array.from(new Set(periods.map((p) => p.aircraft_id as string)));
+    const { data: flights } = await supabaseAdmin
+      .from("simfly_flights")
+      .select("flight_id, aircraft_id, aircraft, aircraft_tail_number, mission_start_ts")
+      .in("aircraft_id", aircraftIds)
+      .order("mission_start_ts", { ascending: true });
+
+    const byAircraft = new Map<string, { ts: number; tail: string | null; name: string | null; id: string }[]>();
+    for (const f of flights ?? []) {
+      const key = f.aircraft_id as string;
+      const ts = f.mission_start_ts ? Date.parse(f.mission_start_ts) : NaN;
+      if (!key || !Number.isFinite(ts)) continue;
+      const list = byAircraft.get(key) ?? [];
+      list.push({
+        ts,
+        tail: (f.aircraft_tail_number as string | null) ?? null,
+        name: (f.aircraft as string | null) ?? null,
+        id: f.flight_id as string,
+      });
+      byAircraft.set(key, list);
+    }
+
+    return periods.map((p) => {
+      const list = byAircraft.get(p.aircraft_id as string) ?? [];
+      const fromMs = Date.parse(p.started_at as string);
+      const toMs = p.ended_at ? Date.parse(p.ended_at as string) : null;
+      const seen = new Set<string>();
+      let last: { tail: string | null; name: string | null } | null = null;
+      for (const f of list) {
+        if (f.ts < fromMs) continue;
+        if (toMs !== null && f.ts >= toMs) continue;
+        seen.add(f.id);
+        last = { tail: f.tail, name: f.name };
+      }
+      return {
+        id: p.id as string,
+        aircraftId: p.aircraft_id as string,
+        owner: p.owner_username as string,
+        registration: last?.tail ?? null,
+        aircraftName: last?.name ?? null,
+        startedAt: p.started_at as string,
+        endedAt: (p.ended_at as string | null) ?? null,
+        startInferred: !!p.start_inferred,
+        flights: seen.size,
+      };
+    });
+  });
