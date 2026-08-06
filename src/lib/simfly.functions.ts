@@ -1760,7 +1760,7 @@ const OPENFLIGHTS_URL =
 let GEO_CACHE: Map<string, AirportGeo> | null = null;
 let GEO_LOAD: Promise<Map<string, AirportGeo>> | null = null;
 
-async function loadGeo(): Promise<Map<string, AirportGeo>> {
+export async function loadGeo(): Promise<Map<string, AirportGeo>> {
   if (GEO_CACHE) return GEO_CACHE;
   if (GEO_LOAD) return GEO_LOAD;
   GEO_LOAD = (async () => {
@@ -2274,17 +2274,17 @@ export type AirportHistoryResult = {
   excluded: number;
 };
 
-async function collectAirportHistoryFlights(
+export async function collectAirportHistoryFlights(
   icao: string,
   username: string,
   nonce: string,
-  opts: { maxPages?: number; sinceMs?: number } = {},
+  opts: { maxPages?: number; sinceMs?: number; startPage?: number } = {},
 ): Promise<AirportHistoryResult> {
   const maxPages = Math.min(Math.max(opts.maxPages ?? 50, 1), 120);
   const sinceMs = opts.sinceMs ?? 0;
+  const startPage = Math.max(1, Math.round(opts.startPage ?? 1));
   const urls = Array.from({ length: maxPages }, (_, i) =>
-    `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${i + 1}`,
-  );
+    `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}&page=${startPage + i}`,  );
   const responses = await fetchJSONPages<RawAirportHistPage>(urls, 4);
   const rows: AirportHistoryRow[] = [];
   const movements: AirportMovement[] = [];
