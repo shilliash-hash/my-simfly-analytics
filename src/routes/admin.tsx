@@ -1243,12 +1243,12 @@ function AirportSpyAccessAdmin({ token }: { token: string }) {
   );
 }
 
-+
-+/**
-+ * Aircraft ownership ledger — read-only audit trail.
-+ * Ownership periods are immutable append-only records; this panel exists to
-+ * verify transfers, not to edit them.
-+ */
+
+/**
+ * Aircraft ownership ledger — read-only audit trail.
+ * Ownership periods are immutable append-only records; this panel exists to
+ * verify transfers, not to edit them.
+ */
 function OwnershipLedgerAdmin({ token }: { token: string }) {
   const listFn = useServerFn(listOwnershipPeriods);
   const [aircraftId, setAircraftId] = useState("");
