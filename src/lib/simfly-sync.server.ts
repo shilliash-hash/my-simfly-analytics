@@ -77,9 +77,11 @@ export async function ingestPilotFlights(
   // AIRCRAFT property, not a pilot property — the map is keyed on aircraft_id
   // and applied regardless of who flew the tail.
   const groundedByAircraftId = new Map<string, string>();
+  const ownedAircraftIds: string[] = [];
   for (const it of assets?.items ?? []) {
     if (it.type === "Airplane") {
       const gu = it.timers?.inGroundOperationUntil ?? null;
+      if (it.aircraftId) ownedAircraftIds.push(String(it.aircraftId));
       if (it.aircraftId && gu) groundedByAircraftId.set(String(it.aircraftId), gu);
     }
   }
@@ -165,6 +167,23 @@ export async function ingestPilotFlights(
       console.warn(
         "[simfly-sync] grounded reconcile error",
         aircraftId,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+  }
+
+    // Ownership ledger reconciliation (append-only). Runs after the logbook
+  // upsert so a first-ever observation can backdate to the aircraft's earliest
+  // known flight. Skipped when the snapshot is missing/empty so a failed asset
+  // fetch can never be read as "sold everything".
+  if (assets?.items?.length) {
+    try {
+      const { reconcileOwnershipFromSnapshot } = await import("./aircraft-ownership.server");
+      await reconcileOwnershipFromSnapshot(username, ownedAircraftIds);
+    } catch (err) {
+      console.warn(
+        "[simfly-sync] ownership reconcile failed",
+        username,
         err instanceof Error ? err.message : String(err),
       );
     }
