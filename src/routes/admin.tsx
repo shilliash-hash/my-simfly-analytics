@@ -20,6 +20,11 @@ import {
   runFlightRecovery,
   type RecoveryReport,
 } from "@/lib/recovery.functions";
+import {
+  listAirportSpyAccess,
+  setAirportSpyAccess,
+  revokeAirportSpyAccess,
+} from "@/lib/airport-spy.functions";
 import { setAdminToken, useAdminToken } from "@/lib/admin-token";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
@@ -99,6 +104,7 @@ function AdminPage() {
         <HubSupportAdmin token={token} />
         <AdminChangelog adminToken={token} />
         <MaintenanceCenter token={token} />
+        <AirportSpyAccessAdmin token={token} />
       </div>
     ) : (
 
@@ -1124,5 +1130,113 @@ function RecoveryReportView({ report }: { report: RecoveryReport }) {
 
       
     </div>
+  );
+}
+
+
+function AirportSpyAccessAdmin({ token }: { token: string }) {
+  const qc = useQueryClient();
+  const listFn = useServerFn(listAirportSpyAccess);
+  const setFn = useServerFn(setAirportSpyAccess);
+  const revokeFn = useServerFn(revokeAirportSpyAccess);
+  const [name, setName] = useState("");
+  const [notes, setNotes] = useState("");
+
+  const { data: rows } = useQuery({
+    queryKey: ["airport-spy-access-admin"],
+    queryFn: () => listFn({ data: { token } }),
+    staleTime: 30_000,
+  });
+
+  const invalidate = () => qc.invalidateQueries({ queryKey: ["airport-spy-access-admin"] });
+
+  const grant = useMutation({
+    mutationFn: (input: { username: string; enabled: boolean; notes?: string }) =>
+      setFn({ data: { token, ...input } }),
+    onSuccess: () => {
+      setName("");
+      setNotes("");
+      invalidate();
+    },
+  });
+  const revoke = useMutation({
+    mutationFn: (username: string) => revokeFn({ data: { token, username } }),
+    onSuccess: invalidate,
+  });
+
+  return (
+    <section className="panel rounded-xl p-4">
+      <h2 className="font-display text-sm font-semibold tracking-tight">Airport Spy access</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Manually managed participant list for the Airport Spy research programme. Supporter status
+        does not grant access.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="SimFly username"
+          className="mono rounded-lg bg-secondary/60 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-runway/50"
+        />
+        <input
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+          placeholder="Notes (optional)"
+          className="flex-1 rounded-lg bg-secondary/60 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-runway/50"
+        />
+        <button
+          disabled={!name.trim() || grant.isPending}
+          onClick={() => grant.mutate({ username: name, enabled: true, notes })}
+          className="mono rounded-lg bg-runway/15 px-4 py-2 text-xs uppercase tracking-widest text-runway ring-1 ring-runway/40 disabled:opacity-50"
+        >
+          Grant access
+        </button>
+      </div>
+      <div className="mt-3 space-y-1">
+        {(rows ?? []).length === 0 ? (
+          <div className="text-xs text-muted-foreground">No participants yet.</div>
+        ) : (
+          (rows ?? []).map((r) => (
+            <div
+              key={r.username}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-secondary/30 px-3 py-2"
+            >
+              <div className="min-w-0">
+                <span className="mono text-xs">{r.username}</span>
+                {r.notes ? (
+                  <span className="ml-2 truncate text-[11px] text-muted-foreground">{r.notes}</span>
+                ) : null}
+              </div>
+              <div className="flex items-center gap-2">
+                <span
+                  className={cn(
+                    "mono rounded px-2 py-0.5 text-[10px] uppercase tracking-widest ring-1",
+                    r.enabled
+                      ? "bg-runway/10 text-runway ring-runway/30"
+                      : "bg-secondary text-muted-foreground ring-border",
+                  )}
+                >
+                  {r.enabled ? "Enabled" : "Disabled"}
+                </span>
+                <button
+                  onClick={() =>
+                    grant.mutate({ username: r.username, enabled: !r.enabled, notes: r.notes ?? "" })
+                  }
+                  className="mono rounded bg-secondary px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
+                >
+                  {r.enabled ? "Disable" : "Enable"}
+                </button>
+                <button
+                  onClick={() => revoke.mutate(r.username)}
+                  className="mono rounded bg-secondary px-2 py-1 text-[10px] uppercase tracking-widest text-destructive"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
   );
 }
