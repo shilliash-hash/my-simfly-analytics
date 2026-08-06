@@ -6,6 +6,7 @@ import { addChangelogEntry, getChangelogEntries, deleteChangelogEntry, getAdviso
 import {
   adminBackfillAction,
   listBackfills,
+  listOwnershipPeriods,
   verifyAdminToken,
   type AdminAction,
 } from "@/lib/admin.functions";
@@ -105,6 +106,7 @@ function AdminPage() {
         <AdminChangelog adminToken={token} />
         <MaintenanceCenter token={token} />
         <AirportSpyAccessAdmin token={token} />
+        <OwnershipLedgerAdmin token={token} />
       </div>
     ) : (
 
@@ -1232,6 +1234,133 @@ function AirportSpyAccessAdmin({ token }: { token: string }) {
                 >
                   Remove
                 </button>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
++
++/**
++ * Aircraft ownership ledger — read-only audit trail.
++ * Ownership periods are immutable append-only records; this panel exists to
++ * verify transfers, not to edit them.
++ */
+function OwnershipLedgerAdmin({ token }: { token: string }) {
+  const listFn = useServerFn(listOwnershipPeriods);
+  const [aircraftId, setAircraftId] = useState("");
+  const [username, setUsername] = useState("");
+  const [filter, setFilter] = useState<{ aircraftId: string; username: string }>({
+    aircraftId: "",
+    username: "",
+  });
+
+  const { data: rows, isFetching } = useQuery({
+    queryKey: ["ownership-ledger-admin", filter.aircraftId, filter.username],
+    queryFn: () =>
+      listFn({
+        data: {
+          token,
+          ...(filter.aircraftId ? { aircraftId: filter.aircraftId } : {}),
+          ...(filter.username ? { username: filter.username } : {}),
+        },
+      }),
+    staleTime: 30_000,
+  });
+
+  const groups = useMemo(() => {
+    const map = new Map<string, typeof rows extends undefined ? never : NonNullable<typeof rows>>();
+    for (const r of rows ?? []) {
+      const list = map.get(r.aircraftId) ?? [];
+      list.push(r);
+      map.set(r.aircraftId, list);
+    }
+    return Array.from(map.entries());
+  }, [rows]);
+
+  return (
+    <section className="panel rounded-xl p-4">
+      <h2 className="font-display text-sm font-semibold tracking-tight">Aircraft ownership ledger</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
+        Immutable audit trail of every ownership transition. Each period attributes flights to the
+        pilot who owned the tail at the time — history is preserved across sales, re-purchases and
+        registration changes.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <input
+          value={aircraftId}
+          onChange={(e) => setAircraftId(e.target.value)}
+          placeholder="Aircraft ID (optional)"
+          className="mono rounded-lg bg-secondary/60 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-runway/50"
+        />
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          placeholder="Owner username (optional)"
+          className="mono rounded-lg bg-secondary/60 px-3 py-2 text-sm outline-none ring-1 ring-border focus:ring-runway/50"
+        />
+        <button
+          onClick={() => setFilter({ aircraftId: aircraftId.trim(), username: username.trim() })}
+          className="mono rounded-lg bg-runway/15 px-4 py-2 text-xs uppercase tracking-widest text-runway ring-1 ring-runway/40"
+        >
+          {isFetching ? "Loading…" : "Query ledger"}
+        </button>
+      </div>
+
+      <div className="mt-3 space-y-3">
+        {groups.length === 0 ? (
+          <div className="text-xs text-muted-foreground">
+            No ownership periods recorded yet. Periods are written automatically as pilots sync.
+          </div>
+        ) : (
+          groups.map(([aid, list]) => (
+            <div key={aid} className="rounded-lg bg-secondary/30 p-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <span className="mono text-xs text-foreground">
+                  {list[0]?.aircraftName || "Aircraft"}{" "}
+                  <span className="text-muted-foreground">#{aid}</span>
+                </span>
+                <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+                  {list.length} period{list.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="mt-2 space-y-1">
+                {list.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded bg-background/40 px-2 py-1.5"
+                  >
+                    <div className="mono min-w-0 text-[11px]">
+                      <span className="text-runway">@{p.owner}</span>
+                      {p.registration ? (
+                        <span className="ml-2 text-muted-foreground">{p.registration}</span>
+                      ) : null}
+                    </div>
+                    <div className="mono flex items-center gap-2 text-[10px] text-muted-foreground">
+                      <span>
+                        {fmtDate(p.startedAt)} → {p.endedAt ? fmtDate(p.endedAt) : "present"}
+                      </span>
+                      {p.startInferred ? (
+                        <span className="rounded bg-instrument/10 px-1.5 py-0.5 text-instrument ring-1 ring-instrument/30">
+                          inferred start
+                        </span>
+                      ) : null}
+                      <span
+                        className={cn(
+                          "rounded px-1.5 py-0.5 ring-1",
+                          p.endedAt
+                            ? "bg-secondary text-muted-foreground ring-border"
+                            : "bg-runway/10 text-runway ring-runway/30",
+                        )}
+                      >
+                        {p.flights} flights
+                     </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           ))
