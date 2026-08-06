@@ -23,6 +23,7 @@ import {
   Compass,
   Radar,
   Radio,
+  Telescope,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -31,14 +32,15 @@ import { useAdminToken } from "@/lib/admin-token";
 
 const NAV = [
   { to: "/",           label: "Overview",  icon: LayoutDashboard },
+  { to: "/stats",       label: "Stats",       icon: BarChart3 },
+  { to: "/activity",   label: "Activity",  icon: Activity },
+  { to: "/income", label: "Income", icon: Coins },
   { to: "/radar", label: "Community Radar", icon: Radar },
   { to: "/airports",   label: "Airports",  icon: Building2 },
   // { to: "/airport-command", label: "Airport Command", icon: Radio },
   { to: "/aircraft",   label: "Aircraft",  icon: Plane },
   { to: "/licenses",   label: "Licenses",  icon: IdCard },
   // { to: "/rankings",   label: "Rankings",  icon: Trophy },
-  { to: "/activity",   label: "Activity",  icon: Activity },
-  { to: "/stats",       label: "Stats",       icon: BarChart3 },
   { to: "/compare",     label: "Compare",     icon: GitCompareArrows },
   { to: "/community",   label: "Last 7D Visitors",   icon: Users },
   { to: "/payout-matrix", label: "Payout Matrix", icon: Grid3x3 },
@@ -46,9 +48,9 @@ const NAV = [
   { to: "/historical-hub-analysis", label: "Historical Hub Analysis", icon: BarChart3 },
   { to: "/my-team-activity", label: "My Team Activity", icon: Users },
   { to: "/alliance", label: "Alliance", icon: Mountain },
-  { to: "/income", label: "Income", icon: Coins },
   { to: "/mission", label: "Mission Prediction", icon: Rocket },
   { to: "/portfolio", label: "Monthly Intelligence Brief", icon: Compass },
+  //{ to: "/airport-spy", label: "Airport Spy", icon: Telescope },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   //{ to: "/admin",       label: "Admin",       icon: Wrench },
