@@ -195,13 +195,18 @@ export const getCommandPulse = createServerFn({ method: "GET" })
       previousWeeklyOperations && previousWeeklyOperations > 0
         ? ((weeklyOperations - previousWeeklyOperations) / previousWeeklyOperations) * 100
         : null;
-
+    
+    // Identity (owner / tier / level / name) comes from the shared resolver;
+    // every operational figure below stays flight-derived.
+    const { resolveAirportIdentityFull } = await import("./airport-identity.server");
+    const identity = await resolveAirportIdentityFull(data.icao).catch(() => null);
+    
     return {
       icao: data.icao,
-      name: meta.name,
-      owner: data.username ?? "",
-      tier: meta.category,
-      level: meta.level,
+      name: identity?.name ?? meta.name,
+      owner: identity?.owner ?? data.username ?? "",
+      tier: identity?.tier ?? meta.category,
+      level: identity?.level ?? meta.level,
       capacity: current?.capacity ?? meta.capacity,
       status: weeklyOperations > 0 ? "ACTIVE HUB" : "QUIET",
       snapshot,
