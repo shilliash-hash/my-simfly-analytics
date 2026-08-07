@@ -93,30 +93,14 @@ function icaoSet(movements: Movement[]): Set<string> {
   return s;
 }
 
-async function ownerMap(icaos: string[]): Promise<Map<string, string>> {
-  const out = new Map<string, string>();
-  if (!icaos.length) return out;
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  const { data: tracked } = await supabaseAdmin
-    .from("airport_utilization_week")
-    .select("icao, username")
-    .in("icao", icaos);
-  for (const r of tracked ?? []) {
-    if (r.icao && r.username && !out.has(r.icao.toUpperCase())) {
-      out.set(r.icao.toUpperCase(), r.username);
-    }
-  }
-
-  const { data: cached } = await supabaseAdmin
-    .from("airport_identity_cache")
-    .select("icao, owner_username")
-    .in("icao", icaos);
-  for (const r of cached ?? []) {
-    if (r.icao && r.owner_username) out.set(r.icao.toUpperCase(), r.owner_username);
-  }
-
-  return out;
+/**
+ * Airport identity for the week's ICAO set. Ownership comes exclusively from
+ * the shared identity resolver (public SimFly airport details); flight and
+ * utilization data are never used to infer an owner.
+ */
+async function identityMap(icaos: string[]) {
+  const { resolveAirportIdentities } = await import("./airport-identity.server");
+  return resolveAirportIdentities(icaos, { maxLive: 40 });
 }
 
 export async function computeCommunityWeek(weekOffset: number): Promise<RadarWeek> {
@@ -169,7 +153,7 @@ export async function computeCommunityWeek(weekOffset: number): Promise<RadarWee
       }
     }
 
-    const owners = await ownerMap(Array.from(agg.keys()));
+     const identities = await identityMap(Array.from(agg.keys()));
 
     const airports: RadarAirport[] = Array.from(agg.entries()).map(([icao, a]) => {
       const pilots = Array.from(a.pilots.entries())
@@ -187,7 +171,10 @@ export async function computeCommunityWeek(weekOffset: number): Promise<RadarWee
         topVisitor: pilots[0]?.username ?? null,
         topVisitorOps: pilots[0]?.operations ?? 0,
         topAircraft: aircraft[0]?.name ?? null,
-        owner: owners.get(icao) ?? null,
+        owner: identities.get(icao)?.owner ?? null,
+        tier: identities.get(icao)?.tier ?? null,
+        level: identities.get(icao)?.level ?? null,
+        name: identities.get(icao)?.name ?? null,
         isNew: !prevIcaos.has(icao),
         pilots: pilots.slice(0, 8),
         aircraft: aircraft.slice(0, 5),
@@ -230,54 +217,15 @@ export async function computeCommunityWeek(weekOffset: number): Promise<RadarWee
 }
 
 export async function resolveAirportIdentity(icaoRaw: string): Promise<AirportIdentity> {
-  const icao = icaoRaw.trim().toUpperCase();
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  const { data: cached } = await supabaseAdmin
-    .from("airport_identity_cache")
-    .select("icao, name, owner_username, tier, refresh_after")
-    .eq("icao", icao)
-    .maybeSingle();
-  if (cached && new Date(cached.refresh_after).getTime() > Date.now()) {
-    return {
-      icao,
-      name: cached.name ?? null,
-      owner: cached.owner_username ?? null,
-      tier: cached.tier ?? null,
-    };
-  }
-
-  let name: string | null = null;
-  let owner: string | null = null;
-  let tier: number | null = null;
-  try {
-    const res = await fetch(
-      `https://simfly.io/api/user/assets/details/airport/${encodeURIComponent(icao)}`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (res.ok) {
-      const json = (await res.json()) as Record<string, unknown>;
-      const node = ((json as { data?: Record<string, unknown> }).data ?? json) as Record<string, unknown>;
-      name = (node["name"] as string) ?? null;
-      tier = typeof node["tier"] === "number" ? (node["tier"] as number) : null;
-      const ownerNode = node["owner"] as { username?: string } | undefined;
-      owner = ownerNode?.username ?? ((node["username"] as string) ?? null);
-    }
-  } catch (err) {
-    console.warn("[radar] identity fetch failed", icao, err instanceof Error ? err.message : err);
-  }
-
-  await supabaseAdmin.from("airport_identity_cache").upsert(
-    {
-      icao,
-      name,
-      owner_username: owner,
-      tier,
-      fetched_at: new Date().toISOString(),
-      refresh_after: new Date(Date.now() + 7 * 24 * 60 * 60_000).toISOString(),
-    },
-    { onConflict: "icao" },
-  );
-
-  return { icao, name, owner, tier };
+ const { resolveAirportIdentityFull } = await import("./airport-identity.server");
+  const id = await resolveAirportIdentityFull(icaoRaw);
+  return {
+    icao: id.icao,
+    name: id.name,
+    owner: id.owner,
+    tier: id.tier,
+    level: id.level,
+    country: id.country,
+    assetId: id.assetId,
+  };
 }
