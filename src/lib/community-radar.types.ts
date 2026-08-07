@@ -10,6 +10,9 @@ export type RadarAirport = {
   topVisitorOps: number;
   topAircraft: string | null;
   owner: string | null;
+  tier: number | null;
+  level: number | null;
+  name: string | null;
   isNew: boolean;
   pilots: { username: string; operations: number }[];
   aircraft: { name: string; operations: number }[];
@@ -38,6 +41,9 @@ export type AirportIdentity = {
   name: string | null;
   owner: string | null;
   tier: number | null;
+  level: number | null;
+  country: string | null;
+  assetId: string | null;
 };
 
 export type RadarMetric = "operations" | "pilots";
