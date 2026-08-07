@@ -367,7 +367,7 @@ function DetailPanel({ airport, onClose }: { airport: RadarAirport; onClose: () 
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="font-mono text-lg tracking-[0.12em] text-primary">{airport.icao}</div>
-          <div className="text-xs text-muted-foreground">{identity?.name ?? "Airport"}</div>
+          <div className="text-xs text-muted-foreground">{identity?.name ?? airport.name ?? "Airport"}</div> 
         </div>
         <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
@@ -376,9 +376,11 @@ function DetailPanel({ airport, onClose }: { airport: RadarAirport; onClose: () 
 
       <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Owner</dt>
-        <dd className="text-right">{airport.owner ?? identity?.owner ?? "Unknown"}</dd>
+        <dd className="text-right">{identity?.owner ?? airport.owner ?? "Unknown"}</dd>
         <dt className="text-muted-foreground">Tier</dt>
-        <dd className="text-right">{identity?.tier ?? "—"}</dd>
+        <dd className="text-right">{identity?.tier ?? airport.tier ?? "—"}</dd>
+        <dt className="text-muted-foreground">Level</dt>
+        <dd className="text-right">{identity?.level ?? airport.level ?? "—"}</dd>
         <dt className="text-muted-foreground">Operations</dt>
         <dd className="text-right tabular-nums">{airport.operations}</dd>
         <dt className="text-muted-foreground">Arrivals</dt>
