@@ -8,7 +8,23 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
- {
+ 
+  {
+  id: "1",
+  version: "v 1.04 FEATURE 07.Aug.26",
+  type: ["FEATURE", "UPGRADE", "FIX"],
+  text: `• Analytical layer for Licenses utilization ration per week, also contributing to Monthly Intelligence Brief like other assets. This new enchancemet is closing circle of assets being analyzed. 
+  • Introduction of COMMUNITY RADAR - heatmap, discovery mode, for current and last 2 weeks, enriched data for airports (ownership/tier/level)
+  • Improved airport identity resolution — airport details are now more consistent across Hub modules, reducing missing or conflicting ownership information
+  • Aircraft ownership tracking improvements** — improved handling of aircraft ownership changes to keep historical analytics accurate after transfers.
+  • Improved fleet analytics accuracy** — aircraft statistics now better respect ownership periods and historical usage
+  • Improved data consistency across dashboards** — multiple sections now share the same identity sources instead of maintaining separate interpretations
+  • UI and quality-of-life improvements** — refined map interactions, metadata displays and overall Intelligence Hub experience.`
+},     
+  
+  
+  
+  {
   id: "1",
   version: "v 1.03 FEATURE 04.Aug.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
