@@ -132,14 +132,25 @@ export const getAirportSpyIntel = createServerFn({ method: "GET" })
       ]);
 
     const r = record as Record<string, unknown> | null;
+
+    
+    // Identity comes from the shared resolver (public SimFly airport details),
+    // never from observed flight activity. Analytics below are untouched.
+    const { resolveAirportIdentityFull } = await import("./airport-identity.server");
+    const identity = await resolveAirportIdentityFull(icao).catch(() => null);
+    if (r && identity && (identity.owner || identity.name)) {
+      const { enrichRecordIdentity } = await import("./airport-spy.server");
+      await enrichRecordIdentity(icao).catch(() => undefined);
+    }
+    
     return {
       icao,
       exists: Boolean(r),
-      name: (r?.name as string) ?? null,
-      country: (r?.country as string) ?? null,
-      owner: (r?.owner_username as string) ?? null,
-      tier: (r?.tier as number) ?? null,
-      level: (r?.level as number) ?? null,
+      name: identity?.name ?? (r?.name as string) ?? null,
+      country: identity?.country ?? (r?.country as string) ?? null,
+      owner: identity?.owner ?? (r?.owner_username as string) ?? null,
+      tier: identity?.tier ?? (r?.tier as number) ?? null,
+      level: identity?.level ?? (r?.level as number) ?? null,
       flightsAnalyzed: (r?.flights_analyzed as number) ?? 0,
       operations: (r?.operations as number) ?? 0,
       arrivals: (r?.arrivals as number) ?? 0,
