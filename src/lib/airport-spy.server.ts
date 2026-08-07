@@ -101,6 +101,26 @@ export async function readRecord(icao: string): Promise<SpyRecordRow | null> {
   return (data as SpyRecordRow | null) ?? null;
 }
 
+/**
+ * Identity-only enrichment. Writes airport metadata (owner, tier, level,
+ * asset id, name, country) from the shared resolver. Never reads or writes any
+ * analytics column.
+ */
+export async function enrichRecordIdentity(icao: string, opts?: { force?: boolean }) {
+  const { resolveAirportIdentityFull } = await import("./airport-identity.server");
+  const id = await resolveAirportIdentityFull(icao, opts);
+  if (!id.name && !id.owner && id.tier === null && id.level === null) return id;
+  await patchRecord(icao, {
+    name: id.name,
+    country: id.country,
+    owner_username: id.owner,
+    tier: id.tier,
+    level: id.level,
+    asset_id: id.assetId,
+  });
+  return id;
+}
+
 async function patchRecord(icao: string, patch: Record<string, unknown>) {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   await supabaseAdmin
@@ -396,17 +416,9 @@ export async function runInvestigation(opts: {
   let observed = 0;
 
   try {
-    // Identity / metadata straight from SimFly (observed, never guessed).
-    const { getAirportSummary } = await import("./simfly.functions");
-    const summary = await getAirportSummary({ data: { icao } });
-    if (summary) {
-      await patchRecord(icao, {
-        name: summary.name,
-        country: summary.country,
-        tier: summary.category,
-        level: summary.level,
-      });
-    }
+    // Identity / metadata straight from the shared resolver (public SimFly
+    // airport details — authoritative, never inferred from flights).
+    await enrichRecordIdentity(icao, { force: true });
 
     // Phase 1 — recent pages.
     let page = 1;
