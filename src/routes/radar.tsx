@@ -11,6 +11,7 @@ import type { RadarAirport, RadarMetric } from "@/lib/community-radar.types";
 import { RadarMap, RADAR_BANDS } from "@/components/radar-map";
 import { SimbriefLink } from "@/components/simbrief-link";
 import { cn } from "@/lib/utils";
+import { formatAirportOwner } from "@/lib/airport-owner";
 import {
   Radar as RadarIcon,
   Sparkles,
@@ -250,7 +251,9 @@ function CommunityRadar() {
                 ? `community sweep ${new Date(data.lastObservationAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
                 : "community layer cold — hub flights only"}
             </span>
-            
+            <span className="w-full text-muted-foreground/70">
+              Bubble center numeral = tier · outer ticks = level (zoom in to reveal)
+            </span>
           </div>
         </div>
 
@@ -340,7 +343,7 @@ function RailSection({
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-muted/40"
               >
                 <span className="font-mono tracking-[0.08em] text-primary">{a.icao}</span>
-                <span className="truncate text-muted-foreground">{a.owner ?? "—"}</span>
+                <span className="truncate text-muted-foreground">{formatAirportOwner(a.owner)}</span>
                 <span className="ml-auto tabular-nums">
                   {metric === "operations" ? a.operations : a.uniquePilots}
                 </span>
@@ -376,7 +379,7 @@ function DetailPanel({ airport, onClose }: { airport: RadarAirport; onClose: () 
 
       <dl className="mt-4 grid grid-cols-2 gap-y-2 text-sm">
         <dt className="text-muted-foreground">Owner</dt>
-        <dd className="text-right">{identity?.owner ?? airport.owner ?? "Unknown"}</dd>
+        <dd className="text-right">{formatAirportOwner(identity?.owner ?? airport.owner)}</dd>
         <dt className="text-muted-foreground">Tier</dt>
         <dd className="text-right">{identity?.tier ?? airport.tier ?? "—"}</dd>
         <dt className="text-muted-foreground">Level</dt>
