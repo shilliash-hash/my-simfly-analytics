@@ -2,6 +2,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
 import type { RadarAirport, RadarMetric, RadarRoute } from "@/lib/community-radar.types";
+import { formatAirportOwner } from "@/lib/airport-owner";
+
+/** Zoom at which the tier/level signature becomes legible. */
+const SIG_MIN_ZOOM = 4;
+/** Tick slots around the ring — level fills them clockwise from north. */
+const SIG_SLOTS = 12;
 
 type Props = {
   airports: RadarAirport[];
@@ -38,6 +44,7 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const arcRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const sigRef = useRef<import("leaflet").LayerGroup | null>(null);
   const markerRef = useRef<Map<string, import("leaflet").CircleMarker>>(new Map());
   const fittedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
@@ -76,6 +83,7 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
       layerRef.current?.remove();
       arcRef.current?.remove();
+      sigRef.current?.remove();
       markerRef.current.clear();
 
       const geo: AirportGeo[] = geoQuery.data ?? [];
@@ -111,6 +119,7 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
       arcRef.current = arcLayer;
 
       const layer = L.layerGroup();
+      const sigLayer = L.layerGroup();
       const bounds: [number, number][] = [];
 
       for (const a of airports) {
@@ -121,6 +130,7 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
         const radius = 5 + Math.sqrt(value / Math.max(1, max)) * 15;
         const dim = discovery && !a.isNew;
         const color = BANDS[band]!.color;
+        const ownerLabel = formatAirportOwner(a.owner);
 
         const marker = L.circleMarker([g.lat, g.lon], {
           radius,
@@ -143,13 +153,48 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
           }).addTo(layer);
         }
 
+                // Tier / level signature — pure visualization above the activity bubble.
+        const tier = a.tier ?? null;
+        const level = a.level ?? 0;
+        if ((tier || level > 0) && radius >= 7) {
+          const size = Math.round(radius * 2);
+          const ticks = Array.from({ length: Math.min(level, SIG_SLOTS) }, (_, i) => {
+            const deg = i * (360 / SIG_SLOTS);
+            return `<i style="transform:translateX(-50%) rotate(${deg}deg);transform-origin:50% ${size / 2}px"></i>`;
+          }).join("");
+          const html = `<div class="radar-sig" style="width:${size}px;height:${size}px;--sig:${color};opacity:${dim ? 0.3 : 1}">${ticks}${
+            tier ? `<span class="radar-sig-tier">${tier}</span>` : ""
+          }</div>`;
+          L.marker([g.lat, g.lon], {
+            icon: L.divIcon({
+              html,
+              className: "radar-sig-icon",
+              iconSize: [size, size],
+              iconAnchor: [size / 2, size / 2],
+            }),
+            interactive: false,
+            keyboard: false,
+          }).addTo(sigLayer);
+        }
+
+        marker.bindTooltip(
+          `<div class="radar-tip-body">
+            <div class="radar-tip-icao">${esc(a.icao)}</div>
+            <div class="radar-tip-meta">Tier ${tier ?? "—"} · Level ${level || "—"}</div>
+            <div class="radar-tip-meta">Owner: ${esc(ownerLabel)}</div>
+            <div class="radar-tip-meta">Operations: ${a.operations} · Pilots: ${a.uniquePilots}</div>
+          </div>`,
+          { direction: "top", offset: [0, -radius], className: "radar-tip", opacity: 1, sticky: false },
+        );
+
         marker.bindPopup(
           `<div style="min-width:200px;font-family:inherit">
             <div style="display:flex;align-items:baseline;gap:8px">
               <span style="font-family:'JetBrains Mono',monospace;font-size:14px;letter-spacing:.08em;color:#22D3EE">${esc(a.icao)}</span>
               <span style="font-size:11px;opacity:.7">${esc(g.name ?? "")}</span>
             </div>
-            <div style="margin-top:6px;font-size:11px;opacity:.75">Owner · ${esc(a.owner ?? "Unknown")}</div>
+            <div style="margin-top:6px;font-size:11px;opacity:.75">Owner · ${esc(ownerLabel)}</div>
+            <div style="margin-top:2px;font-size:11px;opacity:.75">Tier ${tier ?? "—"} · Level ${level || "—"}</div>
             <div style="margin-top:8px;display:grid;grid-template-columns:1fr auto;gap:2px 10px;font-size:12px">
               <span style="opacity:.7">Weekly operations</span><b>${a.operations}</b>
               <span style="opacity:.7">Arrivals</span><b>${a.arrivals}</b>
@@ -169,6 +214,20 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
       layer.addTo(map);
       layerRef.current = layer;
+      sigRef.current = sigLayer;
+
+      const syncSig = () => {
+        const m = mapRef.current;
+        if (!m) return;
+        if (m.getZoom() >= SIG_MIN_ZOOM) {
+          if (!m.hasLayer(sigLayer)) sigLayer.addTo(m);
+        } else if (m.hasLayer(sigLayer)) {
+          sigLayer.remove();
+        }
+      };
+      map.off("zoomend");
+      map.on("zoomend", syncSig);
+      syncSig();
 
       if (!fittedRef.current && bounds.length) {
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 5 });
