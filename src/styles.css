@@ -168,8 +168,9 @@
   70% { opacity: 0; transform: scale(1.5); }
   100% { opacity: 0; transform: scale(1.5); }
 }
-.leaflet-interactive.radar-pulse {
+.radar-pulse-ring {
   transform-origin: center;
+  transform-box: fill-box;
   animation: radar-pulse-anim 2.2s ease-out infinite;
 }
 .leaflet-popup.radar-popup .leaflet-popup-content-wrapper {
@@ -183,36 +184,31 @@
 }
 
 
-/* Community Radar — tier numeral + level tick signature */
-.radar-sig-icon {
+/* Community Radar — single-layer airport marker (bubble + tier numeral + level ticks) */
+.leaflet-marker-icon.radar-marker {
   background: none !important;
   border: none !important;
   pointer-events: none;
 }
-.radar-sig {
-  position: relative;
+.radar-marker-svg {
+  display: block;
+  overflow: visible;
 }
-.radar-sig i {
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  width: 1.5px;
-  height: 4px;
-  background: var(--sig);
-  opacity: 0.8;
+.radar-marker-svg .radar-hit {
+  pointer-events: auto;
+  cursor: pointer;
 }
 .radar-sig-tier {
-  position: absolute;
-  inset: 0;
-  display: grid;
-  place-items: center;
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 10px;
   font-weight: 600;
-  line-height: 1;
   letter-spacing: 0.04em;
-  color: var(--sig);
-  text-shadow: 0 0 4px color-mix(in oklab, var(--color-background) 80%, transparent);
+  paint-order: stroke;
+  stroke: color-mix(in oklab, var(--color-background) 80%, transparent);
+  stroke-width: 2px;
+}
+.radar-hide-sig .radar-sig-g {
+  display: none;
 }
 
 /* Community Radar — hover signature tooltip */
