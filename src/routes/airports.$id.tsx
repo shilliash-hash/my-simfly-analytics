@@ -3,6 +3,7 @@ import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query"
 import { useServerFn } from "@tanstack/react-start";
 import { getSimflyPayload, getAirportVisitors, getHubSupportStatus, getHubTrafficStats, getPilotSupportTimeline } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
+import { getAirportIdentity } from "@/lib/airport-identity.functions";
 import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
 } from "@/components/app-shell";
@@ -36,6 +37,14 @@ function AirportDetail() {
   }));
   const a = data.airports.find((x) => x.icao === id);
   if (!a) throw notFound();
+
+  const identityFn = useServerFn(getAirportIdentity);
+  const identityQ = useQuery({
+    queryKey: ["airport-identity", a.icao],
+    queryFn: () => identityFn({ data: { icao: a.icao } }),
+    staleTime: 60 * 60_000,
+  });
+  const identity = identityQ.data;
 
   const visitorsQ = useQuery({
     queryKey: ["simfly", "visitors", keyTag, a.icao],
