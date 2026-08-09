@@ -44,8 +44,7 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
   const arcRef = useRef<import("leaflet").LayerGroup | null>(null);
-  const sigRef = useRef<import("leaflet").LayerGroup | null>(null);
-  const markerRef = useRef<Map<string, import("leaflet").CircleMarker>>(new Map());
+  const markerRef = useRef<Map<string, import("leaflet").Marker>>(new Map());
   const fittedRef = useRef(false);
   const [mounted, setMounted] = useState(false);
 
@@ -83,7 +82,6 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
       layerRef.current?.remove();
       arcRef.current?.remove();
-      sigRef.current?.remove();
       markerRef.current.clear();
 
       const geo: AirportGeo[] = geoQuery.data ?? [];
@@ -119,7 +117,6 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
       arcRef.current = arcLayer;
 
       const layer = L.layerGroup();
-      const sigLayer = L.layerGroup();
       const bounds: [number, number][] = [];
 
       for (const a of airports) {
@@ -131,51 +128,56 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
         const dim = discovery && !a.isNew;
         const color = BANDS[band]!.color;
         const ownerLabel = formatAirportOwner(a.owner);
-
-        const marker = L.circleMarker([g.lat, g.lon], {
-          radius,
-          color,
-          weight: a.owner ? 2 : 1,
-          opacity: dim ? 0.25 : 0.95,
-          fillColor: color,
-          fillOpacity: dim ? 0.12 : 0.45,
-        });
-
-        if (discovery && a.isNew) {
-          L.circleMarker([g.lat, g.lon], {
-            radius: radius + 8,
-            color: "#F59E0B",
-            weight: 1.5,
-            opacity: 0.8,
-            fill: false,
-            className: "radar-pulse",
-            interactive: false,
-          }).addTo(layer);
-        }
-
-                // Tier / level signature — pure visualization above the activity bubble.
+        
         const tier = a.tier ?? null;
         const level = a.level ?? 0;
-        if ((tier || level > 0) && radius >= 7) {
-          const size = Math.round(radius * 2);
+        
+        
+        // One marker per airport: bubble, pulse, tier numeral and level ticks are
+        // drawn in a single SVG icon anchored to one LatLng, so nothing can drift.
+        const pad = 14;
+        const box = Math.ceil(radius * 2 + pad * 2);
+        const c = box / 2;
+        const weight = a.owner ? 2 : 1;
+
+        const pulse =
+          discovery && a.isNew
+            ? `<circle class="radar-pulse-ring" cx="${c}" cy="${c}" r="${radius + 8}" fill="none" stroke="#F59E0B" stroke-width="1.5" opacity="0.8" />`
+            : "";
+
+        const showSig = (tier || level > 0) && radius >= 7;
+        let sig = "";
+        if (showSig) {
           const ticks = Array.from({ length: Math.min(level, SIG_SLOTS) }, (_, i) => {
-            const deg = i * (360 / SIG_SLOTS);
-            return `<i style="transform:translateX(-50%) rotate(${deg}deg);transform-origin:50% ${size / 2}px"></i>`;
+                        const rad = ((i * (360 / SIG_SLOTS) - 90) * Math.PI) / 180;
+            const x1 = c + Math.cos(rad) * (radius + 1.5);
+            const y1 = c + Math.sin(rad) * (radius + 1.5);
+            const x2 = c + Math.cos(rad) * (radius + 5.5);
+            const y2 = c + Math.sin(rad) * (radius + 5.5);
+            return `<line x1="${x1.toFixed(2)}" y1="${y1.toFixed(2)}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="${color}" stroke-width="1.5" stroke-linecap="round" opacity="0.8" />`;
           }).join("");
-          const html = `<div class="radar-sig" style="width:${size}px;height:${size}px;--sig:${color};opacity:${dim ? 0.3 : 1}">${ticks}${
-            tier ? `<span class="radar-sig-tier">${tier}</span>` : ""
-          }</div>`;
-          L.marker([g.lat, g.lon], {
-            icon: L.divIcon({
-              html,
-              className: "radar-sig-icon",
-              iconSize: [size, size],
-              iconAnchor: [size / 2, size / 2],
-            }),
-            interactive: false,
-            keyboard: false,
-          }).addTo(sigLayer);
+            const numeral = tier
+            ? `<text class="radar-sig-tier" x="${c}" y="${c}" fill="${color}" text-anchor="middle" dominant-baseline="central">${esc(String(tier))}</text>`
+            : "";
+          sig = `<g class="radar-sig-g">${ticks}${numeral}</g>`;
         }
+
+                const html = `<svg class="radar-marker-svg" width="${box}" height="${box}" viewBox="0 0 ${box} ${box}" style="opacity:${dim ? 0.3 : 1}">
+            ${pulse}
+            <circle class="radar-hit" cx="${c}" cy="${c}" r="${radius}" fill="${color}" fill-opacity="${dim ? 0.12 : 0.45}" stroke="${color}" stroke-opacity="${dim ? 0.25 : 0.95}" stroke-width="${weight}" />
+            ${sig}
+          </svg>`;
+
+        const marker = L.marker([g.lat, g.lon], {
+          icon: L.divIcon({
+            html,
+            className: "radar-marker",
+            iconSize: [box, box],
+            iconAnchor: [c, c],
+            popupAnchor: [0, -radius],
+          }),
+          keyboard: false,
+        });
 
         marker.bindTooltip(
           `<div class="radar-tip-body">
@@ -214,16 +216,15 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
       layer.addTo(map);
       layerRef.current = layer;
-      sigRef.current = sigLayer;
+      
+      // Tier/level signature legibility is a pure CSS toggle on the map container,
+      // so marker geometry never changes with zoom.
 
       const syncSig = () => {
         const m = mapRef.current;
         if (!m) return;
-        if (m.getZoom() >= SIG_MIN_ZOOM) {
-          if (!m.hasLayer(sigLayer)) sigLayer.addTo(m);
-        } else if (m.hasLayer(sigLayer)) {
-          sigLayer.remove();
-        }
+        const el = m.getContainer();
+        el.classList.toggle("radar-hide-sig", m.getZoom() < SIG_MIN_ZOOM);
       };
       map.off("zoomend");
       map.on("zoomend", syncSig);
