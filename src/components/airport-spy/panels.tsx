@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { cn } from "@/lib/utils";
+import { formatAirportOwner } from "@/lib/airport-owner";
 import type {
   SpyIntel,
   SpyNearby,
@@ -103,7 +104,7 @@ export function RecordHeader({ intel }: { intel: SpyIntel }) {
             <span>Tier {intel.tier ?? "—"}</span>
             <span>Level {intel.level ?? "—"}</span>
             <span>{intel.country ?? "—"}</span>
-            <span>Owner {intel.owner ?? "not yet observed"}</span>
+            <span>Owner {formatAirportOwner(intel.owner)}</span>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
