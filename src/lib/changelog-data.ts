@@ -8,8 +8,25 @@ export interface ChangelogItem {
 
 // TUTAJ WPISUJESZ NOWE AKTUALIZACJE - NAJNOWSZA ZAWSZE NA SAMEJ GÓRZE
 export const staticChangelogFeed: ChangelogItem[] = [
- 
-  {
+{
+  id: "1",
+  version: "v 1.05 FEATURE 10.Aug.26",
+  type: ["FEATURE"],
+  text: `•Added Aircraft Efficiency Lab — a new analytics module showing real aircraft efficiency based on completed flights. 
+  • PAX generated per hour of pilot flight time
+  • Owned aircraft efficiency analysis
+  • Generic aircraft comparison
+  • 90D / 180D / 365D / All-time views
+  • Efficiency scatter analysis
+  • Aircraft efficiency ranking
+  • Flight distribution analysis
+  • Detailed aircraft performance table
+  • Compare aircraft based on real operational results.
+  • Aircraft Efficiency Lab measures operational efficiency (PAX/hour), not purchase ROI or profitability.
+  • Results are based on completed flight history and are intended to help users better understand aircraft performance before making fleet decisions.`
+},     
+
+{
   id: "1",
   version: "v 1.04 FEATURE 07.Aug.26",
   type: ["FEATURE", "UPGRADE", "FIX"],
@@ -21,9 +38,7 @@ export const staticChangelogFeed: ChangelogItem[] = [
   • Improved data consistency across dashboards** — multiple sections now share the same identity sources instead of maintaining separate interpretations
   • UI and quality-of-life improvements** — refined map interactions, metadata displays and overall Intelligence Hub experience.`
 },     
-  
-  
-  
+    
   {
   id: "1",
   version: "v 1.03 FEATURE 04.Aug.26",
