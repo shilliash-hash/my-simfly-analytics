@@ -1,8 +1,9 @@
-import { useMemo, useState, useEffect } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChevronDown, ChevronRight, Gauge, Radio, Telescope } from "lucide-react";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { addChangelogEntry, getChangelogEntries, deleteChangelogEntry, getAdvisorSettings, setAdvisorSettings, getUpgradeAdvisor } from "@/lib/simfly.functions";
 import {
   adminBackfillAction,
   listBackfills,
@@ -42,55 +43,6 @@ export const Route = createFileRoute("/admin")({
 
 function AdminPage() {
   const token = useAdminToken();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-       // LOGIKA OBECNOŚCI: Pobieramy klienta bezpośrednio z globalnego okna przeglądarki
-  useEffect(() => {
-    // Bezpiecznie sprawdzamy, czy okno oraz globalna instancja Supabase są załadowane w przeglądarce
-    const globalSupabase = typeof window !== "undefined" ? (window as any).supabase : null;
-    if (!globalSupabase) return;
-
-    // Pobieramy tożsamość zalogowanego użytkownika
-    const savedUser = localStorage.getItem("simfly_user_handle") || localStorage.getItem("user");
-    const finalUserId = savedUser 
-      ? savedUser.replace(/"/g, "").trim() 
-      : `Pilot_${Math.floor(1000 + Math.random() * 9000)}`;
-
-    // Otwieramy kanał WebSocket korzystając z odnalezionej globalnie instancji
-    const channel = globalSupabase.channel("hub-online-pilots", {
-      config: { presence: { key: finalUserId } },
-    });
-
-    channel
-      .on("presence", { event: "sync" }, () => {
-        const state = channel.presenceState();
-        const allPresentUsers: string[] = [];
-        
-        Object.entries(state).forEach(([key, presences]: [string, any]) => {
-          presences.forEach(() => { 
-            if (!allPresentUsers.includes(key)) {
-              allPresentUsers.push(key); 
-            }
-          });
-        });
-        
-        (window as any)._hubOnlinePilots = allPresentUsers;
-      })
-      .subscribe(async (status: string) => {
-        if (status === "SUBSCRIBED") {
-          await channel.track({ onlineAt: new Date().toISOString() });
-        }
-      });
-
-    return () => {
-      channel.unsubscribe();
-    };
-  }, []);
-  
   return (
     <AppShell>
       <PageHeader
@@ -98,138 +50,72 @@ function AdminPage() {
         title="Backfill Admin"
         description="Manage historical logbook import jobs — retry stuck pilots, reset progress, cancel runaway imports, and remove failed records."
       />
-      {mounted && token ? (
-      <div className="space-y-8">
-        <AdminUpgradeAdvisor token={token} />
-        <AdminTable token={token} />
-        <HubSupportAdmin token={token} />
-        <AdminChangelog adminToken={token} />
-        <MaintenanceCenter token={token} />
-        <AirportSpyAccessAdmin token={token} />
-        <OwnershipLedgerAdmin token={token} />
-      </div>
-    ) : (
+      {token ? (
+        <div className="space-y-8">
+          <QuickLinks />
+          <AdminTable token={token} />
+          <HubSupportAdmin token={token} />
+          <MaintenanceCenter token={token} />
+          <AirportSpyAccessAdmin token={token} />
+          <OwnershipLedgerAdmin token={token} />
+        </div>
 
+      ) : (
         <TokenForm />
       )}
     </AppShell>
   );
 }
 
-function AdminUpgradeAdvisor({ token }: { token: string }) {
-  const [msg, setMsg] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [ttlInput, setTtlInput] = useState("30");
+const QUICK_LINKS = [
+  {
+    to: "/aircraft-efficiency" as const,
+    label: "Efficiency Lab",
+    hint: "PAX generation per aircraft",
+    icon: Gauge,
+  },
+  {
+    to: "/airport-command" as const,
+    label: "Airport Command",
+    hint: "Owned airport operations room",
+    icon: Radio,
+  },
+  {
+    to: "/airport-spy" as const,
+    label: "Airport Spy",
+    hint: "On-demand airport investigations",
+    icon: Telescope,
+  },
+];
 
-  const setSettingsFn = useServerFn(setAdvisorSettings);
-  const advisorFn = useServerFn(getUpgradeAdvisor);
-  const qc = useQueryClient();
-
-  const { data: settings } = useQuery({
-    queryKey: ["admin", "advisor-settings"],
-    queryFn: () => getAdvisorSettings(),
-    staleTime: 5 * 60_000,
-  });
-
-  async function forceGlobalRefresh() {
-    setBusy(true);
-    setMsg(null);
-    try {
-      await advisorFn({
-        data: {
-          windowDays: 60,
-          adminToken: token,
-          forceIcaos: ["ALL"],
-        },
-      });
-      setMsg("Global cache recalculation successfully triggered.");
-    } catch (e) {
-      setMsg((e as Error).message || "Global refresh failed.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function saveTtlSettings() {
-    const days = parseInt(ttlInput, 10);
-    if (isNaN(days) || days < 1) {
-      setMsg("Please enter a valid number of days (minimum 1).");
-      return;
-    }
-    setBusy(true);
-    setMsg(null);
-    try {
-      await setSettingsFn({ data: { adminToken: token, ttlDays: days } });
-      qc.invalidateQueries({ queryKey: ["admin", "advisor-settings"] });
-      setMsg(`Global Cache TTL successfully locked to ${days} days.`);
-    } catch (e) {
-      setMsg((e as Error).message || "Failed to save TTL.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
+function QuickLinks() {
   return (
-    <div className="space-y-4">
-      <div>
-        <h2 className="font-display text-xl font-semibold flex items-center gap-2">
-          <RefreshCw className="h-5 w-5 text-runway" />
-          <span>Upgrade Advisor Settings</span>
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Global cache rules and manual synchronization pipelines for the financial prediction core.
-        </p>
+    <section className="panel rounded-xl p-4">
+      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+        Intelligence modules
       </div>
-
-      <div className="panel p-5 grid gap-4 grid-cols-1 sm:grid-cols-2 items-end rounded-xl border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-        <div className="space-y-1.5">
-          <label className="mono text-[9px] uppercase tracking-widest text-muted-foreground/60 block pl-0.5">
-            Cache Validity (Current: {settings?.ttlDays ?? 30} days)
-          </label>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              min="1"
-              placeholder="TTL"
-              value={ttlInput}
-              onChange={(e) => setTtlInput(e.target.value)}
-              className="w-24 bg-card border border-border rounded-md px-3 py-1.5 text-sm text-foreground focus:border-runway outline-none transition-colors"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              onClick={saveTtlSettings}
-              className="rounded-md border border-border bg-secondary/40 px-4 py-1.5 text-xs text-foreground hover:bg-secondary transition-colors"
-            >
-              Save TTL
-            </button>
-          </div>
-        </div>
-
-        <div className="space-y-1.5">
-          <div className="mono text-[9px] uppercase tracking-widest text-muted-foreground/60 pl-0.5">
-            Database Invalidation
-          </div>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={forceGlobalRefresh}
-            className="w-full inline-flex items-center justify-center gap-2 rounded-md border border-runway/50 bg-runway/10 px-4 py-2 text-xs text-runway hover:bg-runway/20 transition-all disabled:opacity-40 font-semibold uppercase tracking-wider h-[34px]"
+      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        {QUICK_LINKS.map(({ to, label, hint, icon: Icon }) => (
+          <Link
+            key={to}
+            to={to}
+            className="group flex items-center gap-3 rounded-lg bg-secondary/40 px-3 py-3 ring-1 ring-border transition-colors hover:bg-secondary hover:ring-runway/40"
           >
-            <RefreshCw className={cn("h-3.5 w-3.5", busy && "animate-spin")} />
-            Force Global Recalculation
-          </button>
-        </div>
-
-        {msg && (
-          <div className="sm:col-span-2 mt-2 text-xs text-cyan-400 font-medium bg-cyan-950/20 border border-cyan-500/20 px-3 py-2 rounded-md mono">
-            {msg}
-          </div>
-        )}
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-background/60 text-runway">
+              <Icon className="h-4 w-4" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium text-foreground">{label}</span>
+              <span className="block truncate text-[11px] text-muted-foreground">{hint}</span>
+            </span>
+            <ChevronRight className="ml-auto h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:text-runway" />
+          </Link>
+        ))}
       </div>
-    </div>
+    </section>
   );
 }
+
 
 function TokenForm() {
   const verify = useServerFn(verifyAdminToken);
@@ -754,169 +640,6 @@ function HubSupportAdmin({ token }: { token: string }) {
     </div>
   );
 }
-import { Trash2, RefreshCw, AlertCircle } from "lucide-react";
-
-// Nowy, całkowicie bezpieczny komponent podglądu changelogu z pliku static
-import { staticChangelogFeed } from "@/lib/changelog-data";
-import { Terminal, FileCode, PlusCircle } from "lucide-react";
-
-export function AdminChangelog() {
-  return (
-    <div className="rounded-xl border border-border/50 bg-card p-6 shadow-sm">
-      <div className="flex items-center justify-between border-b border-border/20 pb-4">
-        <div className="flex items-center gap-2">
-          <Terminal className="h-5 w-5 text-runway" />
-          <h2 className="text-lg font-semibold tracking-tight">System Changelog Manager</h2>
-        </div>
-        <span className="mono text-[10px] font-bold bg-runway/15 text-runway border border-runway/30 px-2 py-0.5 rounded-full uppercase">
-          Static Mode Active
-        </span>
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 pt-6 lg:grid-cols-5">
-        {/* LEWA STRONA: PANCERNA INSTRUKCJA SZYBKIEJ EDYCJI */}
-        <div className="space-y-4 lg:col-span-2 border-r border-border/20 pr-4">
-          <div className="rounded-lg border border-border/40 bg-secondary/5 p-4 space-y-3">
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-              <FileCode className="h-4 w-4 text-muted-foreground" />
-              <span>How to add a new update?</span>
-            </div>
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Database connection for updates has been disabled to ensure 100% platform stability. To add, edit, or remove entries from the landing page, modify the central data file directly on GitHub.
-            </p>
-            <div className="mono text-[10px] bg-secondary/30 border border-border/50 rounded p-2 text-muted-foreground select-all truncate">
-              src/lib/changelog-data.ts
-            </div>
-             <button 
-              type="button"
-              onClick={() => {
-                navigator.clipboard.writeText("src/lib/changelog-data.ts");
-                alert("File path copied to clipboard! Open this file in your editor to update changelog.");
-              }}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-runway px-3 py-1.5 text-xs font-medium text-white shadow hover:bg-runway/90 transition cursor-pointer"
-            >
-              <PlusCircle className="h-3.5 w-3.5" />
-              Copy File Path
-            </button>
-          </div>
-        </div>
-
-        {/* PRAWA STRONA: AKTUALNY PODGLĄD LIVE Z PLIKU DATA */}
-        <div className="space-y-3 lg:col-span-3">
-          <span className="text-xs font-bold text-muted-foreground block mb-1">Current Active Feed (Live Preview):</span>
-          <div className="space-y-2 max-h-[340px] overflow-y-auto pr-2">
-            {staticChangelogFeed && staticChangelogFeed.length > 0 ? (
-              staticChangelogFeed.map((entry) => {
-                const tagColor = 
-                  entry.type === "FIX" ? "text-destructive bg-destructive/15 border-destructive/30" : 
-                  entry.type === "UPGRADE" ? "text-instrument bg-instrument/15 border-instrument/30" : 
-                  "text-runway bg-runway/15 border-runway/30";
-
-                return (
-                  <div
-                    key={entry.id}
-                    className="flex items-center justify-between p-3 rounded-md border border-border/30 bg-secondary/10 hover:border-border/50 transition"
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="mono text-[10px] font-bold bg-runway/10 text-runway px-1.5 py-0.5 rounded border border-runway/20 shrink-0">
-                        {entry.version}
-                      </span>
-                      <span className={`mono text-[9px] font-bold px-1.5 py-0.5 rounded border shrink-0 ${tagColor}`}>
-                        {entry.type}
-                      </span>
-                      <p className="text-xs text-foreground truncate">{entry.text}</p>
-                    </div>
-                  </div>
-                );
-              })
-            ) : (
-              <p className="text-xs text-muted-foreground italic text-center p-4">No active changelog items found in static config.</p>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function AdminOnlineUsersWidget() {
-  const [onlinePilots, setOnlinePilots] = useState<string[]>([]);
-  const [isMounted, setIsMounted] = useState(false);
-
-  useEffect(() => {
-    setIsMounted(true);
-    if (typeof window === "undefined") return;
-
-    // Pobieramy sygnały z RAMu przeglądarki od razu po wejściu na stronę
-    const initialList = (window as any)._hubOnlinePilots || [];
-    setOnlinePilots(initialList);
-
-    // Następnie co 2 sekundy automatycznie odświeżamy listę na żywo
-    const interval = setInterval(() => {
-      const liveList = (window as any)._hubOnlinePilots || [];
-      // Aktualizujemy stan Reacta tylko wtedy, gdy zmieniła się liczba osób, aby nie zapętlić przeglądarki
-      setOnlinePilots((prev) => {
-        if (JSON.stringify(prev) !== JSON.stringify(liveList)) {
-          return liveList;
-        }
-        return prev;
-      });
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  // Dopóki serwer Cloudflare buduje stronę (SSR), rysujemy lekki szkielet bezpieczeństwa
-  if (!isMounted) {
-    return (
-      <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-muted animate-pulse"></span>
-          Syncing Presence radar...
-        </div>
-      </div>
-    );
-  }
-
-  // Gdy jesteśmy bezpiecznie w przeglądarce, rysujemy pełny, żywy widżet
-  return (
-    <div className="panel rounded-xl p-4 border border-border/40 bg-background/30 shadow-[0_4px_20px_rgba(0,0,0,0.2)]">
-      <div className="flex items-center justify-between border-b border-border/20 pb-2.5">
-        <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-          {/* Aktywna, pulsująca dioda sieciowa */}
-          <span className="relative flex h-2 w-2">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-runway opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-2 w-2 bg-runway"></span>
-          </span>
-          Live Presence · Hub Network
-        </div>
-        <span className="mono text-[11px] font-bold text-runway px-2 py-0.5 rounded bg-runway/10 border border-runway/20">
-          {onlinePilots.length} Online
-        </span>
-      </div>
-
-      <div className="mt-3">
-        <div className="text-xs font-medium text-muted-foreground mb-2">Pilots currently browsing:</div>
-        {onlinePilots.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground italic text-muted-foreground/60">Gathering network signals...</p>
-        ) : (
-          <ul className="flex flex-wrap gap-1.5 max-h-[150px] overflow-y-auto pr-1 vertical-scroll">
-            {onlinePilots.map((username) => (
-              <li 
-                key={username} 
-                className="mono text-[10px] font-semibold bg-secondary/60 text-foreground border border-border/40 px-2 py-0.5 rounded-md flex items-center gap-1 hover:border-runway/30 transition-colors"
-              >
-                <span className="text-runway">@</span>{username}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// router-force-reload: v3 //
 
 // ---------------------------------------------------------------------------
 // Maintenance Center — manually-triggered recovery utilities.
@@ -1077,9 +800,7 @@ function RecoveryReportView({ report }: { report: RecoveryReport }) {
           ))}
         </div>
       )}
-
-      
-   {report.recovered > 0 && report.recoveredItems.length > 0 && (
+      {report.recovered > 0 && report.recoveredItems.length > 0 && (
         <div className="mt-5">
           <div className="mb-2 flex items-baseline justify-between">
             <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -1128,9 +849,6 @@ function RecoveryReportView({ report }: { report: RecoveryReport }) {
           </div>
         </div>
       )}
-
-
-      
     </div>
   );
 }
@@ -1243,7 +961,6 @@ function AirportSpyAccessAdmin({ token }: { token: string }) {
   );
 }
 
-
 /**
  * Aircraft ownership ledger — read-only audit trail.
  * Ownership periods are immutable append-only records; this panel exists to
@@ -1281,14 +998,36 @@ function OwnershipLedgerAdmin({ token }: { token: string }) {
     return Array.from(map.entries());
   }, [rows]);
 
+  const [open, setOpen] = useState(false);
+
   return (
     <section className="panel rounded-xl p-4">
-      <h2 className="font-display text-sm font-semibold tracking-tight">Aircraft ownership ledger</h2>
-      <p className="mt-1 text-xs text-muted-foreground">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center gap-2 text-left"
+        aria-expanded={open}
+      >
+        {open ? (
+          <ChevronDown className="h-4 w-4 shrink-0 text-runway" />
+        ) : (
+          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+        )}
+        <h2 className="font-display text-sm font-semibold tracking-tight">
+          Aircraft ownership ledger
+        </h2>
+        <span className="mono ml-auto text-[10px] uppercase tracking-widest text-muted-foreground">
+          {groups.length} aircraft · {(rows ?? []).length} periods
+        </span>
+      </button>
+      {!open ? null : (
+      <>
+      <p className="mt-3 text-xs text-muted-foreground">
         Immutable audit trail of every ownership transition. Each period attributes flights to the
         pilot who owned the tail at the time — history is preserved across sales, re-purchases and
         registration changes.
       </p>
+
       <div className="mt-3 flex flex-wrap gap-2">
         <input
           value={aircraftId}
@@ -1357,7 +1096,7 @@ function OwnershipLedgerAdmin({ token }: { token: string }) {
                         )}
                       >
                         {p.flights} flights
-                     </span>
+                      </span>
                     </div>
                   </div>
                 ))}
@@ -1366,6 +1105,9 @@ function OwnershipLedgerAdmin({ token }: { token: string }) {
           ))
         )}
       </div>
+      </>
+      )}
     </section>
+
   );
 }
