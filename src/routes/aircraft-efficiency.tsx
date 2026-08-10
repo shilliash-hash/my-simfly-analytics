@@ -56,6 +56,14 @@ const RANGES = [
   { label: "All", days: 0 },
 ] as const;
 
+type Fleet = "both" | "owned" | "generic";
+
+const FLEETS: { label: string; value: Fleet }[] = [
+  { label: "Both", value: "both" },
+  { label: "Owned", value: "owned" },
+  { label: "Generic", value: "generic" },
+];
+
 const CONF: Record<EfficiencyConfidence, { label: string; cls: string }> = {
   HIGH: { label: "High", cls: "text-runway" },
   MEDIUM: { label: "Medium", cls: "text-instrument" },
@@ -64,6 +72,25 @@ const CONF: Record<EfficiencyConfidence, { label: string; cls: string }> = {
 
 const OWNED_COLOR = "hsl(189 94% 55%)";
 const GENERIC_COLOR = "hsl(38 92% 55%)";
+
+/* Chart colours resolved from the Flight Deck theme.
+   The theme tokens are hex/rgba, so hsl(var(--token)) is invalid here. */
+const AXIS_COLOR = "#94A3B8";
+const AXIS_TEXT = "#CBD5E1";
+const GRID_COLOR = "rgba(226, 232, 240, 0.14)";
+const TOOLTIP_BG = "#1A2236";
+const TOOLTIP_BORDER = "rgba(226, 232, 240, 0.18)";
+const TOOLTIP_TEXT = "#E2E8F0";
+
+const tooltipStyle = {
+  background: TOOLTIP_BG,
+  border: `1px solid ${TOOLTIP_BORDER}`,
+  borderRadius: 10,
+  fontSize: 12,
+  color: TOOLTIP_TEXT,
+} as const;
+
+const tickStyle = { fill: AXIS_TEXT, fontSize: 11 } as const;
 
 function hoursLabel(minutes: number): string {
   const h = minutes / 60;
@@ -74,6 +101,7 @@ function EfficiencyLabPage() {
   const fn = useServerFn(getAircraftEfficiency);
   const { keyTag, username } = useSimflyArgs();
   const [days, setDays] = useState<number>(180);
+  const [fleet, setFleet] = useState<Fleet>("both");
   const [showHistogram, setShowHistogram] = useState(true);
 
   const { data, isLoading, error } = useQuery({
@@ -84,9 +112,14 @@ function EfficiencyLabPage() {
   });
 
   const rows = data?.rows ?? [];
+  const visibleRows = useMemo(
+    () => (fleet === "both" ? rows : rows.filter((r) => r.kind === fleet)),
+    [rows, fleet],
+  );
+
   const scatter = useMemo(
     () =>
-      rows.map((r) => ({
+      visibleRows.map((r) => ({
         x: r.minutes / 60,
         y: r.paxPerHour,
         z: r.flights,
@@ -95,9 +128,19 @@ function EfficiencyLabPage() {
         kind: r.kind,
         flights: r.flights,
       })),
-    [rows],
+    [visibleRows],
   );
-  const ranking = useMemo(() => rows.slice(0, 12), [rows]);
+  const ranking = useMemo(() => visibleRows.slice(0, 12), [visibleRows]);
+
+  const visibleAverage = useMemo(() => {
+    const minutes = visibleRows.reduce((s, r) => s + r.minutes, 0);
+    const pax = visibleRows.reduce((s, r) => s + r.pax, 0);
+    return minutes > 0 ? (pax / minutes) * 60 : 0;
+  }, [visibleRows]);
+
+  const fleetLabel =
+    fleet === "both" ? "all aircraft" : fleet === "owned" ? "owned fleet" : "generic aircraft";
+  const empty = visibleRows.length === 0;
 
   return (
     <AppShell>
@@ -124,6 +167,24 @@ function EfficiencyLabPage() {
             {r.label}
           </button>
         ))}
+
+        <span className="mono ml-4 text-[10px] uppercase tracking-widest text-muted-foreground">
+          Fleet
+        </span>
+        {FLEETS.map((f) => (
+          <button
+            key={f.value}
+            onClick={() => setFleet(f.value)}
+            className={`mono rounded-lg px-3 py-1.5 text-[11px] uppercase tracking-widest transition-colors ${
+              fleet === f.value
+                ? "bg-instrument/20 text-instrument"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {f.label}
+          </button>
+        ))}
+
         <div className="ml-auto flex items-center gap-2 text-[11px] text-muted-foreground">
           <Info className="h-3.5 w-3.5" />
           Flights you personally piloted, ownership-period aware.
@@ -148,238 +209,272 @@ function EfficiencyLabPage() {
             <Stat label="Analyzed flights" value={formatNumber(data.overall.flights)} />
             <Stat label="Your flight time" value={hoursLabel(data.overall.minutes)} />
             <Stat
-              label="Average"
+              label="Average (fleet-wide)"
               value={`${data.overall.paxPerHour.toFixed(1)} PAX/h`}
               accent="runway"
             />
             <Stat
-              label="Median"
+              label="Median (fleet-wide)"
               value={`${data.overall.medianPaxPerHour.toFixed(1)} PAX/h`}
               accent="instrument"
             />
           </div>
 
           <div className="panel mb-4 flex flex-wrap gap-x-6 gap-y-1 rounded-xl p-3 text-[11px] text-muted-foreground">
-            <span className="mono uppercase tracking-widest">Excluded from efficiency</span>
+            <span className="mono uppercase tracking-widest text-foreground/70">
+              Excluded from efficiency
+            </span>
             <span>Zero-income flights: <b className="text-foreground">{data.excluded.zeroIncomeFlights}</b></span>
             <span>Zero-PAX flights: <b className="text-foreground">{data.excluded.zeroPaxFlights}</b></span>
             <span>No duration: <b className="text-foreground">{data.excluded.noDurationFlights}</b></span>
             <span>Rental (other owner): <b className="text-foreground">{data.excluded.rentalFlights}</b></span>
           </div>
 
-          {/* Scatter */}
-          <section className="panel mb-4 rounded-xl p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Gauge className="h-4 w-4 text-runway" />
-              <h2 className="font-display text-base font-semibold">Efficiency scatter</h2>
-              <span className="ml-auto flex items-center gap-3 text-[11px] text-muted-foreground">
-                <LegendDot color={OWNED_COLOR} label="Owned" />
-                <LegendDot color={GENERIC_COLOR} label="Generic" />
-              </span>
+          {empty ? (
+            <div className="panel rounded-xl p-10 text-center text-sm text-muted-foreground">
+              No aircraft in this view. Try a different fleet filter or a wider window.
             </div>
-            <div className="h-[340px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 10, right: 16, bottom: 24, left: 4 }}>
-                  <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.3} />
-                  <XAxis
-                    type="number"
-                    dataKey="x"
-                    name="Flight time"
-                    unit="h"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    type="number"
-                    dataKey="y"
-                    name="PAX/h"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <ZAxis type="number" dataKey="z" range={[60, 420]} name="Flights" />
-                  <ReferenceLine
-                    y={data.overall.paxPerHour}
-                    stroke="hsl(var(--muted-foreground))"
-                    strokeDasharray="4 4"
-                  />
-                  <Tooltip
-                    cursor={{ strokeDasharray: "3 3" }}
-                    contentStyle={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 10,
-                      fontSize: 12,
-                    }}
-                    content={({ active, payload }) => {
-                      if (!active || !payload?.length) return null;
-                      const p = payload[0].payload as (typeof scatter)[number];
-                      return (
-                        <div className="rounded-lg border border-border bg-popover p-2 text-xs">
-                          <div className="font-display font-semibold">{p.name}</div>
-                          <div className="mono text-[10px] text-muted-foreground">
-                            {p.registration}
-                          </div>
-                          <div className="mt-1">{p.y.toFixed(1)} PAX/h</div>
-                          <div className="text-muted-foreground">
-                            {p.x.toFixed(1)} h · {p.flights} flights
-                          </div>
-                        </div>
-                      );
-                    }}
-                  />
-                  <Scatter data={scatter} isAnimationActive={false}>
-                    {scatter.map((p, i) => (
-                      <Cell
-                        key={i}
-                        fill={p.kind === "owned" ? OWNED_COLOR : GENERIC_COLOR}
-                        fillOpacity={0.7}
+          ) : (
+            <>
+              {/* Scatter */}
+              <section className="panel mb-4 rounded-xl p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Gauge className="h-4 w-4 text-runway" />
+                  <h2 className="font-display text-base font-semibold text-foreground">
+                    Efficiency scatter
+                  </h2>
+                  <span className="ml-auto flex items-center gap-3 text-[11px] text-foreground/80">
+                    {fleet !== "generic" && <LegendDot color={OWNED_COLOR} label="Owned" />}
+                    {fleet !== "owned" && <LegendDot color={GENERIC_COLOR} label="Generic" />}
+                  </span>
+                </div>
+                <div className="h-[340px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 10, right: 16, bottom: 24, left: 4 }}>
+                      <CartesianGrid stroke={GRID_COLOR} />
+                      <XAxis
+                        type="number"
+                        dataKey="x"
+                        name="Flight time"
+                        unit="h"
+                        stroke={AXIS_COLOR}
+                        tick={tickStyle}
+                        tickLine={false}
+                        axisLine={false}
                       />
-                    ))}
-                  </Scatter>
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              X = total hours you flew the aircraft, Y = PAX per hour, bubble size = flight count.
-              Dashed line marks your fleet-wide average.
-            </p>
-          </section>
-
-          {/* Ranking */}
-          <section className="panel mb-4 rounded-xl p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-instrument" />
-              <h2 className="font-display text-base font-semibold">Efficiency ranking</h2>
-            </div>
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={ranking}
-                  layout="vertical"
-                  margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
-                >
-                  <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.3} horizontal={false} />
-                  <XAxis
-                    type="number"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    width={150}
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <Tooltip
-                    cursor={{ fill: "hsl(var(--secondary))", fillOpacity: 0.3 }}
-                    contentStyle={{
-                      background: "hsl(var(--popover))",
-                      border: "1px solid hsl(var(--border))",
-                      borderRadius: 10,
-                      fontSize: 12,
-                    }}
-                    formatter={(v: number) => [`${v.toFixed(1)} PAX/h`, "Average"]}
-                  />
-                  <Bar dataKey="paxPerHour" radius={[0, 4, 4, 0]} isAnimationActive={false}>
-                    {ranking.map((r) => (
-                      <Cell
-                        key={r.key}
-                        fill={r.kind === "owned" ? OWNED_COLOR : GENERIC_COLOR}
-                        fillOpacity={0.8}
+                      <YAxis
+                        type="number"
+                        dataKey="y"
+                        name="PAX/h"
+                        stroke={AXIS_COLOR}
+                        tick={tickStyle}
+                        tickLine={false}
+                        axisLine={false}
                       />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </section>
+                      <ZAxis type="number" dataKey="z" range={[60, 420]} name="Flights" />
+                      <ReferenceLine
+                        y={visibleAverage}
+                        stroke={AXIS_COLOR}
+                        strokeDasharray="4 4"
+                        label={{
+                          value: `Avg ${visibleAverage.toFixed(1)} PAX/h · ${fleetLabel}`,
+                          position: "insideTopRight",
+                          fill: AXIS_TEXT,
+                          fontSize: 11,
+                        }}
+                      />
+                      <Tooltip
+                        cursor={{ strokeDasharray: "3 3", stroke: AXIS_COLOR }}
+                        contentStyle={tooltipStyle}
+                        content={({ active, payload }) => {
+                          if (!active || !payload?.length) return null;
+                          const p = payload[0].payload as (typeof scatter)[number];
+                          return (
+                            <div className="rounded-lg border border-border bg-popover p-2 text-xs text-popover-foreground">
+                              <div className="font-display font-semibold">{p.name}</div>
+                              <div className="mono text-[10px] text-muted-foreground">
+                                {p.registration}
+                              </div>
+                              <div className="mt-1">{p.y.toFixed(1)} PAX/h</div>
+                              <div className="text-muted-foreground">
+                                {p.x.toFixed(1)} h · {p.flights} flights
+                              </div>
+                            </div>
+                          );
+                        }}
+                      />
+                      <Scatter data={scatter} isAnimationActive={false}>
+                        {scatter.map((p, i) => (
+                          <Cell
+                            key={i}
+                            fill={p.kind === "owned" ? OWNED_COLOR : GENERIC_COLOR}
+                            fillOpacity={0.75}
+                          />
+                        ))}
+                      </Scatter>
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                </div>
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  X = total hours you flew the aircraft, Y = PAX per hour, bubble size = flight
+                  count. Dashed line marks the average across {fleetLabel}.
+                </p>
+              </section>
 
-          {/* Distribution */}
-          <section className="panel mb-4 rounded-xl p-4">
-            <div className="mb-3 flex items-center gap-2">
-              <h2 className="font-display text-base font-semibold">Flight distribution</h2>
-              <button
-                onClick={() => setShowHistogram((v) => !v)}
-                className="mono ml-auto rounded-lg px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
-              >
-                {showHistogram ? "Hide" : "Show"}
-              </button>
-            </div>
-            {showHistogram && (
-              <div className="h-[260px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={data.histogram.map((b) => ({ ...b, band: `${b.from}–${b.to}` }))}
-                    margin={{ top: 4, right: 16, bottom: 16, left: 4 }}
+              {/* Ranking */}
+              <section className="panel mb-4 rounded-xl p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-instrument" />
+                  <h2 className="font-display text-base font-semibold text-foreground">
+                    Efficiency ranking
+                  </h2>
+                </div>
+                <div className="h-[320px]">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={ranking}
+                      layout="vertical"
+                      margin={{ top: 4, right: 24, bottom: 4, left: 8 }}
+                    >
+                      <CartesianGrid stroke={GRID_COLOR} horizontal={false} />
+                      <XAxis
+                        type="number"
+                        stroke={AXIS_COLOR}
+                        tick={tickStyle}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        type="category"
+                        dataKey="name"
+                        width={150}
+                        stroke={AXIS_COLOR}
+                        tick={tickStyle}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <Tooltip
+                        cursor={{ fill: "rgba(226, 232, 240, 0.06)" }}
+                        contentStyle={tooltipStyle}
+                        itemStyle={{ color: TOOLTIP_TEXT }}
+                        labelStyle={{ color: TOOLTIP_TEXT }}
+                        formatter={(v: number) => [`${v.toFixed(1)} PAX/h`, "Average"]}
+                      />
+                      <Bar dataKey="paxPerHour" radius={[0, 4, 4, 0]} isAnimationActive={false}>
+                        {ranking.map((r) => (
+                          <Cell
+                            key={r.key}
+                            fill={r.kind === "owned" ? OWNED_COLOR : GENERIC_COLOR}
+                            fillOpacity={0.85}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </section>
+
+              {/* Distribution */}
+              <section className="panel mb-4 rounded-xl p-4">
+                <div className="mb-3 flex items-center gap-2">
+                  <h2 className="font-display text-base font-semibold text-foreground">
+                    Flight distribution
+                  </h2>
+                  <button
+                    onClick={() => setShowHistogram((v) => !v)}
+                    className="mono ml-auto rounded-lg px-2 py-1 text-[10px] uppercase tracking-widest text-muted-foreground hover:text-foreground"
                   >
-                    <CartesianGrid stroke="hsl(var(--border))" strokeOpacity={0.3} vertical={false} />
-                    <XAxis dataKey="band" stroke="hsl(var(--muted-foreground))" fontSize={10} tickLine={false} axisLine={false} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
-                    <Tooltip
-                      cursor={{ fill: "hsl(var(--secondary))", fillOpacity: 0.3 }}
-                      contentStyle={{
-                        background: "hsl(var(--popover))",
-                        border: "1px solid hsl(var(--border))",
-                        borderRadius: 10,
-                        fontSize: 12,
-                      }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: 11 }} />
-                    <Bar dataKey="owned" name="Owned" stackId="a" fill={OWNED_COLOR} fillOpacity={0.8} isAnimationActive={false} />
-                    <Bar dataKey="generic" name="Generic" stackId="a" fill={GENERIC_COLOR} fillOpacity={0.8} isAnimationActive={false} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            )}
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              Per-flight PAX/hour, bucketed. Average {data.overall.paxPerHour.toFixed(1)} · median{" "}
-              {data.overall.medianPaxPerHour.toFixed(1)} PAX/h.
-            </p>
-          </section>
+                    {showHistogram ? "Hide" : "Show"}
+                  </button>
+                </div>
+                {showHistogram && (
+                  <div className="h-[260px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart
+                        data={data.histogram.map((b) => ({ ...b, band: `${b.from}–${b.to}` }))}
+                        margin={{ top: 4, right: 16, bottom: 16, left: 4 }}
+                      >
+                        <CartesianGrid stroke={GRID_COLOR} vertical={false} />
+                        <XAxis
+                          dataKey="band"
+                          stroke={AXIS_COLOR}
+                          tick={{ fill: AXIS_TEXT, fontSize: 10 }}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis
+                          stroke={AXIS_COLOR}
+                          tick={tickStyle}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip
+                          cursor={{ fill: "rgba(226, 232, 240, 0.06)" }}
+                          contentStyle={tooltipStyle}
+                          itemStyle={{ color: TOOLTIP_TEXT }}
+                          labelStyle={{ color: TOOLTIP_TEXT }}
+                        />
+                        <Legend wrapperStyle={{ fontSize: 11, color: AXIS_TEXT }} />
+                        {fleet !== "generic" && (
+                          <Bar
+                            dataKey="owned"
+                            name="Owned"
+                            stackId="a"
+                            fill={OWNED_COLOR}
+                            fillOpacity={0.85}
+                            isAnimationActive={false}
+                          />
+                        )}
+                        {fleet !== "owned" && (
+                          <Bar
+                            dataKey="generic"
+                            name="Generic"
+                            stackId="a"
+                            fill={GENERIC_COLOR}
+                            fillOpacity={0.85}
+                            isAnimationActive={false}
+                          />
+                        )}
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+                <p className="mt-2 text-[11px] text-muted-foreground">
+                  Per-flight PAX/hour, bucketed. Fleet-wide average{" "}
+                  {data.overall.paxPerHour.toFixed(1)} · median{" "}
+                  {data.overall.medianPaxPerHour.toFixed(1)} PAX/h.
+                </p>
+              </section>
 
-          {/* Table */}
-          <section className="panel overflow-hidden rounded-xl">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="mono bg-secondary/40 text-[10px] uppercase tracking-widest text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Aircraft</th>
-                    <th className="px-4 py-3 text-left">Registration</th>
-                    <th className="px-4 py-3 text-right">Flights</th>
-                    <th className="px-4 py-3 text-right">Flight time</th>
-                    <th className="px-4 py-3 text-right">Income</th>
-                    <th className="px-4 py-3 text-right">PAX</th>
-                    <th className="px-4 py-3 text-right">PAX/h</th>
-                    <th className="px-4 py-3 text-right">PAX/min</th>
-                    <th className="px-4 py-3 text-right">Median</th>
-                    <th className="px-4 py-3 text-left">Best / worst</th>
-                    <th className="px-4 py-3 text-left">Confidence</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r) => (
-                    <Row key={r.key} r={r} />
-                  ))}
-                  {rows.length === 0 && (
-                    <tr>
-                      <td colSpan={11} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                        No qualifying flights in this window.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
+              {/* Table */}
+              <section className="panel overflow-hidden rounded-xl">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-foreground">
+                    <thead className="mono bg-secondary/40 text-[10px] uppercase tracking-widest text-foreground/70">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Aircraft</th>
+                        <th className="px-4 py-3 text-left">Registration</th>
+                        <th className="px-4 py-3 text-right">Flights</th>
+                        <th className="px-4 py-3 text-right">Flight time</th>
+                        <th className="px-4 py-3 text-right">Income</th>
+                        <th className="px-4 py-3 text-right">PAX</th>
+                        <th className="px-4 py-3 text-right">PAX/h</th>
+                        <th className="px-4 py-3 text-right">PAX/min</th>
+                        <th className="px-4 py-3 text-right">Median</th>
+                        <th className="px-4 py-3 text-left">Best / worst</th>
+                        <th className="px-4 py-3 text-left">Confidence</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {visibleRows.map((r) => (
+                        <Row key={r.key} r={r} />
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            </>
+          )}
         </>
       )}
     </AppShell>
@@ -390,7 +485,7 @@ function Row({ r }: { r: EfficiencyRow }) {
   const conf = CONF[r.confidence];
   return (
     <tr className="border-t border-border transition-colors hover:bg-secondary/30">
-      <td className="px-4 py-3 font-display font-semibold">
+      <td className="px-4 py-3 font-display font-semibold text-foreground">
         <div className="flex items-center gap-2">
           <Plane
             className={`h-3.5 w-3.5 -rotate-45 ${r.kind === "owned" ? "text-runway" : "text-instrument"}`}
