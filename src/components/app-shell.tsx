@@ -24,6 +24,7 @@ import {
   Radar,
   Radio,
   Telescope,
+  Gauge,
 
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
@@ -51,6 +52,7 @@ const NAV = [
   { to: "/mission", label: "Mission Prediction", icon: Rocket },
   { to: "/portfolio", label: "Monthly Intelligence Brief", icon: Compass },
   //{ to: "/airport-spy", label: "Airport Spy", icon: Telescope },
+  //{ to: "/aircraft-efficiency", label: "Efficiency Lab", icon: Gauge },
   // { to: "/pilot-career", label: "Pilot Career", icon: Trophy },
   // { to: "/consistency", label: "Consistency", icon: ShieldCheck, adminOnly: true },
   //{ to: "/admin",       label: "Admin",       icon: Wrench },
