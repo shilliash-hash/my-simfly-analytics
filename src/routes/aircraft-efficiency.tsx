@@ -303,7 +303,7 @@ function EfficiencyLabPage() {
                   <span className="ml-auto flex items-center gap-3 text-[11px] text-foreground/80">
                     {fleet !== "generic" && <LegendDot color={OWNED_COLOR} label="Owned · PAX/h" />}
                     {fleet !== "owned" && <LegendDot color={GENERIC_COLOR} label="Generic · PAX/h" />}
-                    <LegendDot color={EARNINGS_COLOR} label="Earnings/h" />
+                    <LegendDot color={EARNINGS_COLOR} label="Pure Aircraft PAX/h" />
                   </span>
                 </div>
                 <div className="h-[340px]">
@@ -600,7 +600,7 @@ function Row({ r }: { r: EfficiencyRow }) {
       <td className="mono px-4 py-3 text-right text-runway">{formatNumber(Math.round(r.pax))}</td>
       <td className="mono px-4 py-3 text-right font-semibold">{r.paxPerHour.toFixed(2)}</td>
       <td className="mono px-4 py-3 text-right font-semibold" style={{ color: EARNINGS_COLOR }}>
-        {r.kind === "owned" ? formatNumber(Math.round(r.earningsPerHour.toFixed(2))) : "—"}
+         {r.kind === "owned" ? r.earningsPerHour.toFixed(2) : "—"}
       </td>
       <td className="mono px-4 py-3 text-right">{r.paxPerMinute.toFixed(2)}</td>
       <td className="mono px-4 py-3 text-right">{r.medianPaxPerHour.toFixed(2)}</td>
