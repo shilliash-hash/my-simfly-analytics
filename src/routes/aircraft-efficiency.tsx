@@ -272,7 +272,7 @@ function EfficiencyLabPage() {
             />
             <Stat
               label="Earnings (fleet-wide)"
-              value={`${formatNumber(data.overall.earningsPerHour, 2)} /h`}
+              value={`${formatNumber(data.overall.earningsPerHour, 2)} PAX/h`}
               accent="earnings"
             />
           </div>
