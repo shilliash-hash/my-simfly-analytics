@@ -57,6 +57,9 @@ export type EfficiencyRow = {
   minutes: number;
   income: number;
   pax: number;
+  /** Pilot + aircraft-owner payout credited to me on this aircraft (airport income excluded). */
+  earnings: number;
+  earningsPerHour: number;
   paxPerHour: number;
   paxPerMinute: number;
   medianPaxPerHour: number;
@@ -82,6 +85,8 @@ export type AircraftEfficiencyReport = {
     minutes: number;
     pax: number;
     income: number;
+    earnings: number;
+    earningsPerHour: number;
     paxPerHour: number;
     medianPaxPerHour: number;
   };
@@ -156,6 +161,14 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
 
     const liveById = new Map(payload.airplanes.map((a) => [a.aircraftId, a]));
 
+    // Earnings ledger — reuse the shared payout ledger. Per flight we credit
+    // pilot payout + aircraft-owner payout (total pax minus the airport-owner
+    // slot). No new accounting rule; airport income is excluded here.
+    const earningsByFlight = new Map<string, number>();
+    for (const f of payload.incomeLedger?.myFlights ?? []) {
+      earningsByFlight.set(f.flightId, Math.max(0, (f.pax || 0) - (f.paxAirportOwn || 0)));
+    }
+
     type Agg = {
       key: string;
       kind: "owned" | "generic";
@@ -166,6 +179,7 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
       minutes: number;
       income: number;
       pax: number;
+      earnings: number;
       rates: number[];
       best: EfficiencyFlightRef | null;
       worst: EfficiencyFlightRef | null;
@@ -203,7 +217,7 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
           name: live?.name || r.aircraft || typeIcao || "Unknown aircraft",
           registration: owned ? (live?.tailNumber || r.aircraft_tail_number || "—") : "Generic",
           icao: typeIcao,
-          flights: 0, minutes: 0, income: 0, pax: 0,
+          flights: 0, minutes: 0, income: 0, pax: 0, earnings: 0,
           rates: [], best: null, worst: null,
         };
         aggs.set(key, a);
@@ -213,6 +227,9 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
       a.minutes += minutes;
       a.income += income;
       a.pax += pax;
+      // Generic aircraft have no owner, so they generate no aircraft payout at
+      // all — their earnings stay 0. Owned aircraft credit pilot + owner payout.
+      if (owned) a.earnings += earningsByFlight.get(r.flight_id) ?? 0;
       a.rates.push(paxPerHour);
       (owned ? ownedRates : genericRates).push(paxPerHour);
 
@@ -239,6 +256,8 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
         minutes: a.minutes,
         income: a.income,
         pax: a.pax,
+        earnings: a.earnings,
+        earningsPerHour: a.minutes > 0 ? a.earnings / (a.minutes / 60) : 0,
         paxPerHour: a.minutes > 0 ? a.pax / (a.minutes / 60) : 0,
         paxPerMinute: a.minutes > 0 ? a.pax / a.minutes : 0,
         medianPaxPerHour: median(a.rates),
@@ -270,6 +289,7 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
 
     const totMin = outRows.reduce((s, r) => s + r.minutes, 0);
     const totPax = outRows.reduce((s, r) => s + r.pax, 0);
+    const totEarn = outRows.reduce((s, r) => s + r.earnings, 0);
 
     return {
       username,
@@ -281,6 +301,8 @@ export const getAircraftEfficiency = createServerFn({ method: "GET" })
         minutes: totMin,
         pax: totPax,
         income: outRows.reduce((s, r) => s + r.income, 0),
+        earnings: totEarn,
+        earningsPerHour: totMin > 0 ? totEarn / (totMin / 60) : 0,
         paxPerHour: totMin > 0 ? totPax / (totMin / 60) : 0,
         medianPaxPerHour: median(all),
       },
