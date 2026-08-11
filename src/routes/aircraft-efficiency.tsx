@@ -262,12 +262,12 @@ function EfficiencyLabPage() {
             <Stat label="Your flight time" value={hoursLabel(data.overall.minutes)} />
             <Stat
               label="Average (fleet-wide)"
-              value={`${data.overall.paxPerHour.toFixed(1)} PAX/h`}
+              value={`${data.overall.paxPerHour.toFixed(2)} PAX/h`}
               accent="runway"
             />
             <Stat
               label="Median (fleet-wide)"
-              value={`${data.overall.medianPaxPerHour.toFixed(1)} PAX/h`}
+              value={`${data.overall.medianPaxPerHour.toFixed(2)} PAX/h`}
               accent="instrument"
             />
             <Stat
@@ -348,7 +348,7 @@ function EfficiencyLabPage() {
                         stroke={AXIS_COLOR}
                         strokeDasharray="4 4"
                         label={{
-                          value: `Avg ${visibleAverage.toFixed(1)} PAX/h · ${fleetLabel}`,
+                          value: `Avg ${visibleAverage.toFixed(2)} PAX/h · ${fleetLabel}`,
                           position: "insideTopRight",
                           fill: AXIS_TEXT,
                           fontSize: 11,
@@ -366,14 +366,14 @@ function EfficiencyLabPage() {
                               <div className="mono text-[10px] text-muted-foreground">
                                 {p.registration}
                               </div>
-                              <div className="mt-1">{p.y.toFixed(1)} PAX/h</div>
+                              <div className="mt-1">{p.y.toFixed(2)} PAX/h</div>
                               <div style={{ color: EARNINGS_COLOR }}>
                                 {p.kind === "owned"
                                   ? `${formatNumber(Math.round(p.e))} earnings/h`
                                   : "No aircraft earnings (generic)"}
                               </div>
                               <div className="text-muted-foreground">
-                                {p.x.toFixed(1)} h · {p.flights} flights
+                                {p.x.toFixed(2)} h · {p.flights} flights
                               </div>
                             </div>
                           );
@@ -445,7 +445,7 @@ function EfficiencyLabPage() {
                         contentStyle={tooltipStyle}
                         itemStyle={{ color: TOOLTIP_TEXT }}
                         labelStyle={{ color: TOOLTIP_TEXT }}
-                        formatter={(v: number) => [`${v.toFixed(1)} PAX/h`, "Average"]}
+                        formatter={(v: number) => [`${v.toFixed(2)} PAX/h`, "Average"]}
                       />
                       <Bar dataKey="paxPerHour" radius={[0, 4, 4, 0]} isAnimationActive={false}>
                         {ranking.map((r) => (
@@ -528,8 +528,8 @@ function EfficiencyLabPage() {
                 )}
                 <p className="mt-2 text-[11px] text-muted-foreground">
                   Per-flight PAX/hour, bucketed. Fleet-wide average{" "}
-                  {data.overall.paxPerHour.toFixed(1)} · median{" "}
-                  {data.overall.medianPaxPerHour.toFixed(1)} PAX/h.
+                  {data.overall.paxPerHour.toFixed(2)} · median{" "}
+                  {data.overall.medianPaxPerHour.toFixed(2)} PAX/h.
                 </p>
               </section>
 
@@ -591,18 +591,18 @@ function Row({ r }: { r: EfficiencyRow }) {
       <td className="mono px-4 py-3 text-right">{hoursLabel(r.minutes)}</td>
       <td className="mono px-4 py-3 text-right">{formatNumber(Math.round(r.income))}</td>
       <td className="mono px-4 py-3 text-right text-runway">{formatNumber(Math.round(r.pax))}</td>
-      <td className="mono px-4 py-3 text-right font-semibold">{r.paxPerHour.toFixed(1)}</td>
+      <td className="mono px-4 py-3 text-right font-semibold">{r.paxPerHour.toFixed(2)}</td>
       <td className="mono px-4 py-3 text-right font-semibold" style={{ color: EARNINGS_COLOR }}>
         {r.kind === "owned" ? formatNumber(Math.round(r.earningsPerHour.toFixed(2))) : "—"}
       </td>
       <td className="mono px-4 py-3 text-right">{r.paxPerMinute.toFixed(2)}</td>
-      <td className="mono px-4 py-3 text-right">{r.medianPaxPerHour.toFixed(1)}</td>
+      <td className="mono px-4 py-3 text-right">{r.medianPaxPerHour.toFixed(2)}</td>
       <td className="mono px-4 py-3 text-[11px] text-muted-foreground">
         {r.best ? (
           <>
-            <span className="text-runway">{r.best.paxPerHour.toFixed(1)}</span> {r.best.route}
+            <span className="text-runway">{r.best.paxPerHour.toFixed(2)}</span> {r.best.route}
             <br />
-            <span className="text-instrument">{r.worst?.paxPerHour.toFixed(1)}</span>{" "}
+            <span className="text-instrument">{r.worst?.paxPerHour.toFixed(2)}</span>{" "}
             {r.worst?.route}
           </>
         ) : (
