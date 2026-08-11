@@ -272,7 +272,7 @@ function EfficiencyLabPage() {
             />
             <Stat
               label="Earnings (fleet-wide)"
-              value={`${formatNumber(Math.round(data.overall.earningsPerHour))} PAX/h`}
+              value={`${formatNumber(data.overall.earningsPerHour, 2)} /h`}
               accent="earnings"
             />
           </div>
@@ -354,31 +354,38 @@ function EfficiencyLabPage() {
                           fontSize: 11,
                         }}
                       />
-                      <Tooltip
-                        cursor={{ strokeDasharray: "3 3", stroke: AXIS_COLOR }}
-                        contentStyle={tooltipStyle}
-                        content={({ active, payload }) => {
-                          if (!active || !payload?.length) return null;
-                          const p = payload[0].payload as (typeof scatter)[number];
-                          return (
-                            <div className="rounded-lg border border-border bg-popover p-2 text-xs text-popover-foreground">
-                              <div className="font-display font-semibold">{p.name}</div>
-                              <div className="mono text-[10px] text-muted-foreground">
-                                {p.registration}
-                              </div>
-                              <div className="mt-1">{p.y.toFixed(2)} PAX/h</div>
-                              <div style={{ color: EARNINGS_COLOR }}>
-                                {p.kind === "owned"
-                                  ? `${formatNumber(Math.round(p.e))} earnings/h`
-                                  : "No aircraft earnings (generic)"}
-                              </div>
-                              <div className="text-muted-foreground">
-                                {p.x.toFixed(2)} h · {p.flights} flights
-                              </div>
-                            </div>
-                          );
-                        }}
-                      />
+                  <Tooltip
+  cursor={{ strokeDasharray: "3 3", stroke: AXIS_COLOR }}
+  contentStyle={tooltipStyle}
+  content={({ active, payload }) => {
+    if (!active || !payload?.length) return null;
+    const p = payload[0].payload as (typeof scatter)[number];
+
+    return (
+      <div className="rounded-lg border border-border bg-popover p-2 text-xs text-popover-foreground">
+        <div className="font-display font-semibold">{p.name}</div>
+
+        <div className="mono text-[10px] text-muted-foreground">
+          {p.registration}
+        </div>
+
+        <div className="mt-1">
+          {p.y.toFixed(2)} PAX/h
+        </div>
+
+        <div style={{ color: EARNINGS_COLOR }}>
+          {p.kind === "owned"
+            ? `${p.e.toFixed(2)} earnings/h`
+            : "No aircraft earnings (generic)"}
+        </div>
+
+        <div className="text-muted-foreground">
+          {p.x.toFixed(2)} h · {p.flights} flights
+        </div>
+      </div>
+    );
+  }}
+  />
                       <Scatter yAxisId="pax" data={scatter} isAnimationActive={false}>
                         {scatter.map((p, i) => (
                           <Cell
