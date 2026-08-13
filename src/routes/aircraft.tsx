@@ -3,11 +3,13 @@ import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query"
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
 import { getSimflyPayload, getMyLiveFlights } from "@/lib/simfly.functions";
+import { getAircraftRentalActivity } from "@/lib/aircraft-rental.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AircraftExt, MyLiveFlight } from "@/lib/types";
 import { AppShell, PageHeader, formatNumber } from "@/components/app-shell";
 import { Search, Plane } from "lucide-react";
 import { AircraftUtilizationTimeline } from "@/components/aircraft-utilization-timeline";
+import { AircraftRentalBadge, type RentalState } from "@/components/aircraft-rental-details";
 
 export const Route = createFileRoute("/aircraft")({
   component: AircraftPage,
@@ -62,6 +64,52 @@ function AircraftPage() {
     if (p.inGroundOperation) return undefined;
     if (!p.tailNumber) return undefined;
     return liveByTail.get(p.tailNumber.toLowerCase());
+  }
+Editedaircraft-rental-details.tsx
+Thought for 4s
+Checking live flight types and aircraft page wiring
+Readaircraft.tsx
+Thought for 5s
+Checking live flight fields
+
+Now wire it into the aircraft table.
+Editedaircraft.tsx
+Thought for 9s
+Editedaircraft.tsx
+src/routes/aircraft.tsx
+
+    if (!p.tailNumber) return undefined;
+    return liveByTail.get(p.tailNumber.toLowerCase());
+  }
+
+  // --- Rental activity layer (status only, no financials) ---
+  const me = (username || data.me.handle || "").toLowerCase();
+  const ownedIds = useMemo(
+    () => data.airplanes.map((p) => p.aircraftId).filter(Boolean),
+    [data.airplanes],
+  );
+  const rentalFn = useServerFn(getAircraftRentalActivity);
+  const { data: rental } = useQuery({
+    queryKey: ["simfly", "rentalActivity", keyTag, ownedIds],
+    queryFn: () => rentalFn({ data: { aircraftIds: ownedIds, ...(username ? { username } : {}) } }),
+    enabled: ownedIds.length > 0,
+    refetchInterval: 180_000,
+    staleTime: 120_000,
+  });
+  const recentByAircraft = useMemo(() => {
+    const m = new Map<string, NonNullable<typeof rental>["recent"][number]>();
+    for (const r of rental?.recent ?? []) m.set(r.aircraftId, r);
+    return m;
+  }, [rental]);
+
+  function rentalFor(p: AircraftExt): RentalState | undefined {
+    const live = liveFor(p);
+    if (live) {
+      const pilot = (live.pilotUsername || "").toLowerCase();
+      return pilot && pilot !== me ? { kind: "active", live } : undefined;
+    }
+    const recent = recentByAircraft.get(p.aircraftId);
+    return recent ? { kind: "recent", flight: recent } : undefined;
   }
 
   const [query, setQuery] = useState("");
@@ -170,6 +218,18 @@ function AircraftPage() {
                   </td>
                   <td className="px-4 py-3">
                     <StatusPill grounded={p.inGroundOperation} live={liveFor(p)} />
+                      {(() => {
+                        const state = rentalFor(p);
+                        if (!state) return null;
+                        return (
+                          <AircraftRentalBadge
+                            state={state}
+                            aircraftLabel={`${p.tailNumber || p.icao} · ${p.name}`}
+                            currentIcao={p.currentIcao || undefined}
+                          />
+                        );
+                      })()}
+                    </div>
                   </td>
                 </tr>
               ))}
