@@ -135,7 +135,7 @@ export function AircraftRentalBadge({
         </button>
 
         {open && (
-            <div className="panel absolute right-0 z-30 mt-2 w-max min-w-[240px] max-w-[280px] rounded-xl p-4 shadow-xl">
+            <div className="panel absolute right-0 z-30 mt-1.5 w-[280px] rounded-xl p-3.5 shadow-2xl border border-border/40 bg-background/80 backdrop-blur-md">
             <div className="mb-3 flex items-center justify-between">
               <div className="mono text-[10px] uppercase tracking-widest" style={{ color: "var(--rental)" }}>
                 Rental details
