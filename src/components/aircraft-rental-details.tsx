@@ -112,114 +112,95 @@ export function AircraftRentalBadge({
     };
   }, [open]);
 
-  return (
-   <>
-    {open && (
-        <div
-          className="fixed inset-0 z-20 bg-background/40 backdrop-blur-md transition-opacity"
-          aria-hidden
-        />
-      )}
-           <span ref={wrapRef} className="relative inline-block">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className={
-            active
-              ? "mono inline-flex items-center gap-1 rounded border border-rental/60 bg-rental/20 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-rental transition-colors hover:bg-rental/30"
-              : "mono inline-flex items-center gap-1 rounded border border-rental/35 bg-rental/10 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-rental/80 transition-colors hover:bg-rental/20"
-          }
-        >
-          {active && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rental" />}
-          {active ? "On rent" : "Recently rented"}
-        </button>
+   return (
+    <span ref={wrapRef} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={
+          active
+            ? "mono inline-flex items-center gap-1 rounded border border-rental/60 bg-rental/20 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-rental transition-colors hover:bg-rental/30"
+            : "mono inline-flex items-center gap-1 rounded border border-rental/35 bg-rental/10 px-1.5 py-0.5 text-[10px] uppercase tracking-widest text-rental/80 transition-colors hover:bg-rental/20"
+        }
+      >
+        {active && <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-rental" />}
+        {active ? "On rent" : "Recently rented"}
+      </button>
 
-        {open && (
-            <div className="panel absolute right-0 z-30 mt-1.5 w-[280px] rounded-xl p-3.5 shadow-2xl border border-border/40 bg-background/80 backdrop-blur-md">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="mono text-[10px] uppercase tracking-widest" style={{ color: "var(--rental)" }}>
-                Rental details
-              </div>
-              <div className="mono max-w-[55%] truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                {aircraftLabel}
-              </div>
+      {open && (
+        <div className="absolute right-0 z-30 mt-1.5 w-[280px] rounded-xl border border-white/10 bg-[#0f141c]/90 p-4 text-foreground shadow-2xl backdrop-blur-md">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <div className="mono text-[10px] uppercase tracking-widest shrink-0" style={{ color: "var(--rental)" }}>
+              Rental details
             </div>
-
-            {state.kind === "active" ? (
-              <div className="space-y-3">
-                <Field icon={User} label="Pilot" value={state.live.pilotUsername || "—"} />
-                <Field
-                  icon={Plane}
-                  label="Status"
-                  value="FLYING"
-                  accent
-                />
-                <Field
-                  icon={Route}
-                  label="Departure"
-                  value={
-                    <>
-                      {state.live.origin || "—"}
-                      {state.live.departureMs
-                        ? ` · ${fmtStamp(new Date(state.live.departureMs).toISOString())}`
-                        : ""}
-                    </>
-                  }
-                />
-                <Field icon={MapPin} label="Destination" value={state.live.destination || "—"} />
-                {currentIcao && (
-                  <Field icon={MapPin} label="Current location" value={currentIcao} />
-                )}
-                <Field
-                  icon={Clock}
-                  label="Flight duration"
-                  value={state.live.departureMs ? fmtDuration(now - state.live.departureMs) : "—"}
-                  accent
-                />
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Field icon={User} label="Pilot" value={state.flight.pilot || "—"} />
-                <Field
-                  icon={Route}
-                  label="Departure"
-                  value={`${state.flight.originIcao || "—"} · ${fmtStamp(state.flight.departureIso)}`}
-                />
-                <Field
-                  icon={MapPin}
-                  label="Arrival"
-                  value={`${state.flight.destinationIcao || "—"} · ${fmtStamp(state.flight.arrivalIso)}`}
-                />
-                <Field
-                  icon={Clock}
-                  label="Flight duration"
-                  value={
-                    state.flight.durationMinutes != null
-                      ? fmtDuration(state.flight.durationMinutes * 60_000)
-                      : "—"
-                  }
-                />
-                <Field
-                  icon={MapPin}
-                  label="Aircraft location"
-                  value={currentIcao || state.flight.destinationIcao || "—"}
-                />
-                {state.flight.arrivalIso &&
-                  (!currentIcao ||
-                    currentIcao.toUpperCase() ===
-                      (state.flight.destinationIcao || "").toUpperCase()) && (
-                    <Field
-                      icon={Clock}
-                      label="Idle at destination"
-                      value={fmtHHMM(now - Date.parse(state.flight.arrivalIso))}
-                      accent
-                    />
-                  )}
-              </div>
-            )}
+            <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground text-right flex-1 min-w-0">
+              {aircraftLabel}
+            </div>
           </div>
-        )}
-       </span>
-    </>
+
+          {state.kind === "active" ? (
+            <div className="space-y-3">
+              <Field icon={User} label="Pilot" value={state.live.pilotUsername || "—"} />
+              <Field icon={Plane} label="Status" value="FLYING" accent />
+              <Field
+                icon={Route}
+                label="Departure"
+                value={
+                  <>
+                    {state.live.origin || "—"}
+                    {state.live.departureMs
+                      ? ` · ${fmtStamp(new Date(state.live.departureMs).toISOString())}`
+                      : ""}
+                  </>
+                }
+              />
+              <Field icon={MapPin} label="Destination" value={state.live.destination || "—"} />
+              {currentIcao && <Field icon={MapPin} label="Current location" value={currentIcao} />}
+              <Field
+                icon={Clock}
+                label="Flight duration"
+                value={state.live.departureMs ? fmtDuration(now - state.live.departureMs) : "—"}
+                accent
+              />
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <Field icon={User} label="Pilot" value={state.flight.pilot || "—"} />
+              <Field
+                icon={Route}
+                label="Departure"
+                value={`${state.flight.originIcao || "—"} · ${fmtStamp(state.flight.departureIso)}`}
+              />
+              <Field
+                icon={MapPin}
+                label="Arrival"
+                value={`${state.flight.destinationIcao || "—"} · ${fmtStamp(state.flight.arrivalIso)}`}
+              />
+              <Field
+                icon={Clock}
+                label="Flight duration"
+                value={state.flight.durationMinutes != null ? fmtDuration(state.flight.durationMinutes * 60_000) : "—"}
+              />
+              <Field
+                icon={MapPin}
+                label="Aircraft location"
+                value={currentIcao || state.flight.destinationIcao || "—"}
+              />
+              {state.flight.arrivalIso &&
+                (!currentIcao ||
+                  currentIcao.toUpperCase() === (state.flight.destinationIcao || "").toUpperCase()) && (
+                  <Field
+                    icon={Clock}
+                    label="Idle at destination"
+                    value={fmtHHMM(now - Date.parse(state.flight.arrivalIso))}
+                    accent
+                  />
+                )}
+            </div>
+          )}
+        </div>
+      )}
+    </span>
   );
 }
+
