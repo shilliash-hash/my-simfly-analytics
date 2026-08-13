@@ -43,6 +43,8 @@
   --color-instrument-soft: var(--instrument-soft);
   --color-deck: var(--deck);
   --color-deck-elevated: var(--deck-elevated);
+  --color-rental: var(--rental);
+  --color-rental-soft: var(--rental-soft);
   --color-tier-bronze: var(--tier-bronze);
   --color-tier-silver: var(--tier-silver);
   --color-tier-gold: var(--tier-gold);
@@ -64,6 +66,9 @@
   --runway-soft: #0E7490;
   --instrument: #F59E0B;    /* amber instruments */
   --instrument-soft: #78350F;
+  --rental: #A78BFA;        /* rental activity violet */
+  --rental-soft: #4C1D95;
+
   --tier-bronze: #B45309;
   --tier-silver: #94A3B8;
   --tier-gold: #FBBF24;
