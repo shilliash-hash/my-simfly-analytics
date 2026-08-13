@@ -65,18 +65,6 @@ function AircraftPage() {
     if (!p.tailNumber) return undefined;
     return liveByTail.get(p.tailNumber.toLowerCase());
   }
-Editedaircraft-rental-details.tsx
-Thought for 4s
-Checking live flight types and aircraft page wiring
-Readaircraft.tsx
-Thought for 5s
-Checking live flight fields
-
-Now wire it into the aircraft table.
-Editedaircraft.tsx
-Thought for 9s
-Editedaircraft.tsx
-src/routes/aircraft.tsx
 
     if (!p.tailNumber) return undefined;
     return liveByTail.get(p.tailNumber.toLowerCase());
