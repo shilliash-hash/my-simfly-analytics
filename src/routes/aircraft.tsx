@@ -66,10 +66,6 @@ function AircraftPage() {
     return liveByTail.get(p.tailNumber.toLowerCase());
   }
 
-    if (!p.tailNumber) return undefined;
-    return liveByTail.get(p.tailNumber.toLowerCase());
-  }
-
   // --- Rental activity layer (status only, no financials) ---
   const me = (username || data.me.handle || "").toLowerCase();
   const ownedIds = useMemo(
@@ -205,6 +201,7 @@ function AircraftPage() {
                     <GroundTimer until={p.groundedUntil} grounded={p.inGroundOperation} />
                   </td>
                   <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-1.5">
                     <StatusPill grounded={p.inGroundOperation} live={liveFor(p)} />
                       {(() => {
                         const state = rentalFor(p);
