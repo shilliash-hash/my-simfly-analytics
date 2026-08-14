@@ -781,23 +781,34 @@ async function maybeAdvanceToFinalizing(
 
 async function runFinalize(job: BuildJobRow): Promise<BuildJobRow> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-
-  const myFlownIcaos = await (async () => {
+  // My arrivals keyed by destination ICAO. `simfly_flights` carries only
+  // `mission_start_ts` (no landing/arrival column exists in the schema or in
+  // the ingested raw payload), so that is the timestamp used for "last return".
+    const myArrivalsByIcao = await (async () => {
+    const map = new Map<string, { count: number; lastMs: number; lastIso: string }>();
     try {
       const { data: rows } = await supabaseAdmin
         .from("simfly_flights")
-        .select("departure_icao,destination_icao")
+        .select("destination_icao,mission_start_ts")
         .eq("username", job.username)
         .limit(20000);
-      const set = new Set<string>();
       for (const r of rows ?? []) {
-        if (r.departure_icao) set.add(String(r.departure_icao));
-        if (r.destination_icao) set.add(String(r.destination_icao));
+               const icao = r.destination_icao ? String(r.destination_icao) : "";
+        if (!icao) continue;
+        const iso = r.mission_start_ts ? String(r.mission_start_ts) : "";
+        const ms = iso ? new Date(iso).getTime() : 0;
+        const cur = map.get(icao) ?? { count: 0, lastMs: 0, lastIso: "" };
+        cur.count += 1;
+        if (ms > cur.lastMs) {
+          cur.lastMs = ms;
+          cur.lastIso = iso;
+        }
+        map.set(icao, cur);
       }
-      return set;
-    } catch {
-      return new Set<string>();
+     } catch {
+     /* leave empty — treated as no returns */
     }
+       return map;
   })();
 
   const { data: pilotRows } = await supabaseAdmin
@@ -824,9 +835,20 @@ async function runFinalize(job: BuildJobRow): Promise<BuildJobRow> {
       return n > m ? n : m;
     }, 0);
     const bestLevel = airports.reduce((m, a) => Math.max(m, a.level), 0);
-
+    let returnFlights = 0;
+    let lastReturnMs = 0;
+    let lastReturnAt: string | null = null;
+    for (const a of airports) {
+      const hit = myArrivalsByIcao.get(a.icao);
+      if (!hit) continue;
+      returnFlights += hit.count;
+      if (hit.lastMs > lastReturnMs) {
+        lastReturnMs = hit.lastMs;
+        lastReturnAt = hit.lastIso || null;
+      }
+    }
     const returnStatus: AllianceReturnStatus =
-      airports.some((a) => myFlownIcaos.has(a.icao)) ? "completed" : "outstanding";
+      returnFlights > 0 ? "completed" : "outstanding";
 
     const recommendation = recommend({
       allianceFactor,
@@ -846,6 +868,8 @@ async function runFinalize(job: BuildJobRow): Promise<BuildJobRow> {
       allianceFactor: Math.round(allianceFactor * 100) / 100,
       lastVisitAt: seed.lastVisitAt,
       returnStatus,
+      returnFlights,
+      lastReturnAt,
       camp: "trek",
       airports,
       totalFreeSlots,
