@@ -42,6 +42,10 @@ export type AlliancePilot = {
   allianceFactor: number;
   lastVisitAt: string;
   returnStatus: AllianceReturnStatus;
+  /** How many of my flights landed at one of this pilot's airports. */
+  returnFlights?: number;
+  /** Most recent matching return flight (mission_start_ts), ISO. */
+  lastReturnAt?: string | null;
   camp: AllianceCamp;
   airports: AllianceAirport[];
   totalFreeSlots: number;
