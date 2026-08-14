@@ -381,6 +381,27 @@ function AvatarBadge({ username }: { username: string }) {
 // Intelligence popup
 // -----------------------------------------------------------------------------
 
+/**
+ * Return badge copy. Older cached payloads lack `returnFlights`/`lastReturnAt`
+ * — fall back to ×1 with no date until the next pipeline build repopulates.
+ */
+function returnLabel(pilot: AlliancePilot): string {
+  const count =
+    typeof pilot.returnFlights === "number"
+      ? pilot.returnFlights
+      : pilot.returnStatus === "completed"
+        ? 1
+        : 0;
+  if (count === 0) return "Outstanding return";
+  const base = `Flight returned ×${count}`;
+  const iso = pilot.lastReturnAt;
+  if (!iso) return base;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return base;
+  return `${base} · Last: ${d.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
+}
+
+
 function IntelligencePopup({ pilot }: { pilot: AlliancePilot }) {
   const [imgOk, setImgOk] = useState<boolean>(Boolean(pilot.avatarUrl));
   const toneCls: Record<string, string> = {
@@ -444,9 +465,7 @@ function IntelligencePopup({ pilot }: { pilot: AlliancePilot }) {
                     : "bg-instrument",
                 )}
               />
-              {pilot.returnStatus === "completed"
-                ? "Return completed"
-                : "Outstanding return"}
+              {returnLabel(pilot)}
             </span>
           </div>
         </div>
@@ -522,8 +541,8 @@ function Legend() {
           <dd>PAX credited to your airports</dd>
         </div>
         <div className="flex gap-1.5">
-          <dt className="text-runway">Return ✓</dt>
-          <dd>You've flown to one of their airports</dd>
+          <dt className="text-runway">Returned ×N</dt>
+          <dd>Your flights that landed at their airports · last date shown</dd>
         </div>
         <div className="flex items-center gap-1.5">
           <dt className="flex items-center gap-1">
