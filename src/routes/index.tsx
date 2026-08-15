@@ -15,7 +15,7 @@ import { HubSupportCard } from "@/components/hub-support";
 import { ReadyStatusBadge } from "@/components/ready-status-badge";
 import { TopHubsBadge } from "@/components/top-hubs-badge";
 import { ChangelogBadge } from "@/components/ChangelogBadge";
-import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History } from "lucide-react";
+import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History, RefreshCw } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, runFleetActivityBackfill } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
@@ -180,6 +180,15 @@ const { data: income30d } = useQuery({
      {/* PRAWA STRONA BELKI: Twoje obecne, sprawne popupy operacyjne i avatar */}
      <div className="flex items-center gap-3 ml-auto">
        <PilotSwitcher current={viewedUser} />
+       <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="grid h-10 w-10 place-items-center rounded-full border border-border/60 bg-secondary/30 text-muted-foreground transition-colors hover:border-runway/40 hover:bg-secondary/60 hover:text-foreground"
+              aria-label="Refresh status"
+              title="Refresh status"
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
        <ReadyStatusBadge
          airplanes={data.airplanes}
          licenses={data.licenses}
