@@ -263,8 +263,8 @@ const { data: income30d } = useQuery({
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 
-      <section className="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="panel rounded-xl p-5 lg:col-span-2">
+     <section className="mt-8 grid grid-cols-1 gap-6">
+        <div className="panel rounded-xl p-5">
           <div className="mb-4 flex items-end justify-between">
             <div>
               <h2 className="font-display text-lg font-semibold">PAX earnings · Last 60 days</h2>
