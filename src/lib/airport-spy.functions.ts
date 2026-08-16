@@ -86,6 +86,7 @@ export type SpyNearby = {
   name: string;
   distanceNm: number;
   investigated: boolean;
+  hasRecord: boolean;
   operations: number;
   weeksCovered: number;
 };
@@ -210,6 +211,9 @@ export const getAirportSpyNearby = createServerFn({ method: "GET" })
     const icao = normaliseIcao(data.icao);
     if (!icao) return [];
     const radius = Math.min(Math.max(data.radiusNm ?? 150, 25), 500);
+    // Already-investigated airports stay visible further out so existing
+    // intelligence is never silently filtered away by the display radius.
+    const wideRadius = Math.max(radius, 400);
 
     const { loadGeo } = await import("./simfly.functions");
     const geo = await loadGeo();
@@ -218,37 +222,65 @@ export const getAirportSpyNearby = createServerFn({ method: "GET" })
 
     const toRad = (v: number) => (v * Math.PI) / 180;
     const near: { icao: string; name: string; distanceNm: number }[] = [];
+    const wide: { icao: string; name: string; distanceNm: number }[] = [];
     for (const g of geo.values()) {
-      if (g.icao.toUpperCase() === icao) continue;
+      const code = g.icao.trim().toUpperCase();
+      if (code === icao) continue;
       const dLat = toRad(g.lat - origin.lat);
       const dLon = toRad(g.lon - origin.lon);
       const a =
         Math.sin(dLat / 2) ** 2 +
         Math.cos(toRad(origin.lat)) * Math.cos(toRad(g.lat)) * Math.sin(dLon / 2) ** 2;
       const nm = 2 * 3440.065 * Math.asin(Math.min(1, Math.sqrt(a)));
-      if (nm <= radius) near.push({ icao: g.icao.toUpperCase(), name: g.name, distanceNm: nm });
+           if (nm <= radius) near.push({ icao: code, name: g.name, distanceNm: nm });
+           else if (nm <= wideRadius) wide.push({ icao: code, name: g.name, distanceNm: nm });
     }
     near.sort((a, b) => a.distanceNm - b.distanceNm);
     const top = near.slice(0, 12);
-    if (top.length === 0) return [];
+   
 
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const candidates = [...top, ...wide];
+    if (candidates.length === 0) return [];
+
     const { data: records } = await supabaseAdmin
       .from("airport_spy_record")
       .select("icao, operations, weeks_covered")
-      .in("icao", top.map((t) => t.icao));
-    const byIcao = new Map((records ?? []).map((r) => [r.icao as string, r]));
+          .in(
+        "icao",
+        candidates.map((t) => t.icao),
+      );
+    const byIcao = new Map(
+      (records ?? []).map((r) => [String(r.icao ?? "").trim().toUpperCase(), r]),
+    );
 
-    return top.map((t) => {
-      const rec = byIcao.get(t.icao);
-      return {
-        ...t,
-        distanceNm: Math.round(t.distanceNm),
-        investigated: Boolean(rec),
-        operations: (rec?.operations as number) ?? 0,
-        weeksCovered: (rec?.weeks_covered as number) ?? 0,
-      };
-    });
+       // Anything outside the display radius is only kept when it actually holds
+    // observations.
+    const extra = wide
+      .filter((w) => {
+        const rec = byIcao.get(w.icao);
+        return Boolean(rec) && (((rec?.operations as number) ?? 0) > 0 ||
+          ((rec?.weeks_covered as number) ?? 0) > 0);
+      })
+      .sort((a, b) => a.distanceNm - b.distanceNm)
+      .slice(0, 4);
+
+    return [...top, ...extra]
+      .sort((a, b) => a.distanceNm - b.distanceNm)
+      .map((t) => {
+        const rec = byIcao.get(t.icao);
+        const operations = (rec?.operations as number) ?? 0;
+        const weeksCovered = (rec?.weeks_covered as number) ?? 0;
+        return {
+          icao: t.icao,
+          name: t.name,
+          distanceNm: Math.round(t.distanceNm),
+          hasRecord: Boolean(rec),
+          investigated: operations > 0 || weeksCovered > 0,
+          operations,
+          weeksCovered,
+        };
+      });
   });
 
 // --------------------------------------------------------- investigation
