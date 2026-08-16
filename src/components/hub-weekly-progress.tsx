@@ -49,7 +49,7 @@ export function HubWeeklyProgress({ airports }: { airports: AirportExt[] }) {
       <div className="mb-3 flex items-end justify-between gap-3">
         <div className="flex items-center gap-2">
           <TicketsPlane className={cn("h-4 w-4", tone(overall).text)} />
-          <h2 className="font-display text-xl font-semibold">My HUB Weekly Operation Progress</h2>
+          <h2 className="font-display text-xl font-semibold">My HUB Weekly Operation Progress - Slots Remaining</h2>
         </div>
         <span className="mono shrink-0 text-[10px] uppercase tracking-widest text-muted-foreground">
           {totalMax > 0
