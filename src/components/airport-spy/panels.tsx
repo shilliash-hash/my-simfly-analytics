@@ -383,15 +383,31 @@ export function NearbyAirports({
             <button
               key={a.icao}
               onClick={() => onSelect(a.icao)}
-              className="flex items-center justify-between gap-2 rounded-lg bg-secondary/30 px-3 py-2 text-left ring-1 ring-transparent transition hover:ring-runway/40"
-            >
+              className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-lg px-3 py-2 text-left ring-1 transition hover:ring-runway/40 ${
+                a.investigated
+                  ? "bg-runway/10 ring-runway/20"
+                  : "bg-secondary/30 ring-transparent"
+              }`}
+              >
               <span className="min-w-0">
-                <span className="mono text-xs">{a.icao}</span>
-                <span className="ml-2 truncate text-[11px] text-muted-foreground">{a.name}</span>
+                <span
+                  className={`mono block text-xs ${a.investigated ? "text-runway" : ""}`}
+                >
+                  {a.icao}
+                </span>
+                <span className="block truncate text-[11px] text-muted-foreground">
+                  {a.name}
+                </span>
               </span>
-              <span className="mono shrink-0 text-[10px] tabular-nums text-muted-foreground">
-                {a.distanceNm} NM ·{" "}
-                {a.investigated ? `${n(a.operations)} ops observed` : "not yet investigated"}
+                            <span className="mono shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                <span className="block">{a.distanceNm} NM</span>
+                <span className={`block ${a.investigated ? "text-runway/80" : ""}`}>
+                  {a.investigated
+                    ? `${n(a.operations)} ops · ${n(a.weeksCovered)} wks`
+                    : a.hasRecord
+                      ? "record started"
+                      : "not yet investigated"}
+                </span>
               </span>
             </button>
           ))}
