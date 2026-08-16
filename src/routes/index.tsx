@@ -262,9 +262,11 @@ const { data: income30d } = useQuery({
         <HubSupportCard username={data.me.handle} hubTraffic={hubTraffic} />
       </section>
       
+      
+      <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
+
       <HubWeeklyProgress airports={data.airports} />
 
-      <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 
      <section className="mt-8 grid grid-cols-1 gap-6">
         <div className="panel rounded-xl p-5">
