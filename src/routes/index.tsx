@@ -15,6 +15,7 @@ import { HubSupportCard } from "@/components/hub-support";
 import { ReadyStatusBadge } from "@/components/ready-status-badge";
 import { TopHubsBadge } from "@/components/top-hubs-badge";
 import { ChangelogBadge } from "@/components/ChangelogBadge";
+import { HubWeeklyProgress } from "@/components/hub-weekly-progress";
 import { Coins, Plane, Building2, ArrowUpRight, Wallet, Radio, PlaneLanding, PlaneTakeoff, UserCog, X, Heart, Coffee, IdCard, History, RefreshCw } from "lucide-react";
 import type { FlightLog } from "@/lib/types";
 import { getSimflyPayload, getMyHubsIncomingTraffic, getMyLiveFlights, runFleetActivityBackfill } from "@/lib/simfly.functions";
@@ -260,6 +261,8 @@ const { data: income30d } = useQuery({
         />
         <HubSupportCard username={data.me.handle} hubTraffic={hubTraffic} />
       </section>
+      
+      <HubWeeklyProgress airports={data.airports} />
 
       <IncomingTraffic traffic={hubTraffic} myFlights={myFlights} airports={data.airports} />
 
