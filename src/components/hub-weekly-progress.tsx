@@ -11,18 +11,13 @@ import type { AirportExt } from "@/lib/types";
 
 function tone(ratio: number) {
   if (ratio <= 0.4) {
-    return { 
-      bar: "bg-emerald-400", 
-      text: "text-emerald-400", 
-      glow: "shadow-[0_0_10px_-2px_#34d399]" 
-    };
+    return { bar: "bg-runway", text: "text-runway", glow: "shadow-[0_0_10px_-2px_var(--runway)]" };
   }
   
   if (ratio <= 0.7) return { bar: "bg-instrument", text: "text-instrument", glow: "" };
   if (ratio < 1) return { bar: "bg-destructive", text: "text-destructive", glow: "" };
   return { bar: "bg-destructive/40", text: "text-destructive/70", glow: "" };
 }
-
 
 export function HubWeeklyProgress({ airports }: { airports: AirportExt[] }) {
   const rows = useMemo(() => {
