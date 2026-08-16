@@ -10,11 +10,12 @@ import type { AirportExt } from "@/lib/types";
  */
 
 function tone(ratio: number) {
-  if (ratio >= 0.6)
+  if (ratio <= 0.4) {
     return { bar: "bg-runway", text: "text-runway", glow: "shadow-[0_0_10px_-2px_var(--runway)]" };
-
-  if (ratio >= 0.3) return { bar: "bg-instrument", text: "text-instrument", glow: "" };
-  if (ratio > 0) return { bar: "bg-destructive", text: "text-destructive", glow: "" };
+  }
+  
+  if (ratio <= 0.7) return { bar: "bg-instrument", text: "text-instrument", glow: "" };
+  if (ratio < 1) return { bar: "bg-destructive", text: "text-destructive", glow: "" };
   return { bar: "bg-destructive/40", text: "text-destructive/70", glow: "" };
 }
 
