@@ -10,13 +10,17 @@ import type { AirportExt } from "@/lib/types";
  */
 
 function tone(ratio: number) {
-  if (ratio <= 0.4) {
-    return { bar: "bg-runway", text: "text-runway", glow: "shadow-[0_0_10px_-2px_var(--runway)]" };
+   if (ratio <= 0.4) {
+    return { 
+      bar: "bg-[#047857]", 
+      text: "text-[#047857]", 
+      glow: "shadow-[0_0_10px_-2px_#047857]" 
+    };
   }
   
-  if (ratio <= 0.7) return { bar: "bg-instrument", text: "text-instrument", glow: "" };
-  if (ratio < 1) return { bar: "bg-destructive", text: "text-destructive", glow: "" };
-  return { bar: "bg-destructive/40", text: "text-destructive/70", glow: "" };
+   if (ratio <= 0.7) return { bar: "bg-instrument", text: "text-instrument", glow: "" };
+   if (ratio < 1) return { bar: "bg-runway", text: "text-runway", glow: "" };
+   return { bar: "bg-runway/40", text: "text-runway/70", glow: "" };
 }
 
 export function HubWeeklyProgress({ airports }: { airports: AirportExt[] }) {
