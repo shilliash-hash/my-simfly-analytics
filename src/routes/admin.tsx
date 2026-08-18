@@ -1,7 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, Gauge, Radio, Telescope } from "lucide-react";
-
+import { ChevronDown, ChevronRight, Gauge, Globe2, Radio, Telescope } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
@@ -86,6 +85,12 @@ const QUICK_LINKS = [
     hint: "On-demand airport investigations",
     icon: Telescope,
   },
+  {
+    to: "/system-airports" as const,
+    label: "System Airports Analyzer",
+    hint: "System-owned airports with real demand",
+    icon: Globe2,
+  },
 ];
 
 function QuickLinks() {
@@ -94,7 +99,7 @@ function QuickLinks() {
       <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
         Intelligence modules
       </div>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         {QUICK_LINKS.map(({ to, label, hint, icon: Icon }) => (
           <Link
             key={to}
