@@ -17,7 +17,7 @@ import type { SystemAirportRow, SystemAirportWatchRow, SystemScanState } from ".
 const OBS_PAGE = 1000;
 const OBS_MAX = 60_000;
 /** Identity lookups performed per manual scan step. */
-export const SCAN_BATCH = 40;
+export const SCAN_BATCH = 600;
 /** Candidate airports considered per scan (activity-ranked). */
 const CANDIDATE_CAP = 600;
 
