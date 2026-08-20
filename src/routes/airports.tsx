@@ -127,7 +127,7 @@ function AirportsPage() {
                   <td className="mono px-4 py-3">
                     L{a.level}
                     <span className="ml-1 text-[10px] text-muted-foreground">
-                      {Math.round(a.levelProgress)}%
+                      {a.levelProgress.toFixed(2)}%
                     </span>
                   </td>
                   <td className="mono px-4 py-3 text-runway">{formatNumber(Math.round(a.totalEarnedPax))}</td>
