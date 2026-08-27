@@ -172,18 +172,29 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-     let map = mapRef.current;
+let map = mapRef.current;
+
 if (!map) {
   map = L.map(containerRef.current, {
     zoomControl: true,
     attributionControl: false,
     worldCopyJump: true,
   }).setView([20, 0], 2);
+  
+  mapRef.current = map;
+}
 
-  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8", {
-    maxZoom: 18,
-    subdomains: 'abcd',
-  }).addTo(map);
+// Usuwamy starą warstwę, jeśli już jakaś istniała (zapobiega nakładaniu się warstw przy Hot Reload)
+if (mapRef.current.tileLayerRef) {
+  map.removeLayer(mapRef.current.tileLayerRef);
+}
+
+// Tworzymy nową warstwę z aktualnym kluczem API
+mapRef.current.tileLayerRef = L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8", {
+  maxZoom: 18,
+  subdomains: 'abcd',
+}).addTo(map);
+
 
   mapRef.current = map;
 }
