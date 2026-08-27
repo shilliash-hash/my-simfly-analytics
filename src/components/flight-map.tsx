@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
+import 'maplibre-gl/dist/maplibre-gl.css';
+import '@maplibre/maplibre-gl-leaflet';
+
 import type {
   AirportExt,
   AircraftExt,
@@ -9,13 +12,6 @@ import type {
   LicenseExt,
   MyLiveFlight,
 } from "@/lib/types";
-
-// @ts-ignore
-import "https://unpkg.com";
-// @ts-ignore
-import "https://unpkg.com";
-// @ts-ignore
-import "https://unpkg.com";
 
 type Props = {
   hubs: AirportExt[];
