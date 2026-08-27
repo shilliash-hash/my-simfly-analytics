@@ -181,7 +181,7 @@ if (!map) {
   }).setView([20, 0], 2);
 
   L.tileLayer(
-  "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8",
+  "https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8",
   {
     maxZoom: 18,
     subdomains: "abcd",
