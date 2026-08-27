@@ -201,7 +201,7 @@ mapRef.current.tileLayerRef = L.tileLayer("https://{s}.basemaps.cartocdn.com/dar
 
 
       // Drop previous layer groups
-(Object.keys(layersRef.current) as Array<keyof LayerState>).forEach((k) => {
+(Object.keys(layersRef.current) as (keyof LayerState)[]).forEach((k) => {
         layersRef.current[k]?.remove();
         layersRef.current[k] = null;
       });
