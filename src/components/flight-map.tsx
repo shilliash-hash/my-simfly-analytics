@@ -2,10 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { getAirportGeo, type AirportGeo } from "@/lib/simfly.functions";
 import { formatEtaUtc, formatRemainingFromNow } from "@/lib/aircraft-specs";
-import L from "leaflet";
-import "maplibre-gl/dist/maplibre-gl.css";
-import "@maplibre/maplibre-gl-leaflet";
-
 import type {
   AirportExt,
   AircraftExt,
@@ -176,22 +172,21 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-let map = mapRef.current;
+     let map = mapRef.current;
 if (!map) {
   map = L.map(containerRef.current, {
     zoomControl: true,
-    attributionControl: true, // Zmieniamy na true (wymóg prawny i licencyjny darmowych map CARTO)
+    attributionControl: false,
     worldCopyJump: true,
   }).setView([20, 0], 2);
 
-  // Pobieramy nowoczesny i czysty styl wektorowy z pominięciem przestarzałego systemu rastrowego PNG
-  (L as any).maplibreGL({
-    style: 'https://cartocdn.com'
+  L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8", {
+    maxZoom: 18,
+    subdomains: 'abcd',
   }).addTo(map);
 
   mapRef.current = map;
 }
-
 
 
       // Drop previous layer groups
