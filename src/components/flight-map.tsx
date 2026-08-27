@@ -172,20 +172,22 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-      let map = mapRef.current;
-      if (!map) {
-        map = L.map(containerRef.current, {
-          zoomControl: true,
-          attributionControl: false,
-          worldCopyJump: true,
-        }).setView([20, 0], 2);
-        L.tileLayer(
-  "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8", {
-  attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy; <a href="https://carto.com/attributions">CARTO</a>',
-  subdomains: 'abcd', maxZoom: 20
-}).addTo(map);
-        mapRef.current = map;
-      }
+     let map = mapRef.current;
+if (!map) {
+  map = L.map(containerRef.current, {
+    zoomControl: true,
+    attributionControl: false,
+    worldCopyJump: true,
+  }).setView([20, 0], 2);
+
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8', {
+    maxZoom: 18,
+    subdomains: 'abcd',
+  }).addTo(map);
+
+  mapRef.current = map;
+}
+
 
       // Drop previous layer groups
       (Object.keys(layersRef.current) as (keyof LayerState)[]).forEach((k) => {
