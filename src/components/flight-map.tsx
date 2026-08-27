@@ -10,6 +10,13 @@ import type {
   MyLiveFlight,
 } from "@/lib/types";
 
+// @ts-ignore
+import "https://unpkg.com";
+// @ts-ignore
+import "https://unpkg.com";
+// @ts-ignore
+import "https://unpkg.com";
+
 type Props = {
   hubs: AirportExt[];
   flights: FlightLog[];
@@ -172,21 +179,22 @@ export function FlightMap({ hubs, flights, airplanes = [], licenses = [], liveFl
       const L = await import("leaflet");
       if (cancelled || !containerRef.current) return;
 
-     let map = mapRef.current;
+let map = mapRef.current;
 if (!map) {
   map = L.map(containerRef.current, {
     zoomControl: true,
-    attributionControl: false,
+    attributionControl: true, // Zmieniamy na true (wymóg prawny i licencyjny darmowych map CARTO)
     worldCopyJump: true,
   }).setView([20, 0], 2);
 
-  L.tileLayer("https://{s}basemaps.cartocdn.com/rastertiles/dark_matter/{z}/{x}/{y}.png?key=cb1_2a77_1_ea2b4c77037024fcc2caffa8&v=1", {
-    maxZoom: 18,
-    subdomains: 'abcd',
+  // Pobieramy nowoczesny i czysty styl wektorowy z pominięciem przestarzałego systemu rastrowego PNG
+  (L as any).maplibreGL({
+    style: 'https://cartocdn.com'
   }).addTo(map);
 
   mapRef.current = map;
 }
+
 
 
       // Drop previous layer groups
