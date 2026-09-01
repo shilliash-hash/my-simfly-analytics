@@ -17,7 +17,7 @@ import type { SystemAirportRow, SystemAirportWatchRow, SystemScanState } from ".
 const OBS_PAGE = 1000;
 const OBS_MAX = 60_000;
 /** Identity lookups performed per manual scan step. */
-export const SCAN_BATCH = 600;
+export const SCAN_BATCH = 40;
 /** Candidate airports considered per scan (activity-ranked). */
 const CANDIDATE_CAP = 600;
 
@@ -222,11 +222,12 @@ async function writeScanState(
     total: number;
     status: string;
     message: string | null;
+    error_message: string | null;
     last_scanned_at: string | null;
   }>,
-) {
+): Promise<string | null> {
   const t = await table("system_airport_scan");
-  await t.upsert(
+  const { error } = await t.upsert(
     {
       scan_key: key,
       username: username.toLowerCase(),
@@ -236,7 +237,15 @@ async function writeScanState(
     },
     { onConflict: "scan_key" },
   );
+  // Never silently swallow a storage failure: a schema drift here is exactly
+  // what makes the scan look like it never resumes.
+  if (error) {
+    console.warn("[system-airports] scan state write failed", error.message);
+    return error.message as string;
+  }
+  return null;
 }
+
 
 export async function buildDiscovery(input: DiscoveryInput): Promise<DiscoveryResult> {
   const activity = await loadActivity(input.windowDays);
@@ -318,10 +327,16 @@ export type ScanStep = {
   message: string;
 };
 
+/** Batches resolved back to back inside a single scan run. */
+const MAX_BATCHES_PER_RUN = 6;
+/** Wall-clock budget for one scan run. */
+const RUN_BUDGET_MS = 45_000;
+
 /**
- * One bounded scan step: resolves identity for the next slice of candidate
- * airports through the shared resolver (cache first, SimFly only when a row
- * is missing or expired). Never walks flight history.
+ * One bounded scan run: resolves identity for pending candidate airports in
+ * batches through the shared resolver (cache first, SimFly only when a row is
+ * missing or expired), persisting the cursor after every batch so the next run
+ * resumes where this one stopped. Never walks flight history.
  */
 export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
   const key = scanKey(input.username, input.tiers, input.windowDays);
@@ -329,64 +344,107 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
   const candidates = rankedCandidates(activity);
   const codes = candidates.map((c) => c.icao);
   const identity = await readIdentityCache(codes);
-  const pendingCodes = codes.filter((c) => !identityUsable(identity.get(c)));
+  let pendingCodes = codes.filter((c) => !identityUsable(identity.get(c)));
 
   const total = codes.length;
+  let storageError: string | null = null;
+
   if (pendingCodes.length === 0) {
-    await writeScanState(key, input.username, input.tiers, input.windowDays, {
+    storageError = await writeScanState(key, input.username, input.tiers, input.windowDays, {
       cursor_index: total,
       resolved: total,
       total,
       status: "complete",
       message: "All candidate airports resolved.",
+      error_message: null,
       last_scanned_at: new Date().toISOString(),
     });
-    return { resolved: total, pending: 0, total, done: true, message: "Scan complete." };
+    return {
+      resolved: total,
+      pending: 0,
+      total,
+      done: true,
+      message: storageError
+        ? `Scan complete, but progress could not be saved: ${storageError}`
+        : `Scan complete · ${total} of ${total} candidate airports resolved.`,
+    };
   }
 
-  await writeScanState(key, input.username, input.tiers, input.windowDays, {
+  storageError = await writeScanState(key, input.username, input.tiers, input.windowDays, {
     total,
     status: "running",
-    message: `Resolving ${Math.min(SCAN_BATCH, pendingCodes.length)} airports…`,
+    message: `Resolving ${Math.min(SCAN_BATCH, pendingCodes.length)} of ${pendingCodes.length} pending airports…`,
+    error_message: null,
   });
 
   const { resolveAirportIdentityFull } = await import("./airport-identity.server");
-  const slice = pendingCodes.slice(0, SCAN_BATCH);
-  let ok = 0;
-  for (const icao of slice) {
-    try {
-      await resolveAirportIdentityFull(icao);
-      ok += 1;
-    } catch {
-      // A failed lookup stays unresolved; it is never counted as system-owned.
+  const startedAt = Date.now();
+  let resolvedThisRun = 0;
+  let batches = 0;
+
+  while (
+    pendingCodes.length > 0 &&
+    batches < MAX_BATCHES_PER_RUN &&
+    Date.now() - startedAt < RUN_BUDGET_MS
+  ) {
+    const slice = pendingCodes.slice(0, SCAN_BATCH);
+    const stillPending: string[] = [];
+    for (const icao of slice) {
+      try {
+        await resolveAirportIdentityFull(icao);
+        resolvedThisRun += 1;
+      } catch {
+        // A failed lookup stays pending; it is never counted as system-owned.
+        stillPending.push(icao);
+      }
     }
+    batches += 1;
+    pendingCodes = [...stillPending, ...pendingCodes.slice(slice.length)];
+
+    const resolvedSoFar = total - pendingCodes.length;
+    const write = await writeScanState(key, input.username, input.tiers, input.windowDays, {
+      cursor_index: resolvedSoFar,
+      resolved: resolvedSoFar,
+      total,
+      status: pendingCodes.length > 0 ? "partial" : "complete",
+      message: `${resolvedSoFar} of ${total} candidate airports resolved.`,
+      error_message: null,
+      last_scanned_at: new Date().toISOString(),
+    });
+    if (write) storageError = write;
+    // Nothing at all resolved in this batch — stop instead of spinning.
+    if (slice.length === stillPending.length) break;
   }
 
-  const remaining = pendingCodes.length - ok;
+  const remaining = pendingCodes.length;
   const resolvedNow = total - remaining;
+  const done = remaining === 0;
+
   await writeScanState(key, input.username, input.tiers, input.windowDays, {
     cursor_index: resolvedNow,
     resolved: resolvedNow,
     total,
-    status: remaining > 0 ? "partial" : "complete",
-    message:
-      remaining > 0
-        ? `${resolvedNow} of ${total} candidate airports resolved.`
-        : "All candidate airports resolved.",
+    status: done ? "complete" : "partial",
+    message: done
+      ? "All candidate airports resolved."
+      : `${resolvedNow} of ${total} candidate airports resolved.`,
+    error_message: storageError,
     last_scanned_at: new Date().toISOString(),
   });
+
+  const base = done
+    ? `Scan complete · ${resolvedNow} of ${total} candidate airports resolved.`
+    : `${resolvedNow} of ${total} resolved · ${remaining} pending (+${resolvedThisRun} this run). Continue the scan to keep going.`;
 
   return {
     resolved: resolvedNow,
     pending: remaining,
     total,
-    done: remaining === 0,
-    message:
-      remaining > 0
-        ? `Resolved ${ok} airports · ${remaining} still pending.`
-        : "Scan complete.",
+    done,
+    message: storageError ? `${base} Progress could not be saved: ${storageError}` : base,
   };
 }
+
 
 // ---------------------------------------------------------------- watchlist
 
@@ -394,11 +452,13 @@ export async function listWatch(username: string): Promise<SystemAirportWatchRow
   const u = sanitiseUsername(username);
   if (!u) return [];
   const t = await table("system_airport_watch");
-  const { data } = await t
+  const { data, error } = await t
     .select("icao, notes, created_at, last_opened_at")
     .eq("username", u.toLowerCase())
     .order("created_at", { ascending: true });
+  if (error) throw new Error(`Watchlist read failed: ${error.message}`);
   const rows = (data ?? []) as any[];
+
   const codes = rows.map((r) => String(r.icao).trim().toUpperCase());
   if (codes.length === 0) return [];
   const [identity, records] = await Promise.all([
