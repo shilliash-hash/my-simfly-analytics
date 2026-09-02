@@ -166,7 +166,11 @@ async function readIdentityCache(icaos: string[]): Promise<Map<string, IdentityR
 
 function identityUsable(row: IdentityRow | undefined): boolean {
   if (!row) return false;
-  return row.asset_id !== null && Date.parse(row.refresh_after) > Date.now();
+  return (
+    Date.parse(row.refresh_after) > Date.now() &&
+    Boolean(row.name?.trim()) &&
+    row.tier !== null
+  );
 }
 
 // ---------------------------------------------------------------- discovery
@@ -182,6 +186,8 @@ export type DiscoveryResult = {
   candidates: number;
   resolved: number;
   pending: number;
+  systemOwned: number;
+  playerOwned: number;
   windowDays: number;
   tiers: number[];
   scan: SystemScanState | null;
@@ -261,13 +267,19 @@ export async function buildDiscovery(input: DiscoveryInput): Promise<DiscoveryRe
   const tierSet = new Set(input.tiers);
   const rows: SystemAirportRow[] = [];
   let resolved = 0;
+  let systemOwned = 0;
+  let playerOwned = 0;
   for (const c of candidates) {
     const id = identity.get(c.icao);
     if (identityUsable(id)) resolved += 1;
     if (!id || !identityUsable(id)) continue;
     // System-owned only. A failed metadata lookup is never treated as
     // system-owned: unusable rows are skipped above.
-    if (id.owner_username && id.owner_username.trim()) continue;
+    if (id.owner_username && id.owner_username.trim()) {
+      playerOwned += 1;
+      continue;
+    }
+    systemOwned += 1;
     if (id.tier === null || !tierSet.has(id.tier)) continue;
 
     const rec = records.get(c.icao);
@@ -298,6 +310,8 @@ export async function buildDiscovery(input: DiscoveryInput): Promise<DiscoveryRe
     candidates: candidates.length,
     resolved,
     pending: candidates.length - resolved,
+    systemOwned,
+    playerOwned,
     windowDays: input.windowDays,
     tiers: input.tiers,
     scan: await readScanState(scanKey(input.username, input.tiers, input.windowDays)),
@@ -355,7 +369,7 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
       resolved: total,
       total,
       status: "complete",
-      message: "All candidate airports resolved.",
+      message: "All candidate airports classified.",
       error_message: null,
       last_scanned_at: new Date().toISOString(),
     });
@@ -366,14 +380,14 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
       done: true,
       message: storageError
         ? `Scan complete, but progress could not be saved: ${storageError}`
-        : `Scan complete · ${total} of ${total} candidate airports resolved.`,
+        : `Scan complete · ${total} of ${total} candidate airports classified.`,
     };
   }
 
   storageError = await writeScanState(key, input.username, input.tiers, input.windowDays, {
     total,
     status: "running",
-    message: `Resolving ${Math.min(SCAN_BATCH, pendingCodes.length)} of ${pendingCodes.length} pending airports…`,
+    message: `Classifying ${Math.min(SCAN_BATCH, pendingCodes.length)} of ${pendingCodes.length} pending airports…`,
     error_message: null,
   });
 
@@ -391,8 +405,9 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
     const stillPending: string[] = [];
     for (const icao of slice) {
       try {
-        await resolveAirportIdentityFull(icao);
-        resolvedThisRun += 1;
+        const result = await resolveAirportIdentityFull(icao, { force: true });
+        if (result.name && result.tier !== null) resolvedThisRun += 1;
+        else stillPending.push(icao);
       } catch {
         // A failed lookup stays pending; it is never counted as system-owned.
         stillPending.push(icao);
@@ -407,7 +422,7 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
       resolved: resolvedSoFar,
       total,
       status: pendingCodes.length > 0 ? "partial" : "complete",
-      message: `${resolvedSoFar} of ${total} candidate airports resolved.`,
+      message: `${resolvedSoFar} of ${total} candidate airports classified.`,
       error_message: null,
       last_scanned_at: new Date().toISOString(),
     });
@@ -426,15 +441,15 @@ export async function runScanStep(input: DiscoveryInput): Promise<ScanStep> {
     total,
     status: done ? "complete" : "partial",
     message: done
-      ? "All candidate airports resolved."
-      : `${resolvedNow} of ${total} candidate airports resolved.`,
+      ? "All candidate airports classified."
+      : `${resolvedNow} of ${total} candidate airports classified.`,
     error_message: storageError,
     last_scanned_at: new Date().toISOString(),
   });
 
   const base = done
-    ? `Scan complete · ${resolvedNow} of ${total} candidate airports resolved.`
-    : `${resolvedNow} of ${total} resolved · ${remaining} pending (+${resolvedThisRun} this run). Continue the scan to keep going.`;
+    ? `Scan complete · ${resolvedNow} of ${total} candidate airports classified.`
+    : `${resolvedNow} of ${total} classified · ${remaining} unresolved (+${resolvedThisRun} this run). Continue the scan to keep going.`;
 
   return {
     resolved: resolvedNow,
