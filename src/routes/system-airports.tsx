@@ -253,6 +253,8 @@ function AnalyzerTerminal() {
         scanning={scan.isPending}
         scan={discovery?.scan ?? null}
         pending={discovery?.pending ?? 0}
+        systemOwned={discovery?.systemOwned ?? 0}
+        playerOwned={discovery?.playerOwned ?? 0}
       />
 
       <WatchlistPanel
