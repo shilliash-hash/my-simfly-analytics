@@ -19,12 +19,23 @@ import type { AirportIdentityFull } from "./airport-identity.types";
 export type { AirportIdentityFull };
 
 const SIMFLY_DETAILS = "https://simfly.io/api/user/assets/details/airport";
+const SIMFLY_AIRPORTS = "https://simfly.io/api/airports/v2";
 /** Short in-process shortcut so a single render never re-fetches an ICAO. */
 const FRESH_MS = 10 * 60_000;
 /** Cache row lifetime before SimFly is consulted again. */
 const CACHE_TTL_MS = 7 * 24 * 60 * 60_000;
 
 const memo = new Map<string, { at: number; value: AirportIdentityFull }>();
+type CatalogueAirport = {
+  name?: string;
+  ICAO?: string;
+  category?: number;
+  level?: number;
+  country?: string;
+};
+let catalogueMemo: { at: number; airports: Map<string, CatalogueAirport> } | null = null;
+let catalogueRequest: Promise<Map<string, CatalogueAirport> | null> | null = null;
+const CATALOGUE_TTL_MS = 60 * 60_000;
 
 export function normaliseAirportIcao(raw?: string | null): string {
   const v = (raw ?? "").trim().toUpperCase();
@@ -73,10 +84,14 @@ function fromCacheRow(row: CacheRow, stale: boolean): AirportIdentityFull {
   };
 }
 
-/** A cache row is usable only when it is unexpired AND written by the current
- *  resolver shape (rows from the old radar-only resolver lack asset_id). */
+/** A fresh row with catalogue identity is classified. System airports
+ * intentionally have no asset_id; requiring one would exclude all of them. */
 function isCacheUsable(row: CacheRow): boolean {
-  return new Date(row.refresh_after).getTime() > Date.now() && row.asset_id !== null;
+  return (
+    new Date(row.refresh_after).getTime() > Date.now() &&
+    Boolean(row.name?.trim()) &&
+    row.tier !== null
+  );
 }
 
 async function readCache(icaos: string[]): Promise<Map<string, CacheRow>> {
@@ -118,12 +133,59 @@ async function writeCache(id: AirportIdentityFull) {
   }
 }
 
-/** Fetch identity straight from the public SimFly airport details endpoint. */
+async function fetchCatalogue(): Promise<Map<string, CatalogueAirport> | null> {
+  if (catalogueMemo && Date.now() - catalogueMemo.at < CATALOGUE_TTL_MS) {
+    return catalogueMemo.airports;
+  }
+  if (catalogueRequest) return catalogueRequest;
+  catalogueRequest = (async () => {
+    try {
+      const res = await fetch(SIMFLY_AIRPORTS, { headers: { Accept: "application/json" } });
+      if (!res.ok) return null;
+      const json = (await res.json()) as { data?: CatalogueAirport[] };
+      if (!Array.isArray(json.data)) return null;
+      const airports = new Map<string, CatalogueAirport>();
+      for (const airport of json.data) {
+        const code = normaliseAirportIcao(airport.ICAO);
+        if (code) airports.set(code, airport);
+      }
+      catalogueMemo = { at: Date.now(), airports };
+      return airports;
+    } catch (err) {
+      console.warn(
+        "[airport-identity] catalogue fetch failed",
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    } finally {
+      catalogueRequest = null;
+    }
+  })();
+  return catalogueRequest;
+}
+
+/** Combine the complete public catalogue with the owned-asset endpoint.
+ * A 404 is proof of system ownership only when the ICAO exists in the catalogue. */
 async function fetchFromSimfly(icao: string): Promise<AirportIdentityFull | null> {
   try {
+    const catalogue = await fetchCatalogue();
+    const base = catalogue?.get(icao);
     const res = await fetch(`${SIMFLY_DETAILS}/${encodeURIComponent(icao)}`, {
       headers: { Accept: "application/json" },
     });
+    if (res.status === 404 && base) {
+      return {
+        icao,
+        name: typeof base.name === "string" ? base.name : null,
+        owner: null,
+        tier: typeof base.category === "number" ? base.category : null,
+        level: typeof base.level === "number" ? base.level : null,
+        assetId: null,
+        country: typeof base.country === "string" ? base.country : null,
+        source: "simfly",
+        fetchedAt: new Date().toISOString(),
+      };
+    }
     if (!res.ok) return null;
     const json = (await res.json()) as Record<string, unknown>;
     const node = ((json as { data?: Record<string, unknown> }).data ?? json) as Record<string, unknown>;
@@ -132,13 +194,33 @@ async function fetchFromSimfly(icao: string): Promise<AirportIdentityFull | null
     const assetId = node["asset_id"];
     return {
       icao,
-      name: typeof node["name"] === "string" ? (node["name"] as string) : null,
+      name:
+        typeof node["name"] === "string"
+          ? (node["name"] as string)
+          : typeof base?.name === "string"
+            ? base.name
+            : null,
       owner: owner?.username ?? null,
       // SimFly calls the airport tier "category".
-      tier: typeof node["category"] === "number" ? (node["category"] as number) : null,
-      level: typeof node["level"] === "number" ? (node["level"] as number) : null,
+      tier:
+        typeof node["category"] === "number"
+          ? (node["category"] as number)
+          : typeof base?.category === "number"
+            ? base.category
+            : null,
+      level:
+        typeof node["level"] === "number"
+          ? (node["level"] as number)
+          : typeof base?.level === "number"
+            ? base.level
+            : null,
       assetId: assetId === null || assetId === undefined ? null : String(assetId),
-      country: typeof node["country"] === "string" ? (node["country"] as string) : null,
+      country:
+        typeof node["country"] === "string"
+          ? (node["country"] as string)
+          : typeof base?.country === "string"
+            ? base.country
+            : null,
       source: "simfly",
       fetchedAt: new Date().toISOString(),
     };
