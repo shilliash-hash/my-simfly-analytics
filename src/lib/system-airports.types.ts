@@ -50,6 +50,8 @@ export type SystemDiscovery = {
   candidates: number;
   resolved: number;
   pending: number;
+  systemOwned: number;
+  playerOwned: number;
   windowDays: number;
   tiers: number[];
   scan: SystemScanState | null;
