@@ -69,7 +69,7 @@ export const WINDOW_OPTIONS = [
 ] as const;
 
 export const WINDOW_DAYS = WINDOW_OPTIONS.map((w) => w.days) as readonly number[];
-export const DEFAULT_WINDOW_DAYS = 28;
+export const DEFAULT_WINDOW_DAYS = 360;
 
 /** Per-airport detail built from observed radar traffic. */
 export type RadarWeek = {
