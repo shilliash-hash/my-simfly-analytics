@@ -1,9 +1,11 @@
 // System Airports Analyzer — thin server-function wrappers (client-safe import).
 import { createServerFn } from "@tanstack/react-start";
 import type {
+  RadarDetail,
   SystemAirportWatchRow,
   SystemDiscovery,
 } from "./system-airports.types";
+import { DEFAULT_WINDOW_DAYS, WINDOW_DAYS } from "./system-airports.types";
 
 function cleanTiers(raw?: number[]): number[] {
   const list = (raw ?? [3, 4]).filter((t) => Number.isInteger(t) && t >= 1 && t <= 6);
@@ -11,8 +13,8 @@ function cleanTiers(raw?: number[]): number[] {
 }
 
 function cleanWindow(raw?: number): number {
-  const v = Number(raw ?? 90);
-  return [30, 60, 90, 180, 0].includes(v) ? v : 90;
+  const v = Number(raw ?? DEFAULT_WINDOW_DAYS);
+  return WINDOW_DAYS.includes(v) ? v : DEFAULT_WINDOW_DAYS;
 }
 
 export const getSystemAirportAccess = createServerFn({ method: "GET" })
@@ -97,4 +99,15 @@ export const openSystemAirportWatch = createServerFn({ method: "POST" })
     const { touchWatch } = await import("./system-airports.server");
     await touchWatch(username, data.icao);
     return { ok: true as const };
+  });
+
+export const getSystemAirportRadarDetail = createServerFn({ method: "GET" })
+  .inputValidator((d: { icao: string; windowDays?: number; username?: string }) => d)
+  .handler(async ({ data }): Promise<RadarDetail> => {
+    const { resolveIdentityUsername } = await import("./airport-spy-identity.server");
+    const username = await resolveIdentityUsername(data.username);
+    const { assertAirportSpyAccess } = await import("./airport-spy.server");
+    await assertAirportSpyAccess(username);
+    const { loadAirportRadarDetail } = await import("./system-airports.server");
+    return loadAirportRadarDetail(data.icao, cleanWindow(data.windowDays));
   });
