@@ -31,10 +31,14 @@ import {
   openSystemAirportWatch,
   removeSystemAirportWatch,
   runSystemAirportScan,
+  getSystemAirportRadarDetail,
 } from "@/lib/system-airports.functions";
+import { DEFAULT_WINDOW_DAYS, WINDOW_DAYS } from "@/lib/system-airports.types";
 import {
   AnalyzerControls,
   DiscoveryTable,
+  RadarDetailPanels,
+  RadarSourceNote,
   WatchlistPanel,
 } from "@/components/system-airports/panels";
 
@@ -111,7 +115,7 @@ function AnalyzerTerminal() {
   const args = useMemo(() => (username ? { username } : {}), [username]);
 
   const [tiers, setTiers] = useState<number[]>([3, 4]);
-  const [windowDays, setWindowDays] = useState(90);
+  const [windowDays, setWindowDays] = useState(DEFAULT_WINDOW_DAYS);
   const [icao, setIcao] = useState<string | null>(null);
   const [busyIcao, setBusyIcao] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -124,7 +128,7 @@ function AnalyzerTerminal() {
         if (Array.isArray(parsed) && parsed.length) setTiers(parsed);
       }
       const w = window.localStorage.getItem(WINDOW_KEY);
-      if (w !== null) setWindowDays(Number(w));
+      if (w !== null && WINDOW_DAYS.includes(Number(w))) setWindowDays(Number(w));
       const a = window.localStorage.getItem(ICAO_KEY);
       if (a) setIcao(a.toUpperCase());
     } catch {
@@ -338,10 +342,22 @@ function AirportDetail({
   const { keyTag, username } = useSimflyArgs();
   const args = useMemo(() => (username ? { username } : {}), [username]);
 
+  const radarFn = useServerFn(getSystemAirportRadarDetail);
+  const { data: radar, isLoading: radarLoading } = useQuery({
+    queryKey: ["system-airports-radar", keyTag, icao, windowDays],
+    queryFn: () => radarFn({ data: { icao, windowDays, ...args } }),
+    staleTime: 60_000,
+  });
+
+  // SimFly only publishes a flight log for player-owned airports, so a full
+  // Airport Spy investigation is offered only when an owner is known.
+  const ownerKnown = Boolean(radar?.ownershipKnown && radar.owner);
+
   const intelFn = useServerFn(getAirportSpyIntel);
   const { data: full } = useQuery({
     queryKey: ["airport-spy-intel", keyTag, icao],
     queryFn: () => intelFn({ data: { icao, ...args } }),
+    enabled: ownerKnown,
     refetchInterval: (q) => (q.state.data?.status === "running" ? 2000 : false),
   });
 
@@ -355,9 +371,6 @@ function AirportDetail({
   const running = analyzing || full?.status === "running";
   const intel = full ? windowIntel(full, windowDays) : undefined;
   const windowLabel = windowDays ? `${windowDays}D` : "all observed";
-  const coverageShort = Boolean(
-    full && windowDays && full.weeks.length * 7 < windowDays && full.exists,
-  );
 
   return (
     <AppShell>
@@ -379,32 +392,28 @@ function AirportDetail({
             >
               {watched ? "Unwatch" : "Watch"}
             </button>
-            <button
-              disabled={running}
-              onClick={() => onAnalyze(18)}
-              className="mono rounded-lg bg-runway/15 px-3 py-2 text-xs uppercase tracking-widest text-runway ring-1 ring-runway/40 disabled:opacity-50"
-            >
-              {running ? "Analyzing…" : full?.exists ? "Deepen investigation" : "Analyze"}
-            </button>
+            {ownerKnown ? (
+              <button
+                disabled={running}
+                onClick={() => onAnalyze(18)}
+                className="mono rounded-lg bg-runway/15 px-3 py-2 text-xs uppercase tracking-widest text-runway ring-1 ring-runway/40 disabled:opacity-50"
+              >
+                {running ? "Analyzing…" : full?.exists ? "Deepen investigation" : "Analyze"}
+              </button>
+            ) : null}
           </div>
         }
       />
 
-      {!intel || !full ? (
+      {radarLoading || !radar ? (
         <div className="panel rounded-xl p-6 text-sm text-muted-foreground">Reading record…</div>
-      ) : (
+      ) : ownerKnown && full && intel ? (
         <div className="space-y-4">
           <RecordHeader intel={intel} />
           <InvestigationConsole intel={full} running={running} message={message} />
           {!full.exists && !running ? (
             <div className="panel rounded-xl p-6">
               <NotObserved hint="This airport has never been analyzed. Start an analysis to build its record." />
-            </div>
-          ) : null}
-          {coverageShort ? (
-            <div className="mono rounded-lg bg-instrument/10 px-3 py-2 text-[11px] text-instrument ring-1 ring-instrument/30">
-              Observed coverage: {full.weeks.length} weeks of the selected {windowLabel} window.
-              Deepen the investigation to extend it — nothing is extrapolated to fill the gap.
             </div>
           ) : null}
           <OperationalProfile intel={intel} />
@@ -415,6 +424,17 @@ function AirportDetail({
           <TrafficComposition intel={full} />
           <EconomicProfile intel={full} />
           <PerformanceExplanation intel={intel} weeks={intel.weeks} pilots={full.pilots} />
+          <NearbyAirports nearby={nearby} onSelect={onSelect} />
+        </div>
+      ) : (
+        <div className="space-y-4">
+          <RadarSourceNote detail={radar} />
+          {message ? (
+            <div className="mono rounded-lg bg-secondary/40 px-3 py-2 text-[11px] text-muted-foreground ring-1 ring-border/60">
+              {message}
+            </div>
+          ) : null}
+          <RadarDetailPanels detail={radar} />
           <NearbyAirports nearby={nearby} onSelect={onSelect} />
         </div>
       )}
