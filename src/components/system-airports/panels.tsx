@@ -2,6 +2,7 @@ import { Eye, EyeOff, Radar, Star, Trash2, TrendingDown, TrendingUp, Minus } fro
 import { cn } from "@/lib/utils";
 import { SYSTEM_OWNER_LABEL } from "@/lib/airport-owner";
 import type {
+  RadarDetail,
   SystemAirportRow,
   SystemAirportWatchRow,
   SystemScanState,
@@ -350,5 +351,151 @@ export function WatchlistPanel({
         </div>
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------- radar-observed detail
+
+function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="panel rounded-xl p-4">
+      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{title}</div>
+      <div className="mt-3">{children}</div>
+    </section>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">{label}</div>
+      <div className="mono mt-1 text-lg tabular-nums text-foreground">{value}</div>
+    </div>
+  );
+}
+
+function Empty({ text }: { text: string }) {
+  return <p className="text-sm text-muted-foreground">{text}</p>;
+}
+
+export function RadarDetailPanels({ detail }: { detail: RadarDetail }) {
+  const maxWeek = Math.max(1, ...detail.weeks.map((w) => w.operations));
+  const windowLabel = detail.windowDays ? `${detail.windowDays}D` : "all observed";
+
+  return (
+    <div className="space-y-4">
+      <section className="panel rounded-xl p-4">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="mono text-xs text-runway">{detail.icao}</div>
+            <h2 className="font-display text-lg font-semibold">{detail.name ?? "Name not yet resolved"}</h2>
+            <div className="mono mt-1 text-[11px] text-muted-foreground">
+              {detail.ownershipKnown
+                ? detail.owner
+                  ? `owned by ${detail.owner}`
+                  : SYSTEM_OWNER_LABEL
+                : "ownership not yet observed"}
+              {" · "}T{detail.tier ?? "—"} · L{detail.level ?? "—"}
+            </div>
+          </div>
+          <div className="mono text-right text-[11px] text-muted-foreground">
+            <div>Evidence source: Community Radar observations</div>
+            <div>
+              Observed weeks: {detail.weeks.length} of {detail.retainedWeeks} retained
+            </div>
+            <div>
+              First seen {fmtDate(detail.firstObservedAt)} · last {fmtDate(detail.lastObservedAt)}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <Panel title={`Operational profile · ${windowLabel}`}>
+        {detail.operations === 0 ? (
+          <Empty text="Not yet observed — the radar has not caught any traffic at this airport inside the selected period." />
+        ) : (
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+            <Stat label="Operations" value={n(detail.operations)} />
+            <Stat label="Arrivals" value={n(detail.arrivals)} />
+            <Stat label="Departures" value={n(detail.departures)} />
+            <Stat label="Unique pilots" value={n(detail.uniquePilots)} />
+            <Stat label="Aircraft types" value={n(detail.uniqueAircraft)} />
+            <Stat label="Trend" value={<TrendMark trend={detail.trend} />} />
+          </div>
+        )}
+      </Panel>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel title="Demand history (observed weeks)">
+          {detail.weeks.length === 0 ? (
+            <Empty text="Not yet observed." />
+          ) : (
+            <div className="space-y-2">
+              {detail.weeks.map((w) => (
+                <div key={w.weekStartUtc} className="grid grid-cols-[92px_minmax(0,1fr)_auto] items-center gap-3">
+                  <span className="mono text-[11px] text-muted-foreground">{fmtDate(w.weekStartUtc)}</span>
+                  <span className="h-2 overflow-hidden rounded-full bg-secondary">
+                    <span
+                      className="block h-full rounded-full bg-runway"
+                      style={{ width: `${Math.round((w.operations / maxWeek) * 100)}%` }}
+                    />
+                  </span>
+                  <span className="mono text-[11px] tabular-nums text-foreground">
+                    {n(w.operations)} ops · {n(w.uniquePilots)} pilots
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+
+        <Panel title="Visitor intelligence">
+          {detail.pilots.length === 0 ? (
+            <Empty text="Not yet observed." />
+          ) : (
+            <div className="space-y-1.5">
+              {detail.pilots.map((p) => (
+                <div
+                  key={p.username}
+                  className="mono flex items-center justify-between rounded-lg bg-secondary/40 px-3 py-1.5 text-[11px] ring-1 ring-border/60"
+                >
+                  <span className="truncate text-foreground">{p.username}</span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {n(p.visits)} visits · {n(p.arrivals)} arr / {n(p.departures)} dep
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <Panel title="Traffic composition (aircraft observed)">
+        {detail.aircraft.length === 0 ? (
+          <Empty text="Not yet observed." />
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {detail.aircraft.map((a) => (
+              <span
+                key={a.name}
+                className="mono rounded-lg bg-secondary/50 px-2.5 py-1 text-[11px] text-muted-foreground ring-1 ring-border"
+              >
+                {a.name} <span className="tabular-nums text-foreground">×{n(a.visits)}</span>
+              </span>
+            ))}
+          </div>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+export function RadarSourceNote({ detail }: { detail: RadarDetail }) {
+  return (
+    <div className="mono rounded-lg bg-instrument/10 px-3 py-2 text-[11px] leading-relaxed text-instrument ring-1 ring-instrument/30">
+      SimFly publishes a flight log only for player-owned airports, so a full investigation cannot
+      run here. Everything shown is what the Community Radar actually observed in the live feed,
+      retained for {detail.retainedWeeks} SimFly weeks. Nothing is estimated to fill the gap.
+    </div>
   );
 }
