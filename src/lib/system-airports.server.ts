@@ -12,7 +12,13 @@
  * Airport Spy and is only triggered for a single airport at a time.
  */
 
-import type { SystemAirportRow, SystemAirportWatchRow, SystemScanState } from "./system-airports.types";
+import type {
+  RadarDetail,
+  SystemAirportRow,
+  SystemAirportWatchRow,
+  SystemScanState,
+} from "./system-airports.types";
+import { RADAR_RETAINED_WEEKS } from "./community-radar-observer.server";
 
 const OBS_PAGE = 1000;
 const OBS_MAX = 60_000;
@@ -530,4 +536,165 @@ export async function touchWatch(username: string, icao: string) {
     .update({ last_opened_at: new Date().toISOString() })
     .eq("username", u.toLowerCase())
     .eq("icao", code);
+}
+
+// ------------------------------------------------------- radar airport detail
+
+/**
+ * Per-airport detail built from observed radar traffic.
+ *
+ * SimFly only publishes a flight log for *owned* airports
+ * (`/user/assets/airport/{ICAO}/flights` returns 404 for system airports), so
+ * for the airports this analyzer is about the only evidence that exists is the
+ * Community Radar live-feed observation log. That log is the same source the
+ * discovery table uses, which keeps the row and the detail view consistent.
+ */
+export async function loadAirportRadarDetail(
+  icaoRaw: string,
+  windowDays: number,
+): Promise<RadarDetail> {
+  const icao = normaliseIcao(icaoRaw);
+  if (!icao) throw new Error("Invalid ICAO code.");
+
+  const t = await table("community_traffic_observation");
+  const cutoff = windowCutoffMs(windowDays);
+  const rows: any[] = [];
+  for (let from = 0; from < OBS_MAX; from += OBS_PAGE) {
+    let q = t
+      .select(
+        "origin_icao, destination_icao, username, aircraft_icao, aircraft_name, week_start_utc, first_seen_at",
+      )
+      .or(`origin_icao.eq.${icao},destination_icao.eq.${icao}`)
+      .order("week_start_utc", { ascending: false })
+      .range(from, from + OBS_PAGE - 1);
+    if (cutoff > 0) q = q.gte("week_start_utc", new Date(cutoff).toISOString());
+    const { data, error } = await q;
+    if (error) throw new Error(error.message);
+    const page = (data ?? []) as any[];
+    rows.push(...page);
+    if (page.length < OBS_PAGE) break;
+  }
+
+  type WeekAcc = {
+    operations: number;
+    arrivals: number;
+    departures: number;
+    pilots: Set<string>;
+    aircraft: Set<string>;
+  };
+  const weekMap = new Map<string, WeekAcc>();
+  const pilotMap = new Map<string, { username: string; visits: number; arrivals: number; departures: number }>();
+  const aircraftMap = new Map<string, number>();
+  const weekCounts = new Map<string, number>();
+  let operations = 0;
+  let arrivals = 0;
+  let departures = 0;
+  let firstMs = Number.POSITIVE_INFINITY;
+  let lastMs = 0;
+  const pilots = new Set<string>();
+  const aircraftAll = new Set<string>();
+
+  for (const r of rows) {
+    const isArr = normaliseIcao(r.destination_icao) === icao;
+    const isDep = normaliseIcao(r.origin_icao) === icao;
+    if (!isArr && !isDep) continue;
+    const wk = (r.week_start_utc as string | null) ?? null;
+    const acc =
+      wk !== null
+        ? weekMap.get(wk) ??
+          (() => {
+            const v: WeekAcc = {
+              operations: 0,
+              arrivals: 0,
+              departures: 0,
+              pilots: new Set<string>(),
+              aircraft: new Set<string>(),
+            };
+            weekMap.set(wk, v);
+            return v;
+          })()
+        : null;
+
+    const pilot = (r.username as string | null)?.trim() || "";
+    const ac = ((r.aircraft_name as string | null) || (r.aircraft_icao as string | null) || "").trim();
+    const seenMs = r.first_seen_at ? Date.parse(r.first_seen_at as string) : NaN;
+    if (Number.isFinite(seenMs)) {
+      if (seenMs < firstMs) firstMs = seenMs;
+      if (seenMs > lastMs) lastMs = seenMs;
+    }
+
+    // An observation can be both an arrival and a departure only when origin
+    // equals destination; count each leg once.
+    const legs: ("arr" | "dep")[] = [];
+    if (isArr) legs.push("arr");
+    if (isDep) legs.push("dep");
+
+    for (const leg of legs) {
+      operations += 1;
+      if (leg === "arr") arrivals += 1;
+      else departures += 1;
+      if (acc) {
+        acc.operations += 1;
+        if (leg === "arr") acc.arrivals += 1;
+        else acc.departures += 1;
+      }
+      if (wk) weekCounts.set(wk, (weekCounts.get(wk) ?? 0) + 1);
+      if (pilot) {
+        const key = pilot.toLowerCase();
+        const p = pilotMap.get(key) ?? { username: pilot, visits: 0, arrivals: 0, departures: 0 };
+        p.visits += 1;
+        if (leg === "arr") p.arrivals += 1;
+        else p.departures += 1;
+        pilotMap.set(key, p);
+      }
+      if (ac) aircraftMap.set(ac, (aircraftMap.get(ac) ?? 0) + 1);
+    }
+
+    if (pilot) {
+      pilots.add(pilot.toLowerCase());
+      acc?.pilots.add(pilot.toLowerCase());
+    }
+    if (ac) {
+      aircraftAll.add(ac);
+      acc?.aircraft.add(ac);
+    }
+  }
+
+  const identity = (await readIdentityCache([icao])).get(icao);
+
+  const weeks = [...weekMap.entries()]
+    .sort((a, b) => Date.parse(a[0]) - Date.parse(b[0]))
+    .map(([weekStartUtc, v]) => ({
+      weekStartUtc,
+      operations: v.operations,
+      arrivals: v.arrivals,
+      departures: v.departures,
+      uniquePilots: v.pilots.size,
+      uniqueAircraft: v.aircraft.size,
+    }));
+
+  return {
+    icao,
+    name: identity?.name ?? null,
+    owner: identity?.owner_username ?? null,
+    ownershipKnown: identityUsable(identity),
+    tier: identity?.tier ?? null,
+    level: identity?.level ?? null,
+    windowDays,
+    operations,
+    arrivals,
+    departures,
+    uniquePilots: pilots.size,
+    uniqueAircraft: aircraftAll.size,
+    firstObservedAt: Number.isFinite(firstMs) ? new Date(firstMs).toISOString() : null,
+    lastObservedAt: lastMs > 0 ? new Date(lastMs).toISOString() : null,
+    retainedWeeks: RADAR_RETAINED_WEEKS,
+    weeks,
+    pilots: [...pilotMap.values()].sort((a, b) => b.visits - a.visits).slice(0, 25),
+    aircraft: [...aircraftMap.entries()]
+      .map(([name, visits]) => ({ name, visits }))
+      .sort((a, b) => b.visits - a.visits)
+      .slice(0, 25),
+    trend: trendOf(weekCounts),
+  };
 }
