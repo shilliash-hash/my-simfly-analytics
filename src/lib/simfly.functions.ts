@@ -3846,5 +3846,37 @@ export async function getAllGlobalAirplanes(): Promise<{ aircraftId: string; nam
   }
 }
 
+/**
+ * Lifetime rotations / level progress per owned airport.
+ *
+ * `assets/all` does not carry `totalRotations`, so the "% / OP" column has no
+ * basis without this per-airport detail lookup (same source the upgrade
+ * advisor already backfills from). Presentation-only, best effort.
+ */
+export const getAirportRotationBasis = createServerFn({ method: "GET" })
+  .inputValidator((d: { icaos: string[] }) => ({
+    icaos: (d?.icaos ?? []).map((i) => String(i || "").trim().toUpperCase()).filter(Boolean).slice(0, 60),
+  }))
+  .handler(async ({ data }): Promise<Record<string, { totalRotations: number; levelProgress: number | null }>> => {
+    const out: Record<string, { totalRotations: number; levelProgress: number | null }> = {};
+    await Promise.all(
+      data.icaos.map(async (icao) => {
+        try {
+          const raw = await fetchJSON<RawAssetAirport>(
+            `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`,
+          );
+          if (raw && raw.type === "Airport") {
+            const rot = Number(raw.totalRotations);
+            const prog = Number(raw.level_progress);
+            out[icao] = {
+              totalRotations: Number.isFinite(rot) ? rot : 0,
+              levelProgress: Number.isFinite(prog) ? prog : null,
+            };
+          }
+        } catch { /* best effort */ }
+      }),
+    );
+    return out;
+  });
 
 // {Login-change-deployment} 14.07.2026
