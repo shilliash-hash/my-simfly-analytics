@@ -7,7 +7,16 @@ import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AirportExt } from "@/lib/types";
 import { AppShell, PageHeader, TierPill, RotationCell, formatNumber } from "@/components/app-shell";
 import { CapacityUtilizationTimeline } from "@/components/capacity-utilization-timeline";
+import { estimateLevelGainPerOperation } from "@/lib/airport-upgrade-costs";
 import { Search, MapPin } from "lucide-react";
+
+function gainOf(a: AirportExt): number | null {
+  return estimateLevelGainPerOperation({
+    level: a.level,
+    levelProgress: a.levelProgress,
+    totalRotations: a.totalRotations,
+  }).percentPerOp;
+}
 
 export const Route = createFileRoute("/airports")({
   component: AirportsPage,
@@ -23,7 +32,7 @@ export const Route = createFileRoute("/airports")({
   }),
 });
 
-type SortKey = "level" | "totalEarnedPax" | "pax7d" | "pax30d" | "icao" | "tier";
+type SortKey = "level" | "totalEarnedPax" | "pax7d" | "pax30d" | "icao" | "tier" | "gainPerOp";
 
 function AirportsPage() {
   const fn = useServerFn(getSimflyPayload);
@@ -52,6 +61,9 @@ function AirportsPage() {
     return filtered.sort((a, b) => {
       if (sortKey === "icao") return a.icao.localeCompare(b.icao);
       if (sortKey === "tier") return b.category - a.category;
+      if (sortKey === "gainPerOp") {
+        return (gainOf(b) ?? -1) - (gainOf(a) ?? -1);
+      }
       return (b[sortKey] as number) - (a[sortKey] as number);
     });
   }, [data.airports, query, sortKey]);
@@ -98,6 +110,7 @@ function AirportsPage() {
                 <Th>Country</Th>
                 <Th sortable active={sortKey === "tier"} onClick={() => setSortKey("tier")}>Tier</Th>
                 <Th sortable active={sortKey === "level"} onClick={() => setSortKey("level")}>Level</Th>
+                <Th sortable active={sortKey === "gainPerOp"} onClick={() => setSortKey("gainPerOp")}>% / OP</Th>
                 <Th sortable active={sortKey === "totalEarnedPax"} onClick={() => setSortKey("totalEarnedPax")}>Lifetime PAX</Th>
                 <Th sortable active={sortKey === "pax7d"} onClick={() => setSortKey("pax7d")}>PAX 7d</Th>
                 <Th sortable active={sortKey === "pax30d"} onClick={() => setSortKey("pax30d")}>PAX 30d</Th>
@@ -130,6 +143,7 @@ function AirportsPage() {
                       {a.levelProgress.toFixed(2)}%
                     </span>
                   </td>
+                  <td className="mono px-4 py-3"><GainPerOpCell airport={a} /></td>
                   <td className="mono px-4 py-3 text-runway">{formatNumber(Math.round(a.totalEarnedPax))}</td>
                   <td className="mono px-4 py-3">{formatNumber(Math.round(a.pax7d))}</td>
                   <td className="mono px-4 py-3">{formatNumber(Math.round(a.pax30d))}</td>
@@ -140,7 +154,7 @@ function AirportsPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                 <td colSpan={10} className="px-4 py-10 text-center text-sm text-muted-foreground">
                     No airports match.
                   </td>
                 </tr>
@@ -150,6 +164,27 @@ function AirportsPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+function GainPerOpCell({ airport }: { airport: AirportExt }) {
+  const { percentPerOp, opsToNextLevel, atMaxLevel } = estimateLevelGainPerOperation({
+    level: airport.level,
+    levelProgress: airport.levelProgress,
+    totalRotations: airport.totalRotations,
+  });
+
+  if (percentPerOp === null) {
+    return <span className="text-muted-foreground">—</span>;
+  }
+
+  return (
+    <div className="leading-tight">
+      <div className="text-instrument">{percentPerOp.toFixed(2)}%</div>
+      <div className="text-[10px] text-muted-foreground">
+        {atMaxLevel ? "MAX" : `${formatNumber(opsToNextLevel ?? 0)} ops left`}
+      </div>
+    </div>
   );
 }
 
