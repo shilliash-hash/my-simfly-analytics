@@ -62,6 +62,49 @@ export function ratingForPaybackDays(days: number): {
 
 export const MAX_AIRPORT_LEVEL = 10;
 
+export type LevelGainPerOperation = {
+  /** Percent of the level bar added by one operation, or null when underivable. */
+  percentPerOp: number | null;
+  /** Operations still needed to reach the next level, or null. */
+  opsToNextLevel: number | null;
+  atMaxLevel: boolean;
+};
+
+/**
+ * Derive the fixed per-operation level-bar gain from lifetime history.
+ * Every operation contributes the same slice regardless of aircraft type.
+ */
+export function estimateLevelGainPerOperation(input: {
+  level: number;
+  levelProgress?: number | null;
+  totalRotations?: number | null;
+}): LevelGainPerOperation {
+  const level = Math.max(1, Math.round(input.level || 1));
+  const rawProgress = Number(input.levelProgress ?? 0);
+  const progress = Number.isFinite(rawProgress)
+    ? Math.max(0, Math.min(100, rawProgress))
+    : 0;
+  const rotations = Number(input.totalRotations ?? 0);
+  const atMaxLevel = level >= MAX_AIRPORT_LEVEL;
+
+  const levelEquivalents = level - 1 + progress / 100;
+  if (!Number.isFinite(rotations) || rotations <= 0 || levelEquivalents <= 0) {
+    return { percentPerOp: null, opsToNextLevel: null, atMaxLevel };
+  }
+
+  const opsPerLevel = rotations / levelEquivalents;
+  if (!(opsPerLevel > 0)) {
+    return { percentPerOp: null, opsToNextLevel: null, atMaxLevel };
+  }
+
+  const percentPerOp = 100 / opsPerLevel;
+  const opsToNextLevel = atMaxLevel
+    ? null
+    : Math.max(0, Math.ceil((100 - progress) / percentPerOp));
+
+  return { percentPerOp, opsToNextLevel, atMaxLevel };
+}
+
 export type UpgradeProgressEstimate = {
   /** 0–100, clamped. */
   percent: number;
