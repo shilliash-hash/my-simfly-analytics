@@ -1,8 +1,8 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useSuspenseQuery, queryOptions } from "@tanstack/react-query";
+import { useSuspenseQuery, useQuery, queryOptions } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { getSimflyPayload } from "@/lib/simfly.functions";
+import { getSimflyPayload, getAirportRotationBasis } from "@/lib/simfly.functions";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import type { AirportExt } from "@/lib/types";
 import { AppShell, PageHeader, TierPill, RotationCell, formatNumber } from "@/components/app-shell";
@@ -10,12 +10,21 @@ import { CapacityUtilizationTimeline } from "@/components/capacity-utilization-t
 import { estimateLevelGainPerOperation } from "@/lib/airport-upgrade-costs";
 import { Search, MapPin } from "lucide-react";
 
-function gainOf(a: AirportExt): number | null {
-  return estimateLevelGainPerOperation({
+type RotationBasis = Record<string, { totalRotations: number; levelProgress: number | null }>;
+
+function gainInputs(a: AirportExt, basis: RotationBasis | undefined) {
+  const b = basis?.[a.icao.toUpperCase()];
+  return {
     level: a.level,
-    levelProgress: a.levelProgress,
-    totalRotations: a.totalRotations,
-  }).percentPerOp;
+       levelProgress:
+      Number(a.levelProgress) > 0 ? a.levelProgress : b?.levelProgress ?? a.levelProgress,
+    totalRotations:
+      Number(a.totalRotations) > 0 ? a.totalRotations : b?.totalRotations ?? 0,
+  };
+}
+
+function gainOf(a: AirportExt, basis: RotationBasis | undefined): number | null {
+  return estimateLevelGainPerOperation(gainInputs(a, basis)).percentPerOp;
 }
 
 export const Route = createFileRoute("/airports")({
