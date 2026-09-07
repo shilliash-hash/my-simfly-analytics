@@ -57,6 +57,20 @@ function AirportsPage() {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("totalEarnedPax");
 
+  // Lifetime rotations are missing from the assets payload for most airports —
+  // fetch the per-airport detail so the "% / OP" column has a basis.
+  const rotationFn = useServerFn(getAirportRotationBasis);
+  const icaos = useMemo(
+    () => data.airports.map((a) => a.icao.toUpperCase()).sort(),
+    [data.airports],
+  );
+  const { data: basis } = useQuery({
+    queryKey: ["airport-rotation-basis", keyTag, icaos.join(",")],
+    queryFn: () => rotationFn({ data: { icaos } }),
+    enabled: icaos.length > 0,
+    staleTime: 5 * 60_000,
+  });
+
   const rows: AirportExt[] = useMemo(() => {
     const q = query.trim().toLowerCase();
     const filtered = data.airports.filter((a) => {
@@ -71,11 +85,12 @@ function AirportsPage() {
       if (sortKey === "icao") return a.icao.localeCompare(b.icao);
       if (sortKey === "tier") return b.category - a.category;
       if (sortKey === "gainPerOp") {
-        return (gainOf(b) ?? -1) - (gainOf(a) ?? -1);
+        return (gainOf(b, basis) ?? -1) - (gainOf(a, basis) ?? -1);
       }
       return (b[sortKey] as number) - (a[sortKey] as number);
     });
-  }, [data.airports, query, sortKey]);
+   }, [data.airports, query, sortKey, basis]);
+
 
   const totalPax = data.airports.reduce((s, a) => s + a.totalEarnedPax, 0);
   const pax7d = data.airports.reduce((s, a) => s + a.pax7d, 0);
@@ -152,7 +167,7 @@ function AirportsPage() {
                       {a.levelProgress.toFixed(2)}%
                     </span>
                   </td>
-                  <td className="mono px-4 py-3"><GainPerOpCell airport={a} /></td>
+                  <td className="mono px-4 py-3"><GainPerOpCell airport={a} basis={basis} /></td>
                   <td className="mono px-4 py-3 text-runway">{formatNumber(Math.round(a.totalEarnedPax))}</td>
                   <td className="mono px-4 py-3">{formatNumber(Math.round(a.pax7d))}</td>
                   <td className="mono px-4 py-3">{formatNumber(Math.round(a.pax30d))}</td>
@@ -176,12 +191,10 @@ function AirportsPage() {
   );
 }
 
-function GainPerOpCell({ airport }: { airport: AirportExt }) {
-  const { percentPerOp, opsToNextLevel, atMaxLevel } = estimateLevelGainPerOperation({
-    level: airport.level,
-    levelProgress: airport.levelProgress,
-    totalRotations: airport.totalRotations,
-  });
+function GainPerOpCell({ airport, basis }: { airport: AirportExt; basis: RotationBasis | undefined }) {
+  const { percentPerOp, opsToNextLevel, atMaxLevel } = estimateLevelGainPerOperation(
+    gainInputs(airport, basis),
+  );
 
   if (percentPerOp === null) {
     return <span className="text-muted-foreground">—</span>;
