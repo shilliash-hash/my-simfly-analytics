@@ -2016,8 +2016,8 @@ type RawAirportHistFlight = {
   totalDistance?: number;
   pilot?: { username?: string };
   airplane?: { name?: string; icao?: string; aircraftId?: string; category?: number; level?: number; owner?: { username?: string }; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number };
-  origin?: { icao?: string; category?: number; level?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
-  destination?: { icao?: string; category?: number; level?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
+  origin?: { icao?: string; category?: number; level?: number; level_progress?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
+  destination?: { icao?: string; category?: number; level?: number; level_progress?: number; pax?: number; earnedPax?: number; totalEarnedPax?: number; bonusPax?: number; sharedPax?: number | null; percToUser?: number };
 
 };
 
@@ -3853,24 +3853,105 @@ export async function getAllGlobalAirplanes(): Promise<{ aircraftId: string; nam
  * basis without this per-airport detail lookup (same source the upgrade
  * advisor already backfills from). Presentation-only, best effort.
  */
+
+export type AirportRotationBasisEntry = {
+  totalRotations: number;
+  levelProgress: number | null;
+  /**
+   * Measured level-% gain per operation at the CURRENT level, derived from
+   * consecutive `level_progress` snapshots in the airport's public flight
+   * history (not a lifetime average). Null when fewer than two usable
+   * snapshots exist.
+   */
+  gainPerOp: number | null;
+  /** Number of observed operation deltas the gain was measured from. */
+  gainSamples: number;
+};
+
+/**
+ * Measure the per-operation level gain from the airport's public flight log.
+ * Every flight record carries the airport's `level_progress` snapshot at the
+ * time of the operation, so the delta between consecutive observations is the
+ * exact gain of the operation(s) in between. Level-ups wrap at 100%.
+ */
+function measureGainPerOp(
+  flights: RawAirportHistFlight[],
+  icao: string,
+  currentLevel: number,
+): { gainPerOp: number | null; gainSamples: number } {
+  type Snap = { t: number; level: number; progress: number };
+  const snaps: Snap[] = [];
+  for (const f of flights) {
+    for (const side of ["origin", "destination"] as const) {
+      const s = f[side];
+      if (!s || (s.icao || "").toUpperCase() !== icao) continue;
+      const ts = Date.parse(
+        (side === "origin" ? f.takeoffTime : f.landingTime) ??
+          f.takeoffTime ?? f.landingTime ?? "",
+      );
+      const level = Number(s.level);
+      const progress = Number(s.level_progress);
+      if (!Number.isFinite(ts) || !Number.isFinite(level) || !Number.isFinite(progress)) continue;
+      snaps.push({ t: ts, level, progress });
+    }
+  }
+  snaps.sort((a, b) => a.t - b.t);
+  // Deduplicate identical snapshots (same flight seen as origin+destination
+  // carries the same pre-operation progress twice).
+  const dedup: Snap[] = [];
+  for (const s of snaps) {
+    const last = dedup[dedup.length - 1];
+    if (last && last.t === s.t && last.level === s.level && last.progress === s.progress) continue;
+    dedup.push(s);
+  }
+  const deltas: number[] = [];
+  for (let i = 1; i < dedup.length; i++) {
+    const prev = dedup[i - 1];
+    const cur = dedup[i];
+    // Only trust deltas measured entirely at the current level — gain per op
+    // can change between levels, and we want the current-level value.
+    if (cur.level !== currentLevel || prev.level !== currentLevel) continue;
+    const d = cur.progress - prev.progress;
+    // Guard against out-of-order snapshots and multi-op gaps: a single
+    // operation never adds more than a few percent.
+    if (d > 0.0001 && d <= 5) deltas.push(d);
+  }
+  if (deltas.length === 0) return { gainPerOp: null, gainSamples: 0 };
+  deltas.sort((a, b) => a - b);
+  const median = deltas[Math.floor(deltas.length / 2)];
+  return { gainPerOp: median, gainSamples: deltas.length };
+}
+
 export const getAirportRotationBasis = createServerFn({ method: "GET" })
   .inputValidator((d: { icaos: string[] }) => ({
     icaos: (d?.icaos ?? []).map((i) => String(i || "").trim().toUpperCase()).filter(Boolean).slice(0, 60),
   }))
-  .handler(async ({ data }): Promise<Record<string, { totalRotations: number; levelProgress: number | null }>> => {
-    const out: Record<string, { totalRotations: number; levelProgress: number | null }> = {};
+    .handler(async ({ data }): Promise<Record<string, AirportRotationBasisEntry>> => {
+    const out: Record<string, AirportRotationBasisEntry> = {};
     await Promise.all(
       data.icaos.map(async (icao) => {
         try {
-          const raw = await fetchJSON<RawAssetAirport>(
-            `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`,
-          );
+             fetchJSON<RawAssetAirport>(
+              `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`,
+            ),
+            // Public per-airport flight log (page 1 is enough for a handful of
+            // recent snapshots). Best effort — gain stays null on failure.
+            fetchJSON<RawAirportHistPage>(
+              `${SIMFLY_BASE}/user/assets/airport/${encodeURIComponent(icao)}/flights?page=1`,
+            ).catch(() => null),
+          ]);
           if (raw && raw.type === "Airport") {
             const rot = Number(raw.totalRotations);
             const prog = Number(raw.level_progress);
+            const level = Number(raw.level);
+            const { gainPerOp, gainSamples } = hist?.flights?.length
+              ? measureGainPerOp(hist.flights, icao, Number.isFinite(level) ? level : -1)
+              : { gainPerOp: null, gainSamples: 0 };
             out[icao] = {
               totalRotations: Number.isFinite(rot) ? rot : 0,
               levelProgress: Number.isFinite(prog) ? prog : null,
+              gainPerOp,
+              gainSamples,
             };
           }
         } catch { /* best effort */ }
