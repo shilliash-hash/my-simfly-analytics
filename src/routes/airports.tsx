@@ -10,7 +10,32 @@ import { CapacityUtilizationTimeline } from "@/components/capacity-utilization-t
 import { estimateLevelGainPerOperation } from "@/lib/airport-upgrade-costs";
 import { Search, MapPin } from "lucide-react";
 
-type RotationBasis = Record<string, { totalRotations: number; levelProgress: number | null }>;
+type RotationBasis = Record<
+  string,
+  { totalRotations: number; levelProgress: number | null; gainPerOp?: number | null; gainSamples?: number }
+>;
+
+/**
+ * Resolve the % gain per operation: prefer the measured current-level value
+ * from the airport's public flight log; fall back to the lifetime estimate.
+ */
+function resolveGain(a: AirportExt, basis: RotationBasis | undefined) {
+  const b = basis?.[a.icao.toUpperCase()];
+  const measured = b?.gainPerOp ?? null;
+  const inputs = gainInputs(a, basis);
+  const fallback = estimateLevelGainPerOperation(inputs);
+  if (measured && measured > 0) {
+    const progress = inputs.levelProgress;
+    const atMaxLevel = a.level >= 10;
+    const opsToNextLevel =
+      !atMaxLevel && Number.isFinite(progress)
+        ? Math.max(1, Math.ceil((100 - progress) / measured))
+        : null;
+    return { percentPerOp: measured, opsToNextLevel, atMaxLevel, measured: true };
+  }
+  return { ...fallback, measured: false };
+}
+
 
 function gainInputs(a: AirportExt, basis: RotationBasis | undefined) {
   const b = basis?.[a.icao.toUpperCase()];
@@ -24,7 +49,7 @@ function gainInputs(a: AirportExt, basis: RotationBasis | undefined) {
 }
 
 function gainOf(a: AirportExt, basis: RotationBasis | undefined): number | null {
-  return estimateLevelGainPerOperation(gainInputs(a, basis)).percentPerOp;
+ return resolveGain(a, basis).percentPerOp;
 }
 
 export const Route = createFileRoute("/airports")({
@@ -192,9 +217,7 @@ function AirportsPage() {
 }
 
 function GainPerOpCell({ airport, basis }: { airport: AirportExt; basis: RotationBasis | undefined }) {
-  const { percentPerOp, opsToNextLevel, atMaxLevel } = estimateLevelGainPerOperation(
-    gainInputs(airport, basis),
-  );
+ const { percentPerOp, opsToNextLevel, atMaxLevel, measured } = resolveGain(airport, basis);
 
   if (percentPerOp === null) {
     return <span className="text-muted-foreground">—</span>;
@@ -205,6 +228,7 @@ function GainPerOpCell({ airport, basis }: { airport: AirportExt; basis: Rotatio
       <div className="text-instrument">{percentPerOp.toFixed(2)}%</div>
       <div className="text-[10px] text-muted-foreground">
         {atMaxLevel ? "MAX" : `${formatNumber(opsToNextLevel ?? 0)} ops left`}
+        {!atMaxLevel && !measured ? " ·est" : ""}
       </div>
     </div>
   );
