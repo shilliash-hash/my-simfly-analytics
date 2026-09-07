@@ -3931,7 +3931,8 @@ export const getAirportRotationBasis = createServerFn({ method: "GET" })
     await Promise.all(
       data.icaos.map(async (icao) => {
         try {
-             fetchJSON<RawAssetAirport>(
+          const [raw, hist] = await Promise.all([
+          fetchJSON<RawAssetAirport>(
               `${SIMFLY_BASE}/user/assets/details/airport/${encodeURIComponent(icao)}`,
             ),
             // Public per-airport flight log (page 1 is enough for a handful of
