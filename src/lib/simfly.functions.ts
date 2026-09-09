@@ -3879,12 +3879,19 @@ function measureGainPerOp(
   icao: string,
   currentLevel: number,
 ): { gainPerOp: number | null; gainSamples: number } {
-  type Snap = { t: number; level: number; progress: number };
+   type Snap = { t: number; level: number; progress: number; ops: number };
   const snaps: Snap[] = [];
   for (const f of flights) {
-    for (const side of ["origin", "destination"] as const) {
-      const s = f[side];
-      if (!s || (s.icao || "").toUpperCase() !== icao) continue;
+       const sides = (["origin", "destination"] as const).filter(
+      (side) => (f[side]?.icao || "").toUpperCase() === icao,
+    );
+    if (sides.length === 0) continue;
+    // A flight that both departs from and arrives at the same airport is
+    // TWO operations (DEP + ARR) — its snapshots carry the same pre-op
+    // progress, so they dedupe into one snapshot tagged with ops: 2.
+    const ops = sides.length;
+    for (const side of sides) {
+      const s = f[side]!;
       const ts = Date.parse(
         (side === "origin" ? f.takeoffTime : f.landingTime) ??
           f.takeoffTime ?? f.landingTime ?? "",
@@ -3892,7 +3899,7 @@ function measureGainPerOp(
       const level = Number(s.level);
       const progress = Number(s.level_progress);
       if (!Number.isFinite(ts) || !Number.isFinite(level) || !Number.isFinite(progress)) continue;
-      snaps.push({ t: ts, level, progress });
+      snaps.push({ t: ts, level, progress, ops });
     }
   }
   snaps.sort((a, b) => a.t - b.t);
@@ -3911,10 +3918,11 @@ function measureGainPerOp(
     // Only trust deltas measured entirely at the current level — gain per op
     // can change between levels, and we want the current-level value.
     if (cur.level !== currentLevel || prev.level !== currentLevel) continue;
-    const d = cur.progress - prev.progress;
+    const raw = cur.progress - prev.progress;
     // Guard against out-of-order snapshots and multi-op gaps: a single
-    // operation never adds more than a few percent.
-    if (d > 0.0001 && d <= 5) deltas.push(d);
+    // operation never adds more than a few percent. The gap between two
+    // snapshots spans `prev.ops` operations, so divide to get the per-op gain.
+    if (raw > 0.0001 && raw <= 5 * prev.ops) deltas.push(raw / prev.ops);
   }
   if (deltas.length === 0) return { gainPerOp: null, gainSamples: 0 };
   deltas.sort((a, b) => a - b);
