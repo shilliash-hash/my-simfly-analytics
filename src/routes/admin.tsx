@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ChevronDown, ChevronRight, Gauge, Globe2, Radio, Telescope } from "lucide-react";
+import { ChevronDown, ChevronRight, Gauge, Globe2, Radio, Telescope, Users } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import {
   adminBackfillAction,
+  listActivePilots,
   listBackfills,
   listOwnershipPeriods,
   verifyAdminToken,
@@ -51,6 +52,7 @@ function AdminPage() {
       />
       {token ? (
         <div className="space-y-8">
+          <ActivePilotsPanel token={token} />
           <QuickLinks />
           <AdminTable token={token} />
           <HubSupportAdmin token={token} />
@@ -117,6 +119,101 @@ function QuickLinks() {
           </Link>
         ))}
       </div>
+    </section>
+  );
+}
+
+const PRESENCE_WINDOW_MIN = 30;
+
+function relTime(minutes: number): string {
+  if (minutes <= 0) return "just now";
+  if (minutes === 1) return "1 min ago";
+  return `${minutes} min ago`;
+}
+
+const ACTION_LABEL: Record<string, string> = {
+  load: "Status loaded",
+  refresh: "Manual refresh",
+  view_as: "Viewed as pilot",
+};
+
+function ActivePilotsPanel({ token }: { token: string }) {
+  const listActive = useServerFn(listActivePilots);
+  const q = useQuery({
+    queryKey: ["admin-active-pilots", PRESENCE_WINDOW_MIN],
+    queryFn: () =>
+      listActive({ data: { token, windowMinutes: PRESENCE_WINDOW_MIN } }),
+    refetchInterval: 60_000,
+  });
+
+  const pilots = q.data?.pilots ?? [];
+
+  return (
+    <section className="panel rounded-xl p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="relative grid h-9 w-9 place-items-center rounded-lg bg-background/60 text-runway">
+            <Users className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+              Active hub pilots
+            </div>
+            <div className="text-sm font-medium text-foreground">
+              {pilots.length} active in last {PRESENCE_WINDOW_MIN} min
+            </div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => void q.refetch()}
+          disabled={q.isFetching}
+          className="mono rounded-lg bg-secondary/60 px-3 py-1.5 text-[11px] uppercase tracking-widest text-foreground ring-1 ring-border transition-colors hover:bg-secondary disabled:opacity-50"
+        >
+          {q.isFetching ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+
+      {q.isError ? (
+        <p className="mt-3 text-xs text-destructive">
+          {q.error instanceof Error ? q.error.message : "Could not load presence."}
+        </p>
+      ) : pilots.length === 0 ? (
+        <p className="mt-3 text-xs text-muted-foreground">
+          No pilots have opened or refreshed the Hub in the last {PRESENCE_WINDOW_MIN} minutes.
+        </p>
+      ) : (
+        <ul className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {pilots.map((p) => {
+            const fresh = p.minutesAgo <= 5;
+            return (
+              <li
+                key={p.username}
+                className="flex items-center gap-3 rounded-lg bg-secondary/40 px-3 py-2 ring-1 ring-border"
+              >
+                <span
+                  className={cn(
+                    "h-2.5 w-2.5 shrink-0 rounded-full",
+                    fresh ? "bg-runway animate-pulse" : "bg-instrument",
+                  )}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium text-foreground">
+                    {p.username}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {ACTION_LABEL[p.lastAction] ?? p.lastAction} · {relTime(p.minutesAgo)}
+                  </span>
+                </span>
+                <span className="mono shrink-0 text-[11px] text-muted-foreground">
+                  ×{p.hitCount}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </section>
   );
 }
