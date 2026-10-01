@@ -1060,6 +1060,12 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
   .inputValidator((d?: { username?: string; nonce?: string }) => d ?? {})
   .handler(async ({ data }): Promise<SimflyPayload> => {
     const { username, nonce } = await resolveIdentity(data);
+        // Presence telemetry: records that this pilot's dashboard was loaded.
+    // Best effort, never blocks or fails the payload.
+    void (async () => {
+      const { touchPilotPresence } = await import("./pilot-presence.server");
+      await touchPilotPresence(username, "load");
+    })().catch(() => {});
     const qs = `username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`;
 
     const [profile, stats, assets, availablePaxRaw, p1] = await Promise.all([
