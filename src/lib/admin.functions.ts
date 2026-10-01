@@ -44,6 +44,15 @@ export const listBackfills = createServerFn({ method: "POST" })
     return (rows ?? []) as unknown as BackfillStatusRow[];
   });
 
+export const listActivePilots = createServerFn({ method: "POST" })
+  .inputValidator((d: { token: string; windowMinutes?: number }) => d)
+  .handler(async ({ data }) => {
+    checkToken(data.token);
+    const { listRecentPresence } = await import("./pilot-presence.server");
+    const win = Math.min(Math.max(Number(data.windowMinutes ?? 30) || 30, 1), 1440);
+    return { windowMinutes: win, pilots: await listRecentPresence(win) };
+  });
+
 export type AdminAction = "retry" | "retry_current" | "reset" | "cancel" | "delete";
 
 export const adminBackfillAction = createServerFn({ method: "POST" })
