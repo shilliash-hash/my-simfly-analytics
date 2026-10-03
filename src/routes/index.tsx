@@ -167,9 +167,7 @@ const { data: income30d } = useQuery({
             <p className="text-[10px] font-medium tracking-wider text-muted-foreground/40 uppercase">
               Your SimFly.io operations – unofficial but the best dashboard you can find.
             </p>
-             <ActivePilotsBadge current={viewedUsername} />
-           </p>
-          </div>
+           </div>
         }
 
 
