@@ -157,8 +157,7 @@ const { data: income30d } = useQuery({
             <h1 className="font-display text-base font-medium tracking-wide text-muted-foreground/60 uppercase">
               Active Pilot: <span className="text-muted-foreground/80 font-semibold">@{viewedUser || "shill"}</span>
             </h1>
-            <ActivePilotsBadge current={viewedUsername} />
-          </div>
+           </div>
         }
         description={
           <div className="space-y-1 mt-1.5">
@@ -166,8 +165,10 @@ const { data: income30d } = useQuery({
               Operational Fleet Dashboard & Live Telemetry Control
             </p>
             <p className="text-[10px] font-medium tracking-wider text-muted-foreground/40 uppercase">
-              Real-time intelligence on your SimFly.io operations – unofficial but the best dashboard you can find.
+              Your SimFly.io operations – unofficial but the best dashboard you can find.
             </p>
+             <ActivePilotsBadge current={viewedUsername} />
+           </p>
           </div>
         }
 
