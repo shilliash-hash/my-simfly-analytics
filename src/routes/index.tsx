@@ -177,13 +177,13 @@ const { data: income30d } = useQuery({
      {/* LEWA STRONA BELKI: Nowy, minimalistyczny przycisk Changelogu */}
      <div className="flex items-center min-w-[100px] h-9">
        {isMounted ? <ChangelogBadge /> : <div className="w-[100px] h-9 bg-secondary/10 rounded-md border border-border/20 animate-pulse" />}
+       <ActivePilotsBadge current={viewedUsername} />
      </div>
 
      {/* PRAWA STRONA BELKI: Twoje obecne, sprawne popupy operacyjne i avatar */}
      <div className="flex items-center gap-3 ml-auto">
        <PilotSwitcher current={viewedUser} />
-       <ActivePilotsBadge current={viewedUsername} />
-       <button
+              <button
               type="button"
               onClick={() => window.location.reload()}
               className="grid h-10 w-10 place-items-center rounded-full border border-border/60 bg-secondary/30 text-muted-foreground transition-colors hover:border-runway/40 hover:bg-secondary/60 hover:text-foreground"
