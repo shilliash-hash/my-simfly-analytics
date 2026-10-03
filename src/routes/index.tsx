@@ -157,6 +157,7 @@ const { data: income30d } = useQuery({
             <h1 className="font-display text-base font-medium tracking-wide text-muted-foreground/60 uppercase">
               Active Pilot: <span className="text-muted-foreground/80 font-semibold">@{viewedUser || "shill"}</span>
             </h1>
+            <ActivePilotsBadge current={viewedUsername} />
           </div>
         }
         description={
@@ -177,7 +178,6 @@ const { data: income30d } = useQuery({
      {/* LEWA STRONA BELKI: Nowy, minimalistyczny przycisk Changelogu */}
      <div className="flex items-center min-w-[100px] h-9">
        {isMounted ? <ChangelogBadge /> : <div className="w-[100px] h-9 bg-secondary/10 rounded-md border border-border/20 animate-pulse" />}
-       <ActivePilotsBadge current={viewedUsername} />
      </div>
 
      {/* PRAWA STRONA BELKI: Twoje obecne, sprawne popupy operacyjne i avatar */}
