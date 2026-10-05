@@ -11,6 +11,10 @@ import {
 
 import appCss from "../styles.css?url";
 import { BackfillIndicator } from "@/components/backfill-progress";
+import { SimflyLoginGate } from "@/components/simfly-login-gate";
+import { SyncIndicator } from "@/components/sync-indicator";
+import { ModuleUsageTracker } from "@/components/module-usage-tracker";
+
 
 function NotFoundComponent() {
   return (
@@ -132,6 +136,7 @@ function RootComponent() {
         <Outlet />
       </Suspense>
       <BackfillIndicator />
+      <ModuleUsageTracker />
     </QueryClientProvider>
   );
 }
