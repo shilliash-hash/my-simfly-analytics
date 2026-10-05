@@ -17,6 +17,9 @@ type Props = {
   arcs: boolean;
   focusIcao: string | null;
   onSelect: (icao: string) => void;
+  pilots?: RadarPilot[];
+  showPilots?: boolean;
+  focusPilot?: { username: string; nonce: number } | null;
 };
 
 const BANDS = [
@@ -39,7 +42,20 @@ function bandFor(value: number, sorted: number[]): number {
   return 0;
 }
 
-export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao, onSelect }: Props) {
+export function RadarMap({
+  airports,
+  routes,
+  metric,
+  discovery,
+  arcs,
+  focusIcao,
+  onSelect,
+  pilots = [],
+  showPilots = true,
+  focusPilot = null,
+}: Props) {
+  const pilotLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
+  const pilotPosRef = useRef<Map<string, [number, number]>>(new Map());
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<import("leaflet").Map | null>(null);
   const layerRef = useRef<import("leaflet").LayerGroup | null>(null);
@@ -50,8 +66,12 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
   useEffect(() => setMounted(true), []);
 
-  const icaos = useMemo(() => airports.map((a) => a.icao), [airports]);
-  const geoQuery = useQuery({
+    const icaos = useMemo(() => {
+    const set = new Set(airports.map((a) => a.icao));
+    for (const p of pilots) for (const i of [p.origin, p.destination]) if (i) set.add(i);
+    return Array.from(set);
+  }, [airports, pilots]);
+    const geoQuery = useQuery({
     queryKey: ["airport-geo", icaos.slice().sort().join(",")],
     queryFn: () => getAirportGeo({ data: { icaos } }),
     enabled: icaos.length > 0,
@@ -221,6 +241,55 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
 
       layer.addTo(map);
       layerRef.current = layer;
+
+            // Hub pilots active today — routes for live flights, pulsing pins at anchors.
+      pilotLayerRef.current?.remove();
+      pilotPosRef.current.clear();
+      const pl = L.layerGroup();
+      if (showPilots) {
+        for (const p of pilots) {
+          const o = p.origin ? byIcao.get(p.origin) : undefined;
+          const d = p.destination ? byIcao.get(p.destination) : undefined;
+          const flying = p.status === "flying";
+          let pos: [number, number] | null = null;
+          if (flying && o && d) {
+            L.polyline([[o.lat, o.lon], [d.lat, d.lon]], {
+              color: "#F59E0B", weight: 2, opacity: 0.85, dashArray: "6 6", interactive: false,
+            }).addTo(pl);
+            pos = [(o.lat + d.lat) / 2, (o.lon + d.lon) / 2];
+          } else {
+            const a = p.anchor ? byIcao.get(p.anchor) : undefined;
+            if (a) pos = [a.lat, a.lon];
+          }
+          if (!pos) continue;
+          const color = flying ? "#F59E0B" : "#22D3EE";
+          const html = `<svg width="34" height="34" viewBox="0 0 34 34">
+            <circle class="radar-pulse-ring" cx="17" cy="17" r="12" fill="none" stroke="${color}" stroke-width="2" />
+            <circle cx="17" cy="17" r="6" fill="${color}" stroke="#0A0F1C" stroke-width="2" />
+          </svg>`;
+          const route = flying
+            ? `${esc(p.origin ?? "?")} → ${esc(p.destination ?? "?")}`
+            : `Parked at ${esc(p.anchor ?? "?")}`;
+          L.marker(pos, {
+            icon: L.divIcon({ html, className: "radar-marker", iconSize: [34, 34], iconAnchor: [17, 17] }),
+            keyboard: false,
+            zIndexOffset: 1000,
+          })
+            .bindTooltip(
+              `<div class="radar-tip-body">
+                <div class="radar-tip-icao">@${esc(p.username)}</div>
+                <div class="radar-tip-meta">${flying ? "✈ In flight · " : ""}${route}</div>
+                ${p.aircraft ? `<div class="radar-tip-meta">${esc(p.aircraft)}</div>` : ""}
+                <div class="radar-tip-meta">Active on Hub ${p.minutesAgo}m ago</div>
+              </div>`,
+              { direction: "top", offset: [0, -14], className: "radar-tip", opacity: 1 },
+            )
+            .addTo(pl);
+          pilotPosRef.current.set(p.username, pos);
+        }
+        pl.addTo(map);
+      }
+      pilotLayerRef.current = pl;
       
       // Tier/level signature legibility is a pure CSS toggle on the map container,
       // so marker geometry never changes with zoom.
@@ -252,7 +321,14 @@ export function RadarMap({ airports, routes, metric, discovery, arcs, focusIcao,
     return () => {
       cancelled = true;
     };
-  }, [mounted, airports, routes, metric, discovery, arcs, geoQuery.data, onSelect]);
+   }, [mounted, airports, routes, metric, discovery, arcs, geoQuery.data, onSelect, pilots, showPilots]);
+
+  useEffect(() => {
+    if (!focusPilot) return;
+    const pos = pilotPosRef.current.get(focusPilot.username);
+    const map = mapRef.current;
+    if (pos && map) map.flyTo(pos, Math.max(map.getZoom(), 5), { duration: 0.8 });
+  }, [focusPilot]);
 
   // Fly to a selected airport from the rail.
   useEffect(() => {
