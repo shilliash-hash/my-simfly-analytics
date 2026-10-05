@@ -30,6 +30,7 @@ import {
 import { setAdminToken, useAdminToken } from "@/lib/admin-token";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { cn } from "@/lib/utils";
+import { ModuleUsageHeatmap } from "@/components/module-usage-heatmap";
 
 export const Route = createFileRoute("/admin")({
   component: AdminPage,
@@ -53,6 +54,7 @@ function AdminPage() {
       {token ? (
         <div className="space-y-8">
           <ActivePilotsPanel token={token} />
+          <ModuleUsageHeatmap token={token} />
           <QuickLinks />
           <AdminTable token={token} />
           <HubSupportAdmin token={token} />
