@@ -123,7 +123,7 @@ function QuickLinks() {
   );
 }
 
-const PRESENCE_WINDOW_MIN = 30;
+const PRESENCE_WINDOW_MIN = 720;
 
 function relTime(minutes: number): string {
   if (minutes <= 0) return "just now";
