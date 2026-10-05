@@ -263,23 +263,30 @@ export function RadarMap({
           }
           if (!pos) continue;
           const color = flying ? "#F59E0B" : "#22D3EE";
-          const html = `<svg width="34" height="34" viewBox="0 0 34 34">
+          const html = `<svg class="radar-marker-svg" width="34" height="34" viewBox="0 0 34 34">
             <circle class="radar-pulse-ring" cx="17" cy="17" r="12" fill="none" stroke="${color}" stroke-width="2" />
-            <circle cx="17" cy="17" r="6" fill="${color}" stroke="#0A0F1C" stroke-width="2" />
+            <circle class="radar-hit" cx="17" cy="17" r="11" fill="${color}" fill-opacity="0.01" />
+            <circle cx="17" cy="17" r="6" fill="${color}" stroke="#0A0F1C" stroke-width="2" style="pointer-events:none" />
           </svg>`;
+           const nm = (i?: string | null) => {
+            if (!i) return "?";
+            const n = byIcao.get(i)?.name;
+            return `${esc(i)}${n ? ` <span class="radar-tip-meta" style="display:inline">(${esc(n)})</span>` : ""}`;
+          };
           const route = flying
-            ? `${esc(p.origin ?? "?")} → ${esc(p.destination ?? "?")}`
-            : `Parked at ${esc(p.anchor ?? "?")}`;
-          L.marker(pos, {
+                       ? `${nm(p.origin)} → ${nm(p.destination)}`
+            : `Parked at ${nm(p.anchor)}`;
+          const badge = `<span style="display:inline-block;margin-left:6px;padding:1px 6px;border-radius:999px;font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;border:1px solid ${color};color:${color}">${flying ? "In flight" : "Parked"}</span>`;
+         L.marker(pos, {
             icon: L.divIcon({ html, className: "radar-marker", iconSize: [34, 34], iconAnchor: [17, 17] }),
             keyboard: false,
             zIndexOffset: 1000,
           })
             .bindTooltip(
-              `<div class="radar-tip-body">
-                <div class="radar-tip-icao">@${esc(p.username)}</div>
-                <div class="radar-tip-meta">${flying ? "✈ In flight · " : ""}${route}</div>
-                ${p.aircraft ? `<div class="radar-tip-meta">${esc(p.aircraft)}</div>` : ""}
+              `<div class="radar-tip-body" style="min-width:200px;border-left:2px solid ${color};padding-left:8px">
+                <div class="radar-tip-icao">@${esc(p.username)}${badge}</div>
+                <div style="margin-top:4px;font-family:'JetBrains Mono',monospace;font-size:12px">${route}</div>
+                ${p.aircraft ? `<div class="radar-tip-meta">✈ ${esc(p.aircraft)}</div>` : ""}
                 <div class="radar-tip-meta">Active on Hub ${p.minutesAgo}m ago</div>
               </div>`,
               { direction: "top", offset: [0, -14], className: "radar-tip", opacity: 1 },
