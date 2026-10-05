@@ -568,6 +568,7 @@ function HubSupportAdmin({ token }: { token: string }) {
   const [granting, setGranting] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [showSupporters, setShowSupporters] = useState(false);
 
   async function toggle(field: "enabled" | "admin_bypass", next: boolean) {
     setBusy(true);
@@ -682,12 +683,25 @@ function HubSupportAdmin({ token }: { token: string }) {
       </div>
 
       <div className="panel overflow-x-auto rounded-xl">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <div className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+               <button
+          type="button"
+          onClick={() => setShowSupporters((v) => !v)}
+          aria-expanded={showSupporters}
+          className="flex w-full items-center gap-2 border-b border-border px-4 py-2 text-left"
+        >
+          {showSupporters ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-runway" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
             Supporters this week
-          </div>
-          <div className="mono text-xs text-runway">{data?.supporters.length ?? 0}</div>
-        </div>
+                   </span>
+          <span className="mono ml-auto text-xs text-runway">
+            {data?.supporters.length ?? 0}
+          </span>
+        </button>
+        {!showSupporters ? null : (
         <table className="min-w-full text-sm">
           <thead>
             <tr className="text-left text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -738,6 +752,7 @@ function HubSupportAdmin({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+        )}
       </div>
     </div>
   );
