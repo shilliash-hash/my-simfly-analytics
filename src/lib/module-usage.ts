@@ -31,3 +31,4 @@ export function moduleFromPath(pathname: string): string | null {
   const seg = pathname.split("/").filter(Boolean)[0] ?? "overview";
   return seg in MODULE_LABELS ? seg : null;
 }
+
