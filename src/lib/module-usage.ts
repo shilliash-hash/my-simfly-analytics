@@ -1,6 +1,6 @@
 // Shared (browser-safe) module catalogue for usage telemetry.
 export const MODULE_LABELS: Record<string, string> = {
-  "": "Overview",
+  overview: "Overview",
   stats: "Stats",
   activity: "Activity",
   income: "Income",
@@ -28,6 +28,6 @@ export const MODULE_LABELS: Record<string, string> = {
 
 /** Map a URL pathname to a tracked module key, or null when untracked. */
 export function moduleFromPath(pathname: string): string | null {
-  const seg = pathname.split("/").filter(Boolean)[0] ?? "";
+  const seg = pathname.split("/").filter(Boolean)[0] ?? "overview";
   return seg in MODULE_LABELS ? seg : null;
 }
