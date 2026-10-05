@@ -11,6 +11,8 @@ import type { RadarAirport, RadarMetric } from "@/lib/community-radar.types";
 import { RadarMap, RADAR_BANDS } from "@/components/radar-map";
 import { SimbriefLink } from "@/components/simbrief-link";
 import { cn } from "@/lib/utils";
+import { getRadarActivePilots, type RadarPilot } from "@/lib/radar-pilots.functions";
+import { Plane } from "lucide-react";
 import { formatAirportOwner } from "@/lib/airport-owner";
 import {
   Radar as RadarIcon,
@@ -92,6 +94,15 @@ function CommunityRadar() {
   const [search, setSearch] = useState("");
   const [focusIcao, setFocusIcao] = useState<string | null>(null);
   const [detailIcao, setDetailIcao] = useState<string | null>(null);
+  const [showPilots, setShowPilots] = useState(true);
+  const [focusPilot, setFocusPilot] = useState<{ username: string; nonce: number } | null>(null);
+  const pilotsFn = useServerFn(getRadarActivePilots);
+  const { data: pilotData } = useQuery({
+    queryKey: ["radar-active-pilots"],
+    queryFn: () => pilotsFn(),
+    refetchInterval: 60_000,
+  });
+  const pilots = pilotData?.pilots ?? [];
 
   const { data } = useSuspenseQuery(
     queryOptions({
@@ -201,6 +212,9 @@ function CommunityRadar() {
           <Toggle active={arcs} onClick={() => setArcs((v) => !v)} icon={RouteIcon}>
             Arcs
           </Toggle>
+          <Toggle active={showPilots} onClick={() => setShowPilots((v) => !v)} icon={Plane}>
+            Hub pilots{pilots.length ? ` · ${pilots.length}` : ""}
+          </Toggle>
 
           <form onSubmit={submitSearch} className="relative">
             <Search className="pointer-events-none absolute left-2 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground" />
@@ -229,6 +243,9 @@ function CommunityRadar() {
             arcs={arcs}
             focusIcao={focusIcao}
             onSelect={onSelect}
+            pilots={pilots}
+            showPilots={showPilots}
+            focusPilot={focusPilot}
           />
           <div className="pointer-events-none absolute bottom-3 left-3 z-[500] flex flex-wrap items-center gap-2 rounded-lg bg-background/80 px-2.5 py-1.5 text-[10px] uppercase tracking-[0.14em] backdrop-blur">
             {RADAR_BANDS.map((b) => (
@@ -259,6 +276,13 @@ function CommunityRadar() {
 
         {railOpen ? (
           <aside className="panel hidden w-72 shrink-0 overflow-y-auto rounded-xl p-3 h-[72vh] lg:block">
+          <PilotsSection
+              pilots={pilots}
+              onPick={(username) => {
+                setShowPilots(true);
+                setFocusPilot({ username, nonce: Date.now() });
+              }}
+            />
             <RailSection
               title={metric === "operations" ? "Hotspots · operations" : "Hotspots · unique pilots"}
               rows={ranked.slice(0, 10)}
@@ -435,5 +459,48 @@ function DetailPanel({ airport, onClose }: { airport: RadarAirport; onClose: () 
 
       </div>
     </div>
+  );
+}
+
+function PilotsSection({ pilots, onPick }: { pilots: RadarPilot[]; onPick: (u: string) => void }) {
+  return (
+    <section className="mb-4">
+      <h2 className="mb-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+        Hub pilots today
+      </h2>
+      {pilots.length === 0 ? (
+        <p className="text-xs text-muted-foreground/70">No Hub pilots active today yet.</p>
+      ) : (
+        <ul className="space-y-0.5">
+          {pilots.map((p) => (
+            <li key={p.username}>
+              <button
+                onClick={() => onPick(p.username)}
+                className="flex w-full flex-col rounded-md px-2 py-1 text-left text-xs transition-colors hover:bg-muted/40"
+              >
+                <span className="flex items-center gap-1.5">
+                  <span
+                    className={cn(
+                      "inline-block h-1.5 w-1.5 rounded-full",
+                      p.status === "flying" ? "animate-pulse bg-instrument" : "bg-runway",
+                    )}
+                  />
+                  <span className="truncate font-medium">@{p.username}</span>
+                  <span className="ml-auto text-[10px] text-muted-foreground">{p.minutesAgo}m ago</span>
+                </span>
+                <span className="pl-3 font-mono text-[10px] tracking-[0.06em] text-muted-foreground">
+                  {p.status === "flying"
+                    ? `✈ ${p.origin ?? "?"} → ${p.destination ?? "?"}`
+                    : p.status === "parked"
+                      ? `Parked at ${p.anchor}`
+                      : "Location unknown"}
+                  {p.aircraft ? ` · ${p.aircraft}` : ""}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
