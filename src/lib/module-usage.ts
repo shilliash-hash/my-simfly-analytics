@@ -14,7 +14,6 @@ export const MODULE_LABELS: Record<string, string> = {
   "airport-spy": "Airport Spy",
   airports: "Airports",
   alliance: "Alliance",
-  community: "Community",
   compare: "Compare",
   "historical-hub-analysis": "Hub History",
   mission: "Mission",
@@ -23,8 +22,7 @@ export const MODULE_LABELS: Record<string, string> = {
   portfolio: "Portfolio",
   "system-airports": "System Airports",
   "upgrade-advisor": "Upgrade Advisor",
-  "airport-spy": "Airport Spy",
-};
+  };
 
 /** Map a URL pathname to a tracked module key, or null when untracked. */
 export function moduleFromPath(pathname: string): string | null {
