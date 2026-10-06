@@ -481,7 +481,7 @@ airports: AirportExt[];
                   <li key={`mi-${f.id}`} className="flex items-center gap-2 text-xs">
                     <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>
+                                           <div className="truncate font-medium" style={isRentedFlight(f, sessionUser) ? undefined : { color: "var(--instrument)" }}>
                         {isRentedFlight(f, sessionUser) ? `@${f.pilotUsername} · Inbound` : "You · Inbound"}
                         {isRentedFlight(f, sessionUser) && (
                           <span
@@ -508,7 +508,7 @@ airports: AirportExt[];
                   <li key={`mo-${f.id}`} className="flex items-center gap-2 text-xs">
                     <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>
+                                            <div className="truncate font-medium" style={isRentedFlight(f, sessionUser) ? undefined : { color: "var(--instrument)" }}>
                         {isRentedFlight(f, sessionUser) ? `@${f.pilotUsername} · Outbound` : "You · Outbound"}
                         {isRentedFlight(f, sessionUser) && (
                           <span
