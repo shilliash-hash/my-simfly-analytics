@@ -303,6 +303,7 @@ function AdminTable({ token }: { token: string }) {
   const qc = useQueryClient();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+   const [showJobs, setShowJobs] = useState(false);
 
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ["admin", "backfills"],
@@ -326,6 +327,11 @@ function AdminTable({ token }: { token: string }) {
     [rows, selected],
   );
 
+    const activeCount = useMemo(
+    () => rows.filter((r) => r.status === "running" || r.status === "stalled").length,
+    [rows],
+  );
+  
   function toggle(name: string) {
     setSelected((s) => {
       const next = new Set(s);
@@ -407,6 +413,28 @@ function AdminTable({ token }: { token: string }) {
       </div>
 
       <div className="panel overflow-x-auto rounded-xl">
+                <button
+          type="button"
+          onClick={() => setShowJobs((v) => !v)}
+          aria-expanded={showJobs}
+          className="flex w-full items-center gap-2 border-b border-border px-4 py-2 text-left"
+        >
+          {showJobs ? (
+            <ChevronDown className="h-4 w-4 shrink-0 text-runway" />
+          ) : (
+            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+          <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
+            Backfill jobs
+          </span>
+          <span className="mono ml-auto flex items-center gap-3 text-[11px]">
+            {activeCount > 0 ? <span className="text-runway">{activeCount} active</span> : null}
+            <span className="text-muted-foreground">
+              {rows.length} job{rows.length === 1 ? "" : "s"}
+            </span>
+          </span>
+        </button>
+        {!showJobs ? null : (
         <table className="min-w-full text-sm">
           <thead>
             <tr className="border-b border-border text-left text-[10px] uppercase tracking-widest text-muted-foreground">
@@ -489,6 +517,7 @@ function AdminTable({ token }: { token: string }) {
             ))}
           </tbody>
         </table>
+      )}
       </div>
 
       <p className="text-[11px] text-muted-foreground">
