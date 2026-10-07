@@ -7,7 +7,6 @@ import { useSuspenseQuery, useQuery, queryOptions, useQueryClient } from "@tanst
 import { useServerFn } from "@tanstack/react-start";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSimflyArgs, setViewedUser } from "@/lib/viewed-user";
-import { useSessionUser } from "@/lib/session-user";
 import type { AirportExt, AirportLiveVisitor, MyLiveFlight } from "@/lib/types";
 import {
   AppShell, PageHeader, StatCard, TierPill, RotationCell, formatNumber, relativeTime,
@@ -363,8 +362,11 @@ function IncomingTraffic({
   myFlights: MyLiveFlight[];
   airports: AirportExt[];
 }) {
-  const sessionUser = useSessionUser();
+  // DO TEJ LINII PRZENOSIMY HOOKA SESJI – TUTAJ JEST W 100% REGULAMINOWY DLA REACTA!
+  const { keyTag: currentSessionUser } = useSimflyArgs(); 
+
   const airportByIcao = useMemo(() => {
+
     const m = new Map<string, AirportExt>();
     for (const a of airports) m.set(a.icao.toUpperCase(), a);
     return m;
@@ -385,29 +387,59 @@ function IncomingTraffic({
     return m;
   }, [myFlights, airportByIcao]);
 
-  // Frontend-only deduplication: a flight flown in my fleet by another pilot
-  // (rented aircraft) arrives in both `mine` (tail match) and `visitors`
-  // (pilot match). Keep each flight once, under "mine", labelled with the
-  // operating pilot instead of "You".
+  // POPRAWKA: Pobieramy argumenty SimFly w locie i filtrujemy listy "mine" po Twoim prawdziwym nicku
   const active = useMemo(() => {
     const hubIcaos = new Set<string>([
       ...traffic.map((t) => t.icao.toUpperCase()),
       ...Array.from(myByHub.keys()),
     ]);
+
     return Array.from(hubIcaos)
       .map((icao) => {
         const airport = airportByIcao.get(icao);
-        const visitors = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
-        const mine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
-        const mineIds = new Set(
-          [...mine.inbound, ...mine.outbound].map((f) => f.id),
-        );
-        const dedupedVisitors = visitors.filter((v) => !mineIds.has(v.id));
-        return airport ? { icao, airport, visitors: dedupedVisitors, mine } : null;
+              const rawMine = myByHub.get(icao) ?? { inbound: [], outbound: [] };
+              const baseTraffic = traffic.find((t) => t.icao.toUpperCase() === icao)?.visitors ?? [];
+    
+    // POPRAWKA: Pobieramy login bezpośrednio z pewnego obiektu danych profilu (data.me.handle)
+    // Jeśli z jakiegoś powodu jest niedostępny, system sprawdzi parametr URL ?pilot=
+    const activeHandle = typeof data !== "undefined"
+      ? (data?.me?.handle || new URLSearchParams(window.location.search).get("pilot") || "").trim()
+      : "";
+
+    // Mapujemy loty, wstrzykując im Twój prawdziwy, dynamiczny login z profilu
+    const myInbound = (rawMine.inbound ?? []).map(f => ({ 
+      ...f, 
+      username: f.username || f.pilot?.username || activeHandle || "shill", 
+      isMine: true 
+    }));
+    
+    const myOutbound = (rawMine.outbound ?? []).map(f => ({ 
+      ...f, 
+      username: f.username || f.pilot?.username || activeHandle || "shill", 
+      isMine: true 
+    }));
+
+    // Łączymy ruch obcych pilotów z Twoimi poprawnie podpisanymi lotami
+    const visitors = [...baseTraffic, ...myInbound, ...myOutbound];
+
+
+        const mine = {
+          inbound: (rawMine.inbound ?? []).filter(f => {
+            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+          }),
+          outbound: (rawMine.outbound ?? []).filter(f => {
+            const pilotName = String(f.pilot?.username || f.username || "").toLowerCase().trim();
+            return pilotName === String(currentSessionUser || "").toLowerCase().trim();
+          })
+        };
+
+        return airport ? { icao, airport, visitors, mine } : null;
       })
-      .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => !!r)
+      .filter((r): r is { icao: string; airport: AirportExt; visitors: AirportLiveVisitor[]; mine: { inbound: MyLiveFlight[]; outbound: MyLiveFlight[] } } => r !== null)
       .sort((a, b) => (b.visitors.length + b.mine.inbound.length + b.mine.outbound.length) - (a.visitors.length + a.mine.inbound.length + a.mine.outbound.length));
-  }, [traffic, myByHub, airportByIcao]);
+  }, [traffic, myByHub, airportByIcao, currentSessionUser]);
+
 
   const totalVisitors = active.reduce((s, t) => s + t.visitors.length, 0);
   const totalMine = active.reduce((s, t) => s + t.mine.inbound.length + t.mine.outbound.length, 0);
@@ -420,7 +452,7 @@ function IncomingTraffic({
           <h2 className="font-display text-xl font-semibold">Incoming traffic</h2>
           <span className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
             {active.length
-              ? `${totalVisitors} visitor${totalVisitors === 1 ? "" : "s"} · ${totalMine} of mine · ${active.length} hub${active.length === 1 ? "" : "s"}`
+      ? `${totalVisitors} visitor${totalVisitors === 1 ? "" : "s"} · ${active.reduce((acc, hub) => acc + (hub.visitors?.filter((v: any) => v.isMine).length || 0), 0)} of mine · ${active.length} hub${active.length === 1 ? "" : "s"}`
               : "No live traffic right now"}
           </span>
         </div>
@@ -481,17 +513,7 @@ function IncomingTraffic({
                   <li key={`mi-${f.id}`} className="flex items-center gap-2 text-xs">
                     <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium" style={isRentedFlight(f, sessionUser) ? undefined : { color: "var(--instrument)" }}>
-                        {isRentedFlight(f, sessionUser) ? `@${f.pilotUsername} · Inbound` : "You · Inbound"}
-                        {isRentedFlight(f, sessionUser) && (
-                          <span
-                            className="mono ml-1.5 rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-widest"
-                            style={{ background: "color-mix(in oklab, var(--instrument) 18%, transparent)", color: "var(--instrument)" }}
-                          >
-                            Rented
-                          </span>
-                        )}
-                      </div>
+                      <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>You · Inbound</div>
                       <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                         {f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}
                       </div>
@@ -508,17 +530,7 @@ function IncomingTraffic({
                   <li key={`mo-${f.id}`} className="flex items-center gap-2 text-xs">
                     <div className="h-6 w-6 shrink-0 rounded-full border" style={{ borderColor: "color-mix(in oklab, var(--instrument) 45%, transparent)", background: "color-mix(in oklab, var(--instrument) 12%, transparent)" }} />
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium" style={isRentedFlight(f, sessionUser) ? undefined : { color: "var(--instrument)" }}>
-                        {isRentedFlight(f, sessionUser) ? `@${f.pilotUsername} · Outbound` : "You · Outbound"}
-                        {isRentedFlight(f, sessionUser) && (
-                          <span
-                            className="mono ml-1.5 rounded-sm px-1 py-px text-[9px] font-semibold uppercase tracking-widest"
-                            style={{ background: "color-mix(in oklab, var(--instrument) 18%, transparent)", color: "var(--instrument)" }}
-                          >
-                            Rented
-                          </span>
-                        )}
-                      </div>
+                      <div className="truncate font-medium" style={{ color: "var(--instrument)" }}>You · Outbound</div>
                       <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
                         {f.aircraftICAO} · {f.origin ?? "—"} → {f.destination ?? "—"}
                       </div>
@@ -531,24 +543,44 @@ function IncomingTraffic({
                     <PlaneTakeoff className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--instrument)" }} />
                   </li>
                 ))}
-                {visitors.slice(0, 4).map((v) => {
-                  const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
-                  return (
-                    <li key={v.id} className="flex items-center gap-2 text-xs">
-                      {v.userAvatar ? (
-                        <img
-                          src={v.userAvatar}
-                          alt=""
-                          className="h-6 w-6 shrink-0 rounded-full border border-border/40 object-cover"
-                        />
-                      ) : (
-                        <div className="h-6 w-6 shrink-0 rounded-full border border-border/40 bg-secondary/40" />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">@{v.username}</div>
-                        <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
-                          {v.aircraftICAO} · {v.origin ?? "—"} → {v.destination ?? "—"}
-                        </div>
+               {visitors.map((v: any) => {
+            const arriving = v.destination?.toUpperCase() === a.icao.toUpperCase();
+            
+            // POPRAWKA: Sprawdzamy nazwę pilota bezpośrednio z danych Twojego profilu (data.me.handle)
+            const myHandle = typeof data !== "undefined" ? String(data?.me?.handle || "").toLowerCase().trim() : "";
+            const pilotName = String(v.username || v.pilot?.username || "").toLowerCase().trim();
+                     return (
+            <li key={v.id} className="flex items-center gap-2 text-xs">
+              {(() => {
+                            // Odczytujemy bezpieczną flagę, którą wstrzyknęliśmy na górze pliku
+                const isMyFlight = !!v.isMine;
+
+                return v.userAvatar ? (
+                  <img
+                    src={v.userAvatar}
+                    alt=""
+                    className={`h-6 w-6 shrink-0 rounded-full border object-cover shadow-sm ${
+                      isMyFlight ? "border-runway" : "border-[var(--instrument)]"
+                    }`}
+                  />
+                ) : (
+                  <div className={`h-6 w-6 shrink-0 rounded-full border flex items-center justify-center text-[9px] font-bold shadow-sm ${
+                    isMyFlight 
+                      ? "bg-runway/20 border-runway text-runway shadow-runway/5" 
+                      : "bg-[var(--instrument)]/15 border-[var(--instrument)] text-[var(--instrument)] shadow-orange-500/5"
+                  }`}>
+                    {isMyFlight ? "M" : "•"}
+                  </div>
+                );
+              })()}
+               <div className="min-w-0 flex-1">
+                <div className="truncate font-medium">@{v.username || v.pilot?.username || "Pilot"}</div>
+
+                 {/* DODANA LINIA: DETALE TRASY I SAMOLOTU DLA GOŚCIA / TWOJEGO LOTU NA LIŚCIE TRAFFIC */}
+  <div className="mono truncate text-[10px] uppercase tracking-widest text-muted-foreground">
+    {v.aircraftICAO || v.aircraft || "—"} · {v.origin ?? "—"} → {v.destination ?? "—"}
+  </div>
+                 
                         {v.etaMs && (
                           <div className="mono mt-0.5 text-[10px] uppercase tracking-widest text-runway/90">
                             ETA {formatEtaUtc(v.etaMs)} · {formatRemainingFromNow(v.etaMs)}
@@ -563,11 +595,6 @@ function IncomingTraffic({
                     </li>
                   );
                 })}
-                {visitors.length > 4 && (
-                  <li className="mono text-[10px] uppercase tracking-widest text-muted-foreground">
-                    + {visitors.length - 4} more
-                  </li>
-                )}
               </ul>
             </Link>
             );
@@ -576,14 +603,6 @@ function IncomingTraffic({
       )}
     </section>
   );
-}
-
-// A "mine" flight operated by a pilot other than the signed-in viewer — i.e.
-// one of my aircraft being flown under a rented/alias account. Display-only.
-function isRentedFlight(f: MyLiveFlight, sessionUser: string | null): boolean {
-  const pilot = f.pilotUsername?.trim();
-  if (!pilot) return false;
-  return pilot.toLowerCase() !== (sessionUser ?? "").toLowerCase();
 }
 
 type FlightSnapshot = {
@@ -1012,5 +1031,3 @@ function PilotSwitcher({ current }: { current: string | null }) {
 </div>
 );
 }
-
-  
