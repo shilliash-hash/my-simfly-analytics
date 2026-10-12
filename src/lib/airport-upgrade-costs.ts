@@ -21,7 +21,7 @@ const UPGRADE_COST_TABLE: Record<number, Record<number, number>> = {
   // T1: Structural frame left intact
   1: { 2: 1.80, 3: 4.05, 4: 7.49, 5: 13.12, 6: 22.62, 7: 38.54, 8: 64.90, 9: 107.99, 10: 177.54 },
   // T2: Kept 2-6 exact. Tail end gently drops toward a stable ~1.64x decay floor
-  2: { 2: 5.38, 3: 12.10, 4: 22.38, 5: 39.19, 6: 67.56, 7: 114.85, 8: 191.80, 9: 316.47, 10: 519.02 },
+  2: { 2: 5.38, 3: 12.10, 4: 22.38, 5: 39.19, 6: 67.56, 7: 117.62, 8: 191.80, 9: 316.47, 10: 519.02 },
   // T3: Kept 2-4 exact. Missing values solved using the linear vertical scale factor
   3: { 2: 15.41, 3: 43.10, 4: 92.47, 5: 193.62, 6: 380.56, 7: 690.10, 8: 1_145.25, 9: 1_789.37, 10: 2_686.73 },
   // T4: Kept 2-4 exact. The remaining original entries were already mathematically flawless
