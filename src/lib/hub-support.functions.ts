@@ -281,17 +281,14 @@ export async function recordAirportArrivalSupportForBatch(
 }
 
 /**
- * Records support from the owned-airport activity feed, which is the most
- * reliable source for supporter grants: it includes the visiting pilot name,
- * the actual airport side that earned income, and only appears once the flight
- * has landed/settled in SimFly's airport history.
+Pure: pick one qualifying flight-log entry per pilot for the current week.
+ * Any entry at an owned airport — departure OR landing — qualifies.
+ * Keeps the earliest entry per pilot.
  */
-export async function recordAirportLandingSupportFromHistory(
+export function pickWeeklySupportRows(
   flights: AirportHistorySupportFlight[],
-): Promise<void> {
-  if (flights.length === 0) return;
-
-  const weekStart = currentSimflyWeekStart();
+  weekStart: Date,
+) {
   const weekStartMs = weekStart.getTime();
   const rowsByUser = new Map<string, {
     username: string;
@@ -301,7 +298,7 @@ export async function recordAirportLandingSupportFromHistory(
   }>();
 
   for (const f of flights) {
-    if (f.role !== "landing") continue;
+    if (f.role !== "landing" && f.role !== "takeoff") continue;
     if (!f.airportIcao) continue;
 
     const uname = sanitiseUsername(f.visitor);
@@ -321,14 +318,26 @@ export async function recordAirportLandingSupportFromHistory(
       qualifying_arrival_at: new Date(ms).toISOString(),
     });
   }
+  return Array.from(rowsByUser.values());
+}
 
-  const rows = Array.from(rowsByUser.values());
-  if (rows.length === 0) return;
+/**
+ * Records support from the owned-airport flight log: every pilot who departs
+ * from or lands at an owned airport this week becomes a supporter.
+ * Returns false when the write failed (so callers don't advance cursors).
+ */
+export async function recordAirportLandingSupportFromHistory(
+  flights: AirportHistorySupportFlight[],
+): Promise<boolean> {
+  if (flights.length === 0) return true;
+  const weekStart = currentSimflyWeekStart();
+    const rows = pickWeeklySupportRows(flights, weekStart);
+  if (rows.length === 0) return true;
 
   try {
     const now = new Date().toISOString();
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-    await supabaseAdmin.from("hub_support").upsert(
+     const { error } = await supabaseAdmin.from("hub_support").upsert(
       rows.map((row) => ({
         ...row,
         week_start_utc: weekStart.toISOString(),
@@ -338,9 +347,12 @@ export async function recordAirportLandingSupportFromHistory(
       })),
       { onConflict: "username,week_start_utc", ignoreDuplicates: true },
     );
+    if (error) throw error;
     counterCache = null;
+     return true;
   } catch (err) {
     console.warn("[hub-support] airport-history write failed", err);
+     return false;
   }
 }
 
