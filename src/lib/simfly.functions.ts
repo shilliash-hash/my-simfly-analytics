@@ -472,6 +472,7 @@ function mapAirport(a: RawAssetAirport, flights: RawFlightLite[]): AirportExt {
   return {
     icao: a.icao,
     name: a.name,
+    active: a.active === true,
     country: a.country ?? "",
     slug: a.slug,
     category: a.category,
@@ -1170,7 +1171,9 @@ export const getSimflyPayload = createServerFn({ method: "GET" })
     const airplanes: AircraftExt[] = [];
     const licenses: LicenseExt[] = [];
     for (const it of assets?.items ?? []) {
-      if (it.type === "Airport") airports.push(mapAirport(it, airportFlights));
+    // Only activated airports join the owned list — newly bought airports
+    // that the owner has not activated yet stay out of every Hub list.
+      if (it.type === "Airport" && (it as RawAssetAirport).active === true) airports.push(mapAirport(it, airportFlights));
       else if (it.type === "Airplane") airplanes.push(mapAirplane(it, flights));
       else if (it.type === "Pilot License") licenses.push(mapLicence(it, flights));
     }
@@ -2579,7 +2582,7 @@ export const getAirportUtilizationTimeline = createServerFn({ method: "GET" })
         `${SIMFLY_BASE}/user/assets/all?username=${encodeURIComponent(username)}&nonce=${encodeURIComponent(nonce)}`,
       );
       const ownedAirports = (assets?.items ?? []).filter(
-        (it): it is RawAssetAirport => it.type === "Airport",
+   (it): it is RawAssetAirport => it.type === "Airport" && it.active === true,
       );
       const requested = new Set((data.icaos ?? []).map((s) => s.toUpperCase()));
       const scope = requested.size
