@@ -346,7 +346,7 @@ async function initBuild(
     `${SIMFLY_BASE}/user/assets/all?${qs}`,
   );
   const icaos = (myAssets?.items ?? [])
-    .filter((it) => it.type === "Airport" && typeof it.icao === "string")
+  .filter((it) => it.type === "Airport" && typeof it.icao === "string" && it.active === true)
     .map((it) => String(it.icao));
 
   if (icaos.length === 0) return null;
@@ -739,7 +739,7 @@ async function enrichPilot(
       avatarUrl = `https://simfly.io/${profile.avatar.replace(/^(\.\.\/)+/, "")}`;
     }
     airports = (assets?.items ?? [])
-      .filter((it) => it.type === "Airport" && typeof it.icao === "string")
+  .filter((it) => it.type === "Airport" && typeof it.icao === "string" && it.active === true)
       .map((it) => {
         const t = tierFor(it.category);
         const used = it.rotation ?? 0;
