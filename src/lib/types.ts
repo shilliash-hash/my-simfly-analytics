@@ -89,6 +89,8 @@ export interface PaxByAsset {
 export interface AirportExt {
   icao: string;
   name: string;
+  /** True once the owner activated the airport on SimFly; newly bought, not-yet-activated airports are false. */
+  active: boolean;
   country: string;
   slug: string;
   category: number;
