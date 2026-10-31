@@ -308,6 +308,21 @@ export function RadarMap({
         el.classList.toggle("radar-hide-sig", m.getZoom() < SIG_MIN_ZOOM);
       };
       map.off("zoomend");
+            // Remove only our own handlers — a bare map.off("zoomend") would also strip
+      // Leaflet's SVG renderer listeners, leaving route lines stuck on zoom.
+      const w = window as unknown as { __radarHandlers?: { zoom?: () => void; popup?: (e: any) => void } };
+      const prev = (w.__radarHandlers ??= {});
+      if (prev.zoom) map.off("zoomend", prev.zoom);
+      if (prev.popup) map.off("popupopen", prev.popup);
+      const onPopup = (e: { popup: { getElement: () => HTMLElement | undefined } }) => {
+        const el = e.popup.getElement();
+        const btn = el?.querySelector("[data-radar-detail]") as HTMLElement | null;
+        if (btn) {
+          btn.onclick = () => onSelect(btn.getAttribute("data-radar-detail") ?? "");
+        }
+      };
+      prev.zoom = syncSig;
+      prev.popup = onPopup;
       map.on("zoomend", syncSig);
       syncSig();
 
@@ -315,15 +330,7 @@ export function RadarMap({
         map.fitBounds(bounds, { padding: [40, 40], maxZoom: 5 });
         fittedRef.current = true;
       }
-
-      map.off("popupopen");
-      map.on("popupopen", (e: { popup: { getElement: () => HTMLElement | undefined } }) => {
-        const el = e.popup.getElement();
-        const btn = el?.querySelector("[data-radar-detail]") as HTMLElement | null;
-        if (btn) {
-          btn.onclick = () => onSelect(btn.getAttribute("data-radar-detail") ?? "");
-        }
-      });
+    map.on("popupopen", onPopup);
     })();
     return () => {
       cancelled = true;
