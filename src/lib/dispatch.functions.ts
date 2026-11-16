@@ -1,8 +1,9 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
-  CLASS_RANGES, flightMatchesRoute, haversineNm, monthKey, monthStart, scoreRoute, seededRng,
+  awardedPoints, CLASS_RANGES, flightMatchesRoute, haversineNm, monthKey, monthStart, scoreRoute, seededRng,
   type RouteClass,
 } from "./dispatch-rules";
+import { lookupAircraftSpec } from "./aircraft-specs";
 
 export type DispatchRoute = {
   id: string; a: string; b: string; aName: string | null; bName: string | null;
@@ -67,7 +68,7 @@ async function scanCompletions(month: string, routes: { id: string; airport_a: s
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const since = monthStart(month).toISOString();
   const { data: flights } = await supabaseAdmin.from("simfly_flights")
-    .select("username, flight_id, departure_icao, destination_icao, mission_start_ts")
+    .select("username, flight_id, aircraft_icao, departure_icao, destination_icao, mission_start_ts")
     .gte("mission_start_ts", since).order("mission_start_ts", { ascending: true }).limit(5000);
   const inserts: Record<string, unknown>[] = [];
   const done = new Set<string>();
@@ -78,7 +79,7 @@ async function scanCompletions(month: string, routes: { id: string; airport_a: s
       if (done.has(k)) continue; // once per pilot per month, earliest flight
       done.add(k);
       inserts.push({ route_id: r.id, month, pilot_username: f.username, flight_id: f.flight_id,
-        completed_at: f.mission_start_ts, awarded_points: r.points });
+        completed_at: f.mission_start_ts, awarded_points: awardedPoints(r.points, lookupAircraftSpec(f.aircraft_icao).spec.category) });
     }
   }
   if (inserts.length) {
