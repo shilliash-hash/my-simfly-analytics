@@ -7,8 +7,10 @@ import { ArrowDownUp, CheckCircle2, Info, Route as RouteIcon, Trophy } from "luc
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AppShell, PageHeader } from "@/components/app-shell";
+import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/lib/session-user";
-import { getDispatchBoard, type DispatchAirport } from "@/lib/dispatch.functions";
+import { getDispatchBoard, getDispatchAirportSlots, type DispatchAirport } from "@/lib/dispatch.functions";
+import { SLOT_CACHE_MS, slotsAreFresh } from "@/lib/dispatch-slots";
 import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_LEVEL, type RouteClass } from "@/lib/dispatch-rules";
 
 export const Route = createFileRoute("/dispatch")({
@@ -178,10 +180,23 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
 }
 
 function AirportHover({ icao, info }: { icao: string; info?: DispatchAirport }) {
+  const [open, setOpen] = useState(false);
+  const fetchSlots = useServerFn(getDispatchAirportSlots);
+  const q = useQuery({
+    queryKey: ["dispatch-airport-slots", icao],
+    queryFn: () => fetchSlots({ data: { icao } }),
+    enabled: open,
+    staleTime: SLOT_CACHE_MS,
+    refetchInterval: open ? SLOT_CACHE_MS : false,
+    initialData: slotsAreFresh(info?.slots?.fetchedAt) ? { slots: info?.slots ?? null } : undefined,
+    initialDataUpdatedAt: info?.slots?.fetchedAt ? Date.parse(info.slots.fetchedAt) : undefined,
+  });
+  const slots = q.data?.slots ?? info?.slots;
+  const stale = Boolean(slots && (!slotsAreFresh(slots.fetchedAt) || q.data?.error || q.isError));
   return (
-    <HoverCard openDelay={120} closeDelay={60}>
+    <HoverCard open={open} onOpenChange={setOpen} openDelay={120} closeDelay={60}>
       <HoverCardTrigger asChild>
-        <span className="cursor-help underline decoration-dotted decoration-muted-foreground underline-offset-4 hover:text-runway">{icao}</span>
+        <Button variant="link" onClick={() => setOpen((v) => !v)} aria-label={`Airport ${icao}`} className="h-auto p-0 font-mono text-lg font-semibold text-foreground underline decoration-dotted decoration-muted-foreground underline-offset-4 hover:text-runway">{icao}</Button>
       </HoverCardTrigger>
       <HoverCardContent className="w-64 text-xs">
         <div className="font-mono text-sm font-semibold text-runway">{icao}</div>
@@ -190,12 +205,15 @@ function AirportHover({ icao, info }: { icao: string; info?: DispatchAirport }) 
           <dt className="text-muted-foreground">Owner</dt><dd className="text-right">{info?.owner ? `@${info.owner}` : "—"}</dd>
           <dt className="text-muted-foreground">Tier</dt><dd className="text-right font-mono">{info?.tier != null ? `T${info.tier}` : "—"}</dd>
           <dt className="text-muted-foreground">Level</dt><dd className="text-right font-mono">{info?.level != null ? `L${info.level}` : "—"}</dd>
-          <dt className="text-muted-foreground">Free slots</dt><dd className="text-right font-mono">{info?.slots ? (
-            <span className={info.slots.free / Math.max(1, info.slots.capacity) > 0.3 ? "text-runway" : "text-instrument"}>
-              {info.slots.free} free ({info.slots.used} / {info.slots.capacity}){info.slots.current ? "" : " · last wk"}
+          <dt className="text-muted-foreground">Free slots</dt><dd className="text-right font-mono">{slots?.active === false ? (
+            <span className="text-muted-foreground">Inactive (0 slots)</span>
+          ) : slots ? (
+            <span className={slots.free / Math.max(1, slots.capacity) > 0.3 ? "text-runway" : "text-instrument"}>
+              {slots.free} free ({slots.used} / {slots.capacity})
             </span>
-          ) : <span className="text-muted-foreground">not synced</span>}</dd>
+          ) : <span className="text-muted-foreground">{q.isFetching ? "Loading…" : "Unavailable"}</span>}</dd>
         </dl>
+        {slots && <div className="mt-2 text-muted-foreground">{q.isFetching ? "Updating…" : stale ? "Last known · live update unavailable" : "Current week · live data"}</div>}
       </HoverCardContent>
     </HoverCard>
   );
