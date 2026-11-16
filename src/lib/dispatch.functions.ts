@@ -13,8 +13,10 @@ export type DispatchRoute = {
 export type DispatchBoard = {
   month: string; routes: DispatchRoute[];
   leaderboard: { username: string; points: number; routes: number }[];
+  airports: Record<string, DispatchAirport>;
   error?: string;
 };
+export type DispatchAirport = { icao: string; name: string | null; country: string | null; owner: string | null; tier: number | null; level: number | null; slots?: { capacity: number; used: number; free: number; weekStart: string; current: boolean } | null };
 
 const PER_CLASS = 24;
 
@@ -98,9 +100,19 @@ export const getDispatchBoard = createServerFn({ method: "GET" }).handler(async 
     await scanCompletions(month, routes ?? []);
     const [{ data: comps }, { data: names }] = await Promise.all([
       supabaseAdmin.from("dispatch_completions").select("route_id, pilot_username, awarded_points").eq("month", month),
-      supabaseAdmin.from("airport_identity_cache").select("icao, name")
+      supabaseAdmin.from("airport_identity_cache").select("icao, name, country, owner_username, tier, level")
         .in("icao", [...new Set((routes ?? []).flatMap((r) => [r.airport_a, r.airport_b]))]),
     ]);
+    const icaoList = [...new Set((routes ?? []).flatMap((r) => [r.airport_a, r.airport_b]))];
+    const { data: util } = await supabaseAdmin.from("airport_utilization_week").select("icao, week_start_utc, capacity, used")
+      .in("icao", icaoList).order("week_start_utc", { ascending: false }).limit(5000);
+    const now = new Date(); const dow = (now.getUTCDay() + 6) % 7;
+    const curWeek = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - dow);
+    const slotOf = new Map<string, NonNullable<DispatchAirport["slots"]>>();
+    for (const u of util ?? []) {
+      const k = u.icao.toUpperCase(); if (slotOf.has(k)) continue;
+      slotOf.set(k, { capacity: u.capacity, used: u.used, free: Math.max(0, u.capacity - u.used), weekStart: u.week_start_utc, current: Date.parse(u.week_start_utc) >= curWeek });
+    }
     const nameOf = new Map((names ?? []).map((n) => [n.icao.toUpperCase(), n.name]));
     const byRoute = new Map<string, string[]>();
     const lb = new Map<string, { username: string; points: number; routes: number }>();
@@ -109,8 +121,10 @@ export const getDispatchBoard = createServerFn({ method: "GET" }).handler(async 
       const e = lb.get(c.pilot_username) ?? { username: c.pilot_username, points: 0, routes: 0 };
       e.points += c.awarded_points; e.routes++; lb.set(c.pilot_username, e);
     }
+    const airports: Record<string, DispatchAirport> = {};
+    for (const n of names ?? []) airports[n.icao.toUpperCase()] = { icao: n.icao.toUpperCase(), name: n.name, country: n.country, owner: n.owner_username, tier: n.tier, level: n.level, slots: slotOf.get(n.icao.toUpperCase()) ?? null };
     return {
-      month,
+      month, airports,
       routes: (routes ?? []).map((r) => ({
         id: r.id, a: r.airport_a, b: r.airport_b, aName: nameOf.get(r.airport_a) ?? null, bName: nameOf.get(r.airport_b) ?? null,
         routeClass: r.route_class as RouteClass, distanceNm: r.distance_nm, basePoints: r.base_points,
@@ -120,6 +134,6 @@ export const getDispatchBoard = createServerFn({ method: "GET" }).handler(async 
     };
   } catch (e) {
     console.error("[dispatch]", e);
-    return { month, routes: [], leaderboard: [], error: "Dispatch board is temporarily unavailable." };
+    return { month, routes: [], leaderboard: [], airports: {}, error: "Dispatch board is temporarily unavailable." };
   }
 });
