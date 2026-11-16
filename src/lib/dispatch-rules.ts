@@ -35,6 +35,17 @@ export function scoreRoute(nm: number, a: EndpointInfo, b: EndpointInfo) {
   return { base, mult: Math.round(mult * 100) / 100, bonuses, points: Math.round(base * mult) };
 }
 
+/** Aircraft tier multiplier (applied per flight): rewards light GA over big jets. */
+export function aircraftTierMultiplier(tier: number | null | undefined): number {
+  if (tier == null || !Number.isFinite(tier) || tier <= 0) return 1;
+  if (tier <= 2) return 2.5;
+  if (tier <= 4) return 1.5;
+  return 1;
+}
+export function awardedPoints(routePoints: number, tier: number | null | undefined): number {
+  return Math.round(routePoints * aircraftTierMultiplier(tier));
+}
+
 /** Direction does not matter: A→B and B→A both complete the route. */
 export function flightMatchesRoute(dep: string | null, arr: string | null, a: string, b: string): boolean {
   const d = (dep ?? "").toUpperCase(), r = (arr ?? "").toUpperCase();
