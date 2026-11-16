@@ -67,6 +67,10 @@ function DispatchPage() {
         <Stat label="Days left in cycle" value={daysLeft} />
       </div>
 
+      <div className="mb-4 rounded-md border border-border bg-secondary/30 px-3 py-2 text-xs text-muted-foreground">
+        Aircraft bonus on completion: <span className="font-mono text-instrument">Tier 1–2 ×2.5</span> · <span className="font-mono text-instrument">Tier 3–4 ×1.5</span> · <span className="font-mono">Tier 5–7 ×1.0</span> — points shown on routes are before this bonus.
+      </div>
+
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
         {(["ALL", "GA", "REGIONAL", "AIRLINER"] as ClassFilter[]).map((c) => (
           <Chip key={c} on={cls === c} onClick={() => setCls(c)}>
