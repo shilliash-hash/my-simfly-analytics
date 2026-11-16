@@ -25,7 +25,8 @@ import {
   Radio,
   Telescope,
   Gauge,
-
+  Route,
+  
 } from "lucide-react";
 import { useState, useEffect, type ReactNode } from "react";
 import { SessionBanner } from "./session-banner";
@@ -37,6 +38,7 @@ const NAV = [
   { to: "/activity",   label: "Activity",  icon: Activity },
   { to: "/income", label: "Income", icon: Coins },
   { to: "/radar", label: "Community Radar", icon: Radar },
+  { to: "/dispatch", label: "Dispatch Center", icon: Route },
   { to: "/airports",   label: "Airports",  icon: Building2 },
   // { to: "/airport-command", label: "Airport Command", icon: Radio },
   { to: "/aircraft",   label: "Aircraft",  icon: Plane },
