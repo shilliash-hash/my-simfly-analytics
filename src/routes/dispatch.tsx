@@ -3,11 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { CheckCircle2, Route as RouteIcon, Trophy } from "lucide-react";
+import { ArrowDownUp, CheckCircle2, Info, Route as RouteIcon, Trophy } from "lucide-react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { useSessionUser } from "@/lib/session-user";
-import { getDispatchBoard } from "@/lib/dispatch.functions";
-import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, type RouteClass } from "@/lib/dispatch-rules";
+import { getDispatchBoard, type DispatchAirport } from "@/lib/dispatch.functions";
+import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_LEVEL, type RouteClass } from "@/lib/dispatch-rules";
 
 export const Route = createFileRoute("/dispatch")({
   component: DispatchPage,
@@ -25,6 +27,8 @@ export const Route = createFileRoute("/dispatch")({
 
 type ClassFilter = "ALL" | RouteClass;
 type StatusFilter = "all" | "todo" | "done";
+type SortKey = "pts_desc" | "pts_asc" | "nm_asc" | "nm_desc";
+const SORTS: [SortKey, string][] = [["pts_desc", "Points: highest"], ["pts_asc", "Points: lowest"], ["nm_asc", "Distance: shortest"], ["nm_desc", "Distance: longest"]];
 
 function DispatchPage() {
   const fetchBoard = useServerFn(getDispatchBoard);
@@ -33,6 +37,7 @@ function DispatchPage() {
   const q = useQuery({ queryKey: ["dispatch-board"], queryFn: () => fetchBoard(), refetchInterval: 5 * 60_000 });
   const [cls, setCls] = useState<ClassFilter>("ALL");
   const [status, setStatus] = useState<StatusFilter>("all");
+  const [sort, setSort] = useState<SortKey>("pts_desc");
 
   const board = q.data;
   const routes = useMemo(() => (board?.routes ?? []).filter((r) => {
@@ -41,7 +46,9 @@ function DispatchPage() {
     if (status === "done" && !mine) return false;
     if (status === "todo" && mine) return false;
     return true;
-  }), [board, cls, status, me]);
+  }).sort((x, y) => sort === "pts_desc" ? y.points - x.points : sort === "pts_asc" ? x.points - y.points
+    : sort === "nm_asc" ? x.distanceNm - y.distanceNm : y.distanceNm - x.distanceNm), [board, cls, status, me, sort]);
+  const ap = board?.airports ?? {};
 
   const myRow = board?.leaderboard.find((l) => l.username.toLowerCase() === me);
   const myRank = board ? board.leaderboard.findIndex((l) => l.username.toLowerCase() === me) + 1 : 0;
@@ -57,6 +64,7 @@ function DispatchPage() {
       <PageHeader
         eyebrow="HUB Dispatch Center"
         title={monthLabel ? `${monthLabel} Flight Operations` : "Flight Operations"}
+        actions={<RulesInfo />}
         description="Routes between community airports, refreshed on the 1st of each month. Fly either direction — each pilot can complete a route once per month. Completions are detected automatically from your flight log."
       />
 
@@ -81,6 +89,12 @@ function DispatchPage() {
         {([["all", "All"], ["todo", "To do"], ["done", "Completed"]] as [StatusFilter, string][]).map(([s, l]) => (
           <Chip key={s} on={status === s} onClick={() => setStatus(s)}>{l}</Chip>
         ))}
+        <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
+          <ArrowDownUp className="h-3.5 w-3.5" />
+          <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-md border border-border bg-background px-2 py-1 text-foreground">
+            {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+          </select>
+        </label>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
@@ -95,7 +109,7 @@ function DispatchPage() {
                 <div key={r.id} className={`rounded-xl border bg-card/60 p-4 ${mine ? "border-runway/60" : "border-border"}`}>
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-mono text-lg font-semibold">{r.a} ⇄ {r.b}</div>
+                      <div className="font-mono text-lg font-semibold"><AirportHover icao={r.a} info={ap[r.a]} /> ⇄ <AirportHover icao={r.b} info={ap[r.b]} /></div>
                       <div className="truncate text-xs text-muted-foreground">{r.aName ?? r.a} · {r.bName ?? r.b}</div>
                     </div>
                     <div className="text-right">
@@ -160,5 +174,56 @@ function Chip({ on, onClick, children }: { on: boolean; onClick: () => void; chi
     <button onClick={onClick} className={`rounded-full border px-3 py-1 ${on ? "border-runway bg-runway/15 text-runway" : "border-border text-muted-foreground hover:text-foreground"}`}>
       {children}
     </button>
+  );
+}
+
+function AirportHover({ icao, info }: { icao: string; info?: DispatchAirport }) {
+  return (
+    <HoverCard openDelay={120} closeDelay={60}>
+      <HoverCardTrigger asChild>
+        <span className="cursor-help underline decoration-dotted decoration-muted-foreground underline-offset-4 hover:text-runway">{icao}</span>
+      </HoverCardTrigger>
+      <HoverCardContent className="w-64 text-xs">
+        <div className="font-mono text-sm font-semibold text-runway">{icao}</div>
+        <div className="mb-2 text-muted-foreground">{info?.name ?? "Unknown airport"}{info?.country ? ` · ${info.country}` : ""}</div>
+        <dl className="grid grid-cols-2 gap-y-1">
+          <dt className="text-muted-foreground">Owner</dt><dd className="text-right">{info?.owner ? `@${info.owner}` : "—"}</dd>
+          <dt className="text-muted-foreground">Tier</dt><dd className="text-right font-mono">{info?.tier != null ? `T${info.tier}` : "—"}</dd>
+          <dt className="text-muted-foreground">Level</dt><dd className="text-right font-mono">{info?.level != null ? `L${info.level}` : "—"}</dd>
+          <dt className="text-muted-foreground">Free slots</dt><dd className="text-right font-mono">{info?.slots ? (
+            <span className={info.slots.free / Math.max(1, info.slots.capacity) > 0.3 ? "text-runway" : "text-instrument"}>
+              {info.slots.free} free ({info.slots.used} / {info.slots.capacity}){info.slots.current ? "" : " · last wk"}
+            </span>
+          ) : <span className="text-muted-foreground">not synced</span>}</dd>
+        </dl>
+      </HoverCardContent>
+    </HoverCard>
+  );
+}
+
+function RulesInfo() {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button aria-label="How Dispatch Center works" className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1 text-xs text-muted-foreground hover:border-runway hover:text-runway">
+          <Info className="h-4 w-4" />How it works
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="max-h-[70vh] w-96 overflow-y-auto text-xs leading-relaxed">
+        <h4 className="mb-2 text-sm font-semibold">How Dispatch Center works</h4>
+        <ul className="list-disc space-y-1.5 pl-4">
+          <li><b>Monthly routes:</b> a new set of routes is generated on the 1st of every month (UTC), connecting only airports owned by SimFly players.</li>
+          <li><b>Route classes:</b> {Object.values(CLASS_RANGES).map((c) => `${c.label} ${c.min}–${c.max} NM`).join(" · ")}.</li>
+          <li><b>Direction:</b> either way counts — A ⇄ B and B ⇄ A are the same route.</li>
+          <li><b>Once per month:</b> each pilot can complete a route once per month. Many pilots can fly the same route; extra rotations earn no extra points.</li>
+          <li><b>Automatic:</b> completions are detected from your SimFly flight log — no need to accept anything.</li>
+          <li><b>Base value:</b> 10 + distance (NM) ÷ 10.</li>
+          <li><b>Hub airport ×{HUB_MEMBER_MULT}:</b> at least one airport belongs to a pilot who uses the Hub.</li>
+          <li><b>Underdog ×{UNDERDOG_MULT}:</b> at least one airport is level {UNDERDOG_MAX_LEVEL} or lower.</li>
+          <li><b>Aircraft bonus on completion:</b> Tier 1–2 ×2.5 · Tier 3–4 ×1.5 · Tier 5–7 ×1.0. Unknown aircraft count as ×1.0. Points on route cards are shown before this bonus.</li>
+          <li><b>Leaderboard:</b> your Airworthy Points add up across the month and reset with the next cycle.</li>
+        </ul>
+      </PopoverContent>
+    </Popover>
   );
 }
