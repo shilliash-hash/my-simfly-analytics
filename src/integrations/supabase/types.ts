@@ -140,6 +140,90 @@ export type Database = {
         }
         Relationships: []
       }
+      dispatch_completions: {
+        Row: {
+          awarded_points: number
+          completed_at: string
+          created_at: string
+          flight_id: string
+          id: string
+          month: string
+          pilot_username: string
+          route_id: string
+        }
+        Insert: {
+          awarded_points: number
+          completed_at: string
+          created_at?: string
+          flight_id: string
+          id?: string
+          month: string
+          pilot_username: string
+          route_id: string
+        }
+        Update: {
+          awarded_points?: number
+          completed_at?: string
+          created_at?: string
+          flight_id?: string
+          id?: string
+          month?: string
+          pilot_username?: string
+          route_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dispatch_completions_route_id_fkey"
+            columns: ["route_id"]
+            isOneToOne: false
+            referencedRelation: "dispatch_monthly_routes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      dispatch_monthly_routes: {
+        Row: {
+          airport_a: string
+          airport_b: string
+          base_points: number
+          bonuses: string[]
+          created_at: string
+          distance_nm: number
+          id: string
+          month: string
+          multiplier: number
+          points: number
+          route_class: string
+        }
+        Insert: {
+          airport_a: string
+          airport_b: string
+          base_points: number
+          bonuses?: string[]
+          created_at?: string
+          distance_nm: number
+          id?: string
+          month: string
+          multiplier?: number
+          points: number
+          route_class: string
+        }
+        Update: {
+          airport_a?: string
+          airport_b?: string
+          base_points?: number
+          bonuses?: string[]
+          created_at?: string
+          distance_nm?: number
+          id?: string
+          month?: string
+          multiplier?: number
+          points?: number
+          route_class?: string
+        }
+        Relationships: []
+      }
+      
       hub_support: {
         Row: {
           activated_at: string
