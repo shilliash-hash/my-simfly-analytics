@@ -46,6 +46,21 @@ export function awardedPoints(routePoints: number, tier: number | null | undefin
   return Math.round(routePoints * aircraftTierMultiplier(tier));
 }
 
+export const DECAY_STEP = 0.05;
+export const DECAY_FLOOR = 0.5;
+/** Share of original route value for the next pilot, given how many already completed it. */
+export function decayFactor(priorCompletions: number): number {
+  return Math.max(DECAY_FLOOR, 1 - DECAY_STEP * Math.max(0, priorCompletions));
+}
+export function decayedRoutePoints(routePoints: number, priorCompletions: number): number {
+  return Math.round(routePoints * decayFactor(priorCompletions));
+}
+export type Freshness = "fresh" | "flown" | "settled";
+export function freshness(priorCompletions: number): Freshness {
+  if (priorCompletions <= 0) return "fresh";
+  return decayFactor(priorCompletions) <= DECAY_FLOOR ? "settled" : "flown";
+}
+
 /** Direction does not matter: A→B and B→A both complete the route. */
 export function flightMatchesRoute(dep: string | null, arr: string | null, a: string, b: string): boolean {
   const d = (dep ?? "").toUpperCase(), r = (arr ?? "").toUpperCase();
