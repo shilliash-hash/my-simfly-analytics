@@ -79,7 +79,7 @@ async function ensureRoutes(month: string) {
   if ((count ?? 0) > 0) return;
 
   const [{ data: airports }, { data: presence }] = await Promise.all([
-    supabaseAdmin.from("airport_identity_cache").select("icao, owner_username, level").not("owner_username", "is", null),
+    supabaseAdmin.from("airport_identity_cache").select("icao, owner_username, tier").not("owner_username", "is", null),
     supabaseAdmin.from("pilot_presence").select("username"),
   ]);
   const hub = new Set((presence ?? []).map((p) => p.username.toLowerCase()));
@@ -87,7 +87,7 @@ async function ensureRoutes(month: string) {
   const geo = await loadGeo();
   const pool = (airports ?? []).flatMap((r) => {
     const g = geo.get(r.icao.toUpperCase());
-    return g ? [{ icao: r.icao.toUpperCase(), lat: g.lat, lon: g.lon, level: r.level,
+    return g ? [{ icao: r.icao.toUpperCase(), lat: g.lat, lon: g.lon, tier: r.tier,
       hubOwned: hub.has((r.owner_username ?? "").toLowerCase()) }] : [];
   });
   if (pool.length < 2) return;
