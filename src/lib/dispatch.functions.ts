@@ -1,6 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import {
-  awardedPoints, CLASS_RANGES, flightMatchesRoute, haversineNm, monthKey, monthStart, scoreRoute, seededRng,
+  awardedPoints, decayedRoutePoints, CLASS_RANGES, flightMatchesRoute, haversineNm, monthKey, monthStart, scoreRoute, seededRng,
   type RouteClass,
 } from "./dispatch-rules";
 import { lookupAircraftSpec } from "./aircraft-specs";
@@ -126,14 +126,16 @@ async function scanCompletions(month: string, routes: { id: string; airport_a: s
     .gte("mission_start_ts", since).order("mission_start_ts", { ascending: true }).limit(5000);
   const inserts: Record<string, unknown>[] = [];
   const done = new Set<string>();
+  const order = new Map<string, number>(); // chronological completions per route
   for (const f of flights ?? []) {
     for (const r of routes) {
       if (!flightMatchesRoute(f.departure_icao, f.destination_icao, r.airport_a, r.airport_b)) continue;
       const k = `${r.id}|${f.username.toLowerCase()}`;
       if (done.has(k)) continue; // once per pilot per month, earliest flight
       done.add(k);
+      const prior = order.get(r.id) ?? 0; order.set(r.id, prior + 1);
       inserts.push({ route_id: r.id, month, pilot_username: f.username, flight_id: f.flight_id,
-        completed_at: f.mission_start_ts, awarded_points: awardedPoints(r.points, lookupAircraftSpec(f.aircraft_icao).spec.category) });
+        completed_at: f.mission_start_ts, awarded_points: awardedPoints(decayedRoutePoints(r.points, prior), lookupAircraftSpec(f.aircraft_icao).spec.category) });
     }
   }
   if (inserts.length) {
