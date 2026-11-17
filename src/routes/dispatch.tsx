@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/lib/session-user";
 import { getDispatchBoard, getDispatchAirportSlots, type DispatchAirport } from "@/lib/dispatch.functions";
 import { SLOT_CACHE_MS, slotsAreFresh } from "@/lib/dispatch-slots";
-import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_TIER, type RouteClass } from "@/lib/dispatch-rules";
+import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_TIER, DECAY_STEP, DECAY_FLOOR, decayFactor, decayedRoutePoints, freshness, type RouteClass } from "@/lib/dispatch-rules";
 
 export const Route = createFileRoute("/dispatch")({
   component: DispatchPage,
@@ -51,7 +51,7 @@ function DispatchPage() {
     const term = search.trim().toUpperCase();
     if (term && !r.a.toUpperCase().includes(term) && !r.b.toUpperCase().includes(term)) return false;
     return true;
-  }).sort((x, y) => sort === "pts_desc" ? y.points - x.points : sort === "pts_asc" ? x.points - y.points
+  }).sort((x, y) => sort === "pts_desc" ? decayedRoutePoints(y.points, y.pilots.length) - decayedRoutePoints(x.points, x.pilots.length) : sort === "pts_asc" ? decayedRoutePoints(x.points, x.pilots.length) - decayedRoutePoints(y.points, y.pilots.length)
     : sort === "nm_asc" ? x.distanceNm - y.distanceNm : y.distanceNm - x.distanceNm), [board, cls, status, me, sort, search]);
   const ap = board?.airports ?? {};
 
@@ -126,7 +126,8 @@ function DispatchPage() {
                       <div className="truncate text-xs text-muted-foreground">{r.aName ?? r.a} · {r.bName ?? r.b}</div>
                     </div>
                     <div className="text-right">
-                      <div className="font-mono text-xl font-bold text-instrument">{r.points}</div>
+                      <div className="font-mono text-xl font-bold text-instrument">{decayedRoutePoints(r.points, r.pilots.length)}</div>
+                      {r.pilots.length > 0 && <div className="font-mono text-[10px] text-muted-foreground line-through">{r.points}</div>}
                       <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Airworthy pts</div>
                     </div>
                   </div>
@@ -134,6 +135,7 @@ function DispatchPage() {
                     <span className="rounded bg-secondary px-1.5 py-0.5">{CLASS_RANGES[r.routeClass].label}</span>
                     <span className="rounded bg-secondary px-1.5 py-0.5 font-mono">{r.distanceNm} NM</span>
                     {r.bonuses.includes("hub_member") && <span className="rounded bg-runway/15 px-1.5 py-0.5 text-runway">Hub airport ×{HUB_MEMBER_MULT}</span>}
+                    <FreshBadge n={r.pilots.length} />
                     {r.bonuses.includes("underdog") && <span className="rounded bg-instrument/15 px-1.5 py-0.5 text-instrument">Underdog ×{UNDERDOG_MULT}</span>}
                   </div>
                   <div className="mt-3 flex items-center justify-between gap-2">
@@ -245,6 +247,7 @@ function RulesInfo() {
           <li><b>Route classes:</b> {Object.values(CLASS_RANGES).map((c) => `${c.label} ${c.min}–${c.max} NM`).join(" · ")}.</li>
           <li><b>Direction:</b> either way counts — A ⇄ B and B ⇄ A are the same route.</li>
           <li><b>Once per month:</b> each pilot can complete a route once per month. Many pilots can fly the same route; extra rotations earn no extra points.</li>
+          <li><b>Route decay:</b> every completion lowers the route's value for the next pilot by {Math.round(DECAY_STEP*100)}% of the original, down to a floor of {Math.round(DECAY_FLOOR*100)}%. The first pilot (in flight order) gets 100%. Fly fresh routes for the best rewards.</li>
           <li><b>Automatic:</b> completions are detected from your SimFly flight log — no need to accept anything.</li>
           <li><b>Base value:</b> 10 + distance (NM) ÷ 10.</li>
           <li><b>Hub airport ×{HUB_MEMBER_MULT}:</b> at least one airport belongs to a pilot who uses the Hub.</li>
@@ -255,4 +258,11 @@ function RulesInfo() {
       </PopoverContent>
     </Popover>
   );
+}
+
+function FreshBadge({ n }: { n: number }) {
+  const f = freshness(n), pct = Math.round(decayFactor(n) * 100);
+  if (f === "fresh") return <span className="rounded bg-runway/15 px-1.5 py-0.5 text-runway">✨ Fresh · 100%</span>;
+  if (f === "settled") return <span className="rounded bg-secondary px-1.5 py-0.5 text-muted-foreground">💤 Settled · {pct}%</span>;
+  return <span className="rounded bg-instrument/15 px-1.5 py-0.5 text-instrument">🔥 {pct}% (−{100 - pct}%)</span>;
 }
