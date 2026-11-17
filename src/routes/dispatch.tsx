@@ -3,7 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { useMemo, useState } from "react";
-import { ArrowDownUp, CheckCircle2, Info, Route as RouteIcon, Trophy } from "lucide-react";
+import { ArrowDownUp, CheckCircle2, Info, Route as RouteIcon, Search, Trophy, X } from "lucide-react";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { AppShell, PageHeader } from "@/components/app-shell";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useSessionUser } from "@/lib/session-user";
 import { getDispatchBoard, getDispatchAirportSlots, type DispatchAirport } from "@/lib/dispatch.functions";
 import { SLOT_CACHE_MS, slotsAreFresh } from "@/lib/dispatch-slots";
-import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_LEVEL, type RouteClass } from "@/lib/dispatch-rules";
+import { CLASS_RANGES, HUB_MEMBER_MULT, UNDERDOG_MULT, UNDERDOG_MAX_TIER, type RouteClass } from "@/lib/dispatch-rules";
 
 export const Route = createFileRoute("/dispatch")({
   component: DispatchPage,
@@ -40,6 +40,7 @@ function DispatchPage() {
   const [cls, setCls] = useState<ClassFilter>("ALL");
   const [status, setStatus] = useState<StatusFilter>("all");
   const [sort, setSort] = useState<SortKey>("pts_desc");
+  const [search, setSearch] = useState("");
 
   const board = q.data;
   const routes = useMemo(() => (board?.routes ?? []).filter((r) => {
@@ -47,9 +48,11 @@ function DispatchPage() {
     const mine = r.pilots.some((p) => p.toLowerCase() === me);
     if (status === "done" && !mine) return false;
     if (status === "todo" && mine) return false;
+    const term = search.trim().toUpperCase();
+    if (term && !r.a.toUpperCase().includes(term) && !r.b.toUpperCase().includes(term)) return false;
     return true;
   }).sort((x, y) => sort === "pts_desc" ? y.points - x.points : sort === "pts_asc" ? x.points - y.points
-    : sort === "nm_asc" ? x.distanceNm - y.distanceNm : y.distanceNm - x.distanceNm), [board, cls, status, me, sort]);
+    : sort === "nm_asc" ? x.distanceNm - y.distanceNm : y.distanceNm - x.distanceNm), [board, cls, status, me, sort, search]);
   const ap = board?.airports ?? {};
 
   const myRow = board?.leaderboard.find((l) => l.username.toLowerCase() === me);
@@ -91,6 +94,14 @@ function DispatchPage() {
         {([["all", "All"], ["todo", "To do"], ["done", "Completed"]] as [StatusFilter, string][]).map(([s, l]) => (
           <Chip key={s} on={status === s} onClick={() => setStatus(s)}>{l}</Chip>
         ))}
+        <span className="mx-1 w-px bg-border" />
+        <div className="relative flex items-center">
+          <Search className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-muted-foreground" />
+          <input value={search} onChange={(e) => setSearch(e.target.value.toUpperCase().slice(0, 4))} placeholder="ICAO e.g. ENVA" aria-label="Search airport ICAO"
+            className="w-36 rounded-md border border-border bg-background py-1 pl-7 pr-6 font-mono text-foreground placeholder:font-sans placeholder:text-muted-foreground" />
+          {search && <button type="button" aria-label="Clear search" onClick={() => setSearch("")} className="absolute right-1.5 text-muted-foreground hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
+        </div>
+        {search && <span className="self-center text-muted-foreground">{routes.length} route{routes.length === 1 ? "" : "s"}</span>}
         <label className="ml-auto flex items-center gap-1.5 text-muted-foreground">
           <ArrowDownUp className="h-3.5 w-3.5" />
           <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} className="rounded-md border border-border bg-background px-2 py-1 text-foreground">
@@ -237,7 +248,7 @@ function RulesInfo() {
           <li><b>Automatic:</b> completions are detected from your SimFly flight log — no need to accept anything.</li>
           <li><b>Base value:</b> 10 + distance (NM) ÷ 10.</li>
           <li><b>Hub airport ×{HUB_MEMBER_MULT}:</b> at least one airport belongs to a pilot who uses the Hub.</li>
-          <li><b>Underdog ×{UNDERDOG_MULT}:</b> at least one airport is level {UNDERDOG_MAX_LEVEL} or lower.</li>
+          <li><b>Underdog ×{UNDERDOG_MULT}:</b> at least one airport is Tier 1–{UNDERDOG_MAX_TIER}.</li>
           <li><b>Aircraft bonus on completion:</b> Tier 1–2 ×2.5 · Tier 3–4 ×1.5 · Tier 5–7 ×1.0. Unknown aircraft count as ×1.0. Points on route cards are shown before this bonus.</li>
           <li><b>Leaderboard:</b> your Airworthy Points add up across the month and reset with the next cycle.</li>
         </ul>
