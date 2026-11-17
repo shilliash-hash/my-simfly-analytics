@@ -9,7 +9,7 @@ export const CLASS_RANGES: Record<RouteClass, { min: number; max: number; label:
 
 export const HUB_MEMBER_MULT = 1.25;
 export const UNDERDOG_MULT = 1.5;
-export const UNDERDOG_MAX_LEVEL = 2;
+export const UNDERDOG_MAX_TIER = 3;
 
 export function monthKey(d = new Date()): string {
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
@@ -23,14 +23,14 @@ export function basePoints(nm: number): number {
   return 10 + Math.round(nm / 10);
 }
 
-export type EndpointInfo = { hubOwned: boolean; level: number | null };
+export type EndpointInfo = { hubOwned: boolean; tier: number | null };
 
 export function scoreRoute(nm: number, a: EndpointInfo, b: EndpointInfo) {
   const base = basePoints(nm);
   const bonuses: string[] = [];
   let mult = 1;
   if (a.hubOwned || b.hubOwned) { bonuses.push("hub_member"); mult *= HUB_MEMBER_MULT; }
-  const lowLevel = (e: EndpointInfo) => e.level != null && e.level <= UNDERDOG_MAX_LEVEL;
+  const lowLevel = (e: EndpointInfo) => e.tier != null && e.tier > 0 && e.tier <= UNDERDOG_MAX_TIER;
   if (lowLevel(a) || lowLevel(b)) { bonuses.push("underdog"); mult *= UNDERDOG_MULT; }
   return { base, mult: Math.round(mult * 100) / 100, bonuses, points: Math.round(base * mult) };
 }
