@@ -65,3 +65,23 @@ export function nextLogCursor(since: number, entries: { startedAt: number; outco
   if (pending.length) return Math.max(since, Math.min(...pending) - 1);
   return Math.max(since, ...entries.map(e => e.startedAt));
 }
+/** SimFly-owned (system) airports have no passenger pool: departures board at most 75% of seats. */
+export const SYSTEM_LOAD_FACTOR = 0.75;
+export function systemBoarding(seats: number) { return Math.floor(Math.max(0, seats) * SYSTEM_LOAD_FACTOR); }
+/** Owner label stored for SimFly-owned (system) endpoints; their 2.5% handling is a coin sink, credited to nobody. */
+export const SYSTEM_OWNER = "SimFly";
+export type RouteKind = "network" | "from-system" | "to-system" | "ineligible";
+/** Player↔player is the classic network; one system endpoint is a hybrid; system↔system earns nothing. */
+export function routeKind(originSystem: boolean, destinationSystem: boolean): RouteKind {
+  if (originSystem && destinationSystem) return "ineligible";
+  return originSystem ? "from-system" : destinationSystem ? "to-system" : "network";
+}
+/** SimFly publishes no flight log for system airports, so a hybrid flight is verified in its player airport's log (which lists departures and arrivals). */
+export function verificationAirport(origin: string, destination: string, destinationSystem: boolean) {
+  return destinationSystem ? origin : destination;
+}
+/** Arrival at a system airport: every paid passenger ends the journey there; nothing is stored. */
+export function arrivalOutcome(accepted: number, roll: number, destinationSystem: boolean) {
+  const dissolved = destinationSystem ? accepted : dissolvedPax(accepted, roll);
+  return { dissolved, stays: accepted - dissolved };
+}
