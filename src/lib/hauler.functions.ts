@@ -9,14 +9,15 @@ export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
   const db=createClient<Database>(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>{
     const headers=new Headers(init?.headers); if(key.startsWith("sb_") && headers.get("Authorization")===`Bearer ${key}`) headers.delete("Authorization"); headers.set("apikey",key);return fetch(input,{...init,headers});
   }}});
-  const [airports,aircraft,flights,worker]=await Promise.all([
+  const [airports,aircraft,flights,worker,logWorker]=await Promise.all([
     db.from("hauler_airport_state").select("*").eq("active",true).order("icao").limit(5000),
     db.from("hauler_catalogue").select("slug,icao,name,tier,seats,range_nm").order("tier").order("name"),
     db.from("hauler_flight_ledger").select("*").order("observed_at",{ascending:false}).limit(5000),
     db.from("hauler_worker_state").select("last_completed_at,error").eq("key","network").maybeSingle(),
+    db.from("hauler_worker_state").select("last_completed_at,error").eq("key","retro").maybeSingle(),
   ]);
   if(airports.error || aircraft.error || flights.error || worker.error){console.error("[hauler] board query failed",{airports:airports.error,aircraft:aircraft.error,flights:flights.error,worker:worker.error});throw new Error("Hauler data temporarily unavailable");}
-  return {airports:(airports.data??[]).map(a=>({...a,current_pax:regeneratedStock(a.current_pax,a.capacity,(Date.now()-new Date(a.regenerated_at).getTime())/3600000)})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data};
+  return {airports:(airports.data??[]).map(a=>({...a,current_pax:regeneratedStock(a.current_pax,a.capacity,(Date.now()-new Date(a.regenerated_at).getTime())/3600000)})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data,logWorker:logWorker.error?null:logWorker.data};
 });
 export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d:{origin:string;destination:string})=>{
   if(!/^[A-Z0-9]{4}$/.test(d.origin)||!/^[A-Z0-9]{4}$/.test(d.destination)||d.origin===d.destination) throw new Error("Choose two different airports");return d;
@@ -27,8 +28,13 @@ export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d
   if(!a || !b) return {distanceNm:null};
   return {distanceNm:Math.round(haversineNm(a.lat,a.lon,b.lat,b.lon))};
 });
-/** Public on-demand flight check. Safe to expose: the sweep reads only official SimFly data, is throttled to one run per 45 s and serialized by a DB lock. */
+/** Public on-demand flight check. Safe to expose: both sweeps read only official SimFly data; the live check is throttled to one run per 45 s and the log recovery to one run per hour, each serialized by the database. */
 export const syncHaulerFlights=createServerFn({method:"POST"}).handler(async()=>{
-  try {const {sweepHauler}=await import("./hauler.server");const r=await sweepHauler();return {ok:true as const,observed:r.observed,settled:r.settled,skipped:!!r.skipped};}
-  catch(error){console.error("[hauler] on-demand check failed",error instanceof Error?error.message:error);return {ok:false as const,observed:0,settled:0,skipped:false};}
+  const {sweepHauler,sweepHaulerLogs}=await import("./hauler.server");
+  let ok=true,observed=0,settled=0,skipped=false,recovered=0,logChecked=false;
+  try {const r=await sweepHauler();observed=r.observed;settled=r.settled;skipped=!!r.skipped;}
+  catch(error){ok=false;console.error("[hauler] on-demand check failed",error instanceof Error?error.message:error);}
+  try {const r=await sweepHaulerLogs();recovered=r.recovered;logChecked=!r.skipped;}
+  catch(error){console.error("[hauler] log recovery failed",error instanceof Error?error.message:error);}
+  return {ok,observed,settled,skipped,recovered,logChecked};
 });
