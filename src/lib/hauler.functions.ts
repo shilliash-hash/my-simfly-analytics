@@ -3,9 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 import { regeneratedStock } from "./hauler-rules";
 export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
-  const key=process.env['SUPABASE_PUBLISHABLE_KEY'];
-  const url=process.env['SUPABASE_URL'];
-  if(!key || !url) throw new Error("Hauler temporarily unavailable");
+  const key=process.env['SUPABASE_PUBLISHABLE_KEY']||process.env['VITE_SUPABASE_PUBLISHABLE_KEY']||process.env['SUPABASE_ANON_KEY']||process.env['VITE_SUPABASE_ANON_KEY'];
+  const url=process.env['SUPABASE_URL']||process.env['VITE_SUPABASE_URL'];
+  if(!key || !url){console.error("[hauler] missing env",{hasUrl:!!url,hasKey:!!key});throw new Error("Hauler temporarily unavailable");}
   const db=createClient<Database>(url,key,{auth:{persistSession:false,autoRefreshToken:false},global:{fetch:(input,init)=>{
     const headers=new Headers(init?.headers); if(key.startsWith("sb_") && headers.get("Authorization")===`Bearer ${key}`) headers.delete("Authorization"); headers.set("apikey",key);return fetch(input,{...init,headers});
   }}});
@@ -15,7 +15,7 @@ export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
     db.from("hauler_flight_ledger").select("*").order("observed_at",{ascending:false}).limit(5000),
     db.from("hauler_worker_state").select("last_completed_at,error").eq("key","network").maybeSingle(),
   ]);
-  if(airports.error || aircraft.error || flights.error || worker.error) throw new Error("Hauler data temporarily unavailable");
+  if(airports.error || aircraft.error || flights.error || worker.error){console.error("[hauler] board query failed",{airports:airports.error,aircraft:aircraft.error,flights:flights.error,worker:worker.error});throw new Error("Hauler data temporarily unavailable");}
   return {airports:(airports.data??[]).map(a=>({...a,current_pax:regeneratedStock(a.current_pax,a.capacity,(Date.now()-new Date(a.regenerated_at).getTime())/3600000)})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data};
 });
 export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d:{origin:string;destination:string})=>{
