@@ -53,7 +53,7 @@ function HistoryBody({ airport, flights }: { airport: Airport; flights: HistoryF
         <Line yAxisId="stock" dataKey="stock" type="monotone" stroke="var(--color-stock)" strokeOpacity={0.7} strokeWidth={1.5} dot={false} connectNulls={false} />
       </ComposedChart>
     </ChartContainer>
-    <p className="text-[11px] text-muted-foreground">Hub Hauler mini-game only — official SimFly PAX, traffic and income are not shown or affected. Bars are verified Hauler ledger movements; the waiting line is estimated from the 10% start, 1%/h regeneration and those movements{peak ? ` (peak ${peak.toLocaleString()})` : ""}.</p>
+    <p className="text-[11px] text-muted-foreground">Hub Hauler mini-game only — official SimFly PAX, traffic and income are not shown or affected. Bars are verified Hauler ledger movements; the waiting line is estimated from the 10% start, 1%/h regeneration to 95%, idle burnout, and those movements (only connecting arrivals stay){peak ? ` (peak ${peak.toLocaleString()})` : ""}.</p>
   </>;
 }
 
