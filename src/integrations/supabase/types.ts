@@ -14,6 +14,318 @@ export type Database = {
   }
   public: {
     Tables: {
+      aircraft_ownership_period: {
+        Row: {
+          aircraft_id: string
+          created_at: string
+          ended_at: string | null
+          id: string
+          owner_username: string
+          start_inferred: boolean
+          started_at: string
+          updated_at: string
+        }
+        Insert: {
+          aircraft_id: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          owner_username: string
+          start_inferred?: boolean
+          started_at: string
+          updated_at?: string
+        }
+        Update: {
+          aircraft_id?: string
+          created_at?: string
+          ended_at?: string | null
+          id?: string
+          owner_username?: string
+          start_inferred?: boolean
+          started_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      airport_identity_cache: {
+        Row: {
+          asset_id: string | null
+          country: string | null
+          dispatch_airport_active: boolean | null
+          dispatch_slots_capacity: number | null
+          dispatch_slots_fetched_at: string | null
+          dispatch_slots_used: number | null
+          fetched_at: string
+          icao: string
+          level: number | null
+          name: string | null
+          owner_username: string | null
+          payload: Json | null
+          refresh_after: string
+          tier: number | null
+        }
+        Insert: {
+          asset_id?: string | null
+          country?: string | null
+          dispatch_airport_active?: boolean | null
+          dispatch_slots_capacity?: number | null
+          dispatch_slots_fetched_at?: string | null
+          dispatch_slots_used?: number | null
+          fetched_at?: string
+          icao: string
+          level?: number | null
+          name?: string | null
+          owner_username?: string | null
+          payload?: Json | null
+          refresh_after?: string
+          tier?: number | null
+        }
+        Update: {
+          asset_id?: string | null
+          country?: string | null
+          dispatch_airport_active?: boolean | null
+          dispatch_slots_capacity?: number | null
+          dispatch_slots_fetched_at?: string | null
+          dispatch_slots_used?: number | null
+          fetched_at?: string
+          icao?: string
+          level?: number | null
+          name?: string | null
+          owner_username?: string | null
+          payload?: Json | null
+          refresh_after?: string
+          tier?: number | null
+        }
+        Relationships: []
+      }
+      airport_spy_access: {
+        Row: {
+          enabled: boolean
+          granted_at: string
+          granted_by: string | null
+          notes: string | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          enabled?: boolean
+          granted_at?: string
+          granted_by?: string | null
+          notes?: string | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          enabled?: boolean
+          granted_at?: string
+          granted_by?: string | null
+          notes?: string | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      airport_spy_pilot: {
+        Row: {
+          arrivals: number
+          departures: number
+          first_seen_at: string | null
+          icao: string
+          last_seen_at: string | null
+          observed_owner_pax: number
+          observed_pax: number
+          operations: number
+          pilot_username: string
+          updated_at: string
+        }
+        Insert: {
+          arrivals?: number
+          departures?: number
+          first_seen_at?: string | null
+          icao: string
+          last_seen_at?: string | null
+          observed_owner_pax?: number
+          observed_pax?: number
+          operations?: number
+          pilot_username: string
+          updated_at?: string
+        }
+        Update: {
+          arrivals?: number
+          departures?: number
+          first_seen_at?: string | null
+          icao?: string
+          last_seen_at?: string | null
+          observed_owner_pax?: number
+          observed_pax?: number
+          operations?: number
+          pilot_username?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      airport_spy_record: {
+        Row: {
+          arrivals: number
+          asset_id: string | null
+          country: string | null
+          created_at: string
+          departures: number
+          error_message: string | null
+          first_observed_at: string
+          flights_analyzed: number
+          icao: string
+          investigations: number
+          last_refreshed_at: string | null
+          level: number | null
+          name: string | null
+          newest_flight_at: string | null
+          oldest_flight_at: string | null
+          operations: number
+          owner_username: string | null
+          pages_walked: number
+          progress_message: string | null
+          progress_page: number
+          progress_total: number
+          status: string
+          tier: number | null
+          unique_aircraft: number
+          unique_pilots: number
+          updated_at: string
+          weeks_covered: number
+        }
+        Insert: {
+          arrivals?: number
+          asset_id?: string | null
+          country?: string | null
+          created_at?: string
+          departures?: number
+          error_message?: string | null
+          first_observed_at?: string
+          flights_analyzed?: number
+          icao: string
+          investigations?: number
+          last_refreshed_at?: string | null
+          level?: number | null
+          name?: string | null
+          newest_flight_at?: string | null
+          oldest_flight_at?: string | null
+          operations?: number
+          owner_username?: string | null
+          pages_walked?: number
+          progress_message?: string | null
+          progress_page?: number
+          progress_total?: number
+          status?: string
+          tier?: number | null
+          unique_aircraft?: number
+          unique_pilots?: number
+          updated_at?: string
+          weeks_covered?: number
+        }
+        Update: {
+          arrivals?: number
+          asset_id?: string | null
+          country?: string | null
+          created_at?: string
+          departures?: number
+          error_message?: string | null
+          first_observed_at?: string
+          flights_analyzed?: number
+          icao?: string
+          investigations?: number
+          last_refreshed_at?: string | null
+          level?: number | null
+          name?: string | null
+          newest_flight_at?: string | null
+          oldest_flight_at?: string | null
+          operations?: number
+          owner_username?: string | null
+          pages_walked?: number
+          progress_message?: string | null
+          progress_page?: number
+          progress_total?: number
+          status?: string
+          tier?: number | null
+          unique_aircraft?: number
+          unique_pilots?: number
+          updated_at?: string
+          weeks_covered?: number
+        }
+        Relationships: []
+      }
+      airport_spy_traffic: {
+        Row: {
+          bucket: string
+          dimension: string
+          flights: number
+          icao: string
+          observed_owner_pax: number
+          observed_pax: number
+          updated_at: string
+        }
+        Insert: {
+          bucket: string
+          dimension: string
+          flights?: number
+          icao: string
+          observed_owner_pax?: number
+          observed_pax?: number
+          updated_at?: string
+        }
+        Update: {
+          bucket?: string
+          dimension?: string
+          flights?: number
+          icao?: string
+          observed_owner_pax?: number
+          observed_pax?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      airport_spy_week: {
+        Row: {
+          arrivals: number
+          departures: number
+          flights_observed: number
+          icao: string
+          observed_owner_pax: number
+          observed_pax: number
+          operations: number
+          unique_aircraft: number
+          unique_pilots: number
+          updated_at: string
+          week_start_utc: string
+        }
+        Insert: {
+          arrivals?: number
+          departures?: number
+          flights_observed?: number
+          icao: string
+          observed_owner_pax?: number
+          observed_pax?: number
+          operations?: number
+          unique_aircraft?: number
+          unique_pilots?: number
+          updated_at?: string
+          week_start_utc: string
+        }
+        Update: {
+          arrivals?: number
+          departures?: number
+          flights_observed?: number
+          icao?: string
+          observed_owner_pax?: number
+          observed_pax?: number
+          operations?: number
+          unique_aircraft?: number
+          unique_pilots?: number
+          updated_at?: string
+          week_start_utc?: string
+        }
+        Relationships: []
+      }
       airport_upgrade_cache: {
         Row: {
           generated_at: string
@@ -80,6 +392,96 @@ export type Database = {
         }
         Relationships: []
       }
+      alliance_build_item: {
+        Row: {
+          attempts: number
+          build_id: string
+          key: string
+          kind: string
+          payload: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          build_id: string
+          key: string
+          kind: string
+          payload?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          build_id?: string
+          key?: string
+          kind?: string
+          payload?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      alliance_build_job: {
+        Row: {
+          airports_done: number
+          airports_total: number
+          build_id: string
+          error_message: string | null
+          phase: string
+          pilots_done: number
+          pilots_total: number
+          started_at: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          airports_done?: number
+          airports_total?: number
+          build_id?: string
+          error_message?: string | null
+          phase?: string
+          pilots_done?: number
+          pilots_total?: number
+          started_at?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          airports_done?: number
+          airports_total?: number
+          build_id?: string
+          error_message?: string | null
+          phase?: string
+          pilots_done?: number
+          pilots_total?: number
+          started_at?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      alliance_intel_cache: {
+        Row: {
+          generated_at: string
+          payload: Json
+          refresh_after: string
+          username: string
+        }
+        Insert: {
+          generated_at?: string
+          payload: Json
+          refresh_after: string
+          username: string
+        }
+        Update: {
+          generated_at?: string
+          payload?: Json
+          refresh_after?: string
+          username?: string
+        }
+        Relationships: []
+      }
       app_settings: {
         Row: {
           key: string
@@ -95,6 +497,45 @@ export type Database = {
           key?: string
           updated_at?: string
           value?: Json
+        }
+        Relationships: []
+      }
+      asset_watch_state: {
+        Row: {
+          asset_key: string
+          asset_kind: string
+          consecutive_failures: number
+          created_at: string
+          last_error: string | null
+          last_flight_at: string | null
+          last_flight_id: string | null
+          last_probed_at: string | null
+          owner_username: string
+          updated_at: string
+        }
+        Insert: {
+          asset_key: string
+          asset_kind: string
+          consecutive_failures?: number
+          created_at?: string
+          last_error?: string | null
+          last_flight_at?: string | null
+          last_flight_id?: string | null
+          last_probed_at?: string | null
+          owner_username: string
+          updated_at?: string
+        }
+        Update: {
+          asset_key?: string
+          asset_kind?: string
+          consecutive_failures?: number
+          created_at?: string
+          last_error?: string | null
+          last_flight_at?: string | null
+          last_flight_id?: string | null
+          last_probed_at?: string | null
+          owner_username?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -137,6 +578,39 @@ export type Database = {
           total_pages?: number
           updated_at?: string
           username?: string
+        }
+        Relationships: []
+      }
+      community_traffic_observation: {
+        Row: {
+          aircraft_icao: string | null
+          aircraft_name: string | null
+          destination_icao: string | null
+          first_seen_at: string
+          flight_id: string
+          origin_icao: string | null
+          username: string | null
+          week_start_utc: string
+        }
+        Insert: {
+          aircraft_icao?: string | null
+          aircraft_name?: string | null
+          destination_icao?: string | null
+          first_seen_at?: string
+          flight_id: string
+          origin_icao?: string | null
+          username?: string | null
+          week_start_utc: string
+        }
+        Update: {
+          aircraft_icao?: string | null
+          aircraft_name?: string | null
+          destination_icao?: string | null
+          first_seen_at?: string
+          flight_id?: string
+          origin_icao?: string | null
+          username?: string | null
+          week_start_utc?: string
         }
         Relationships: []
       }
@@ -223,7 +697,171 @@ export type Database = {
         }
         Relationships: []
       }
-      
+      hauler_airport_state: {
+        Row: {
+          active: boolean
+          capacity: number
+          created_at: string
+          current_pax: number
+          icao: string
+          level: number
+          name: string
+          owner_username: string
+          regenerated_at: string
+          tier: number
+        }
+        Insert: {
+          active?: boolean
+          capacity: number
+          created_at?: string
+          current_pax: number
+          icao: string
+          level?: number
+          name: string
+          owner_username: string
+          regenerated_at?: string
+          tier: number
+        }
+        Update: {
+          active?: boolean
+          capacity?: number
+          created_at?: string
+          current_pax?: number
+          icao?: string
+          level?: number
+          name?: string
+          owner_username?: string
+          regenerated_at?: string
+          tier?: number
+        }
+        Relationships: []
+      }
+      hauler_catalogue: {
+        Row: {
+          fetched_at: string
+          icao: string
+          name: string
+          range_nm: number | null
+          seats: number
+          slug: string
+          tier: number
+        }
+        Insert: {
+          fetched_at?: string
+          icao: string
+          name: string
+          range_nm?: number | null
+          seats: number
+          slug: string
+          tier: number
+        }
+        Update: {
+          fetched_at?: string
+          icao?: string
+          name?: string
+          range_nm?: number | null
+          seats?: number
+          slug?: string
+          tier?: number
+        }
+        Relationships: []
+      }
+      hauler_flight_ledger: {
+        Row: {
+          accepted: number
+          aircraft_icao: string
+          aircraft_tier: number
+          boarded: number
+          costs: number
+          departure_at: string
+          destination_fee: number
+          destination_icao: string
+          destination_owner: string
+          distance_nm: number
+          flight_id: string
+          gross: number
+          net: number
+          observed_at: string
+          origin_fee: number
+          origin_icao: string
+          origin_owner: string
+          pilot_username: string
+          seats: number
+          settled_at: string | null
+          status: string
+          unpaid: number
+        }
+        Insert: {
+          accepted?: number
+          aircraft_icao: string
+          aircraft_tier: number
+          boarded?: number
+          costs?: number
+          departure_at: string
+          destination_fee?: number
+          destination_icao: string
+          destination_owner: string
+          distance_nm?: number
+          flight_id: string
+          gross?: number
+          net?: number
+          observed_at?: string
+          origin_fee?: number
+          origin_icao: string
+          origin_owner: string
+          pilot_username: string
+          seats: number
+          settled_at?: string | null
+          status?: string
+          unpaid?: number
+        }
+        Update: {
+          accepted?: number
+          aircraft_icao?: string
+          aircraft_tier?: number
+          boarded?: number
+          costs?: number
+          departure_at?: string
+          destination_fee?: number
+          destination_icao?: string
+          destination_owner?: string
+          distance_nm?: number
+          flight_id?: string
+          gross?: number
+          net?: number
+          observed_at?: string
+          origin_fee?: number
+          origin_icao?: string
+          origin_owner?: string
+          pilot_username?: string
+          seats?: number
+          settled_at?: string | null
+          status?: string
+          unpaid?: number
+        }
+        Relationships: []
+      }
+      hauler_worker_state: {
+        Row: {
+          error: string | null
+          key: string
+          last_completed_at: string | null
+          last_started_at: string
+        }
+        Insert: {
+          error?: string | null
+          key: string
+          last_completed_at?: string | null
+          last_started_at?: string
+        }
+        Update: {
+          error?: string | null
+          key?: string
+          last_completed_at?: string | null
+          last_started_at?: string
+        }
+        Relationships: []
+      }
       hub_support: {
         Row: {
           activated_at: string
@@ -257,6 +895,33 @@ export type Database = {
         }
         Relationships: []
       }
+      module_usage_daily: {
+        Row: {
+          created_at: string
+          day: string
+          hits: number
+          last_seen_at: string
+          module: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          day?: string
+          hits?: number
+          last_seen_at?: string
+          module: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          hits?: number
+          last_seen_at?: string
+          module?: string
+          username?: string
+        }
+        Relationships: []
+      }
       pilot_nonces: {
         Row: {
           created_at: string
@@ -278,6 +943,153 @@ export type Database = {
         }
         Relationships: []
       }
+      pilot_presence: {
+        Row: {
+          created_at: string
+          hit_count: number
+          last_action: string
+          last_seen_at: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          hit_count?: number
+          last_action?: string
+          last_seen_at?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          hit_count?: number
+          last_action?: string
+          last_seen_at?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      pilot_sync_state: {
+        Row: {
+          consecutive_failures: number
+          created_at: string
+          enabled: boolean
+          last_error: string | null
+          last_flight_at: string | null
+          last_imported_count: number
+          last_synced_at: string | null
+          next_sync_after: string
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          last_error?: string | null
+          last_flight_at?: string | null
+          last_imported_count?: number
+          last_synced_at?: string | null
+          next_sync_after?: string
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          consecutive_failures?: number
+          created_at?: string
+          enabled?: boolean
+          last_error?: string | null
+          last_flight_at?: string | null
+          last_imported_count?: number
+          last_synced_at?: string | null
+          next_sync_after?: string
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      pilot_teams: {
+        Row: {
+          created_at: string
+          member_username: string
+          owner_username: string
+        }
+        Insert: {
+          created_at?: string
+          member_username: string
+          owner_username: string
+        }
+        Update: {
+          created_at?: string
+          member_username?: string
+          owner_username?: string
+        }
+        Relationships: []
+      }
+      portfolio_horizon: {
+        Row: {
+          created_at: string
+          horizon_started_at: string
+          rule_registry_version: string
+          username: string
+          weights_version: string
+        }
+        Insert: {
+          created_at?: string
+          horizon_started_at?: string
+          rule_registry_version: string
+          username: string
+          weights_version: string
+        }
+        Update: {
+          created_at?: string
+          horizon_started_at?: string
+          rule_registry_version?: string
+          username?: string
+          weights_version?: string
+        }
+        Relationships: []
+      }
+      portfolio_snapshot_week: {
+        Row: {
+          composites: Json
+          created_at: string
+          degraded_sources: string[]
+          inputs_frozen: Json
+          recommendations: Json
+          rule_registry_version: string
+          source_versions: Json
+          username: string
+          week_start_utc: string
+          weights_version: string
+        }
+        Insert: {
+          composites: Json
+          created_at?: string
+          degraded_sources?: string[]
+          inputs_frozen: Json
+          recommendations: Json
+          rule_registry_version: string
+          source_versions: Json
+          username: string
+          week_start_utc: string
+          weights_version: string
+        }
+        Update: {
+          composites?: Json
+          created_at?: string
+          degraded_sources?: string[]
+          inputs_frozen?: Json
+          recommendations?: Json
+          rule_registry_version?: string
+          source_versions?: Json
+          username?: string
+          week_start_utc?: string
+          weights_version?: string
+        }
+        Relationships: []
+      }
       simfly_flights: {
         Row: {
           aircraft: string | null
@@ -290,6 +1102,7 @@ export type Database = {
           destination_name: string | null
           flight_id: string
           flight_time: string | null
+          grounded_until: string | null
           landing_rate: number | null
           licence: string | null
           licence_rank: number | null
@@ -314,6 +1127,7 @@ export type Database = {
           destination_name?: string | null
           flight_id: string
           flight_time?: string | null
+          grounded_until?: string | null
           landing_rate?: number | null
           licence?: string | null
           licence_rank?: number | null
@@ -338,6 +1152,7 @@ export type Database = {
           destination_name?: string | null
           flight_id?: string
           flight_time?: string | null
+          grounded_until?: string | null
           landing_rate?: number | null
           licence?: string | null
           licence_rank?: number | null
@@ -353,12 +1168,123 @@ export type Database = {
         }
         Relationships: []
       }
+      system_airport_scan: {
+        Row: {
+          created_at: string
+          cursor_index: number
+          error_message: string | null
+          last_scanned_at: string | null
+          message: string | null
+          resolved: number
+          scan_key: string
+          status: string
+          tiers: string
+          total: number
+          updated_at: string
+          username: string
+          window_days: number
+        }
+        Insert: {
+          created_at?: string
+          cursor_index?: number
+          error_message?: string | null
+          last_scanned_at?: string | null
+          message?: string | null
+          resolved?: number
+          scan_key: string
+          status?: string
+          tiers?: string
+          total?: number
+          updated_at?: string
+          username: string
+          window_days?: number
+        }
+        Update: {
+          created_at?: string
+          cursor_index?: number
+          error_message?: string | null
+          last_scanned_at?: string | null
+          message?: string | null
+          resolved?: number
+          scan_key?: string
+          status?: string
+          tiers?: string
+          total?: number
+          updated_at?: string
+          username?: string
+          window_days?: number
+        }
+        Relationships: []
+      }
+      system_airport_watch: {
+        Row: {
+          created_at: string
+          icao: string
+          id: string
+          last_opened_at: string | null
+          notes: string | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          created_at?: string
+          icao: string
+          id?: string
+          last_opened_at?: string | null
+          notes?: string | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          created_at?: string
+          icao?: string
+          id?: string
+          last_opened_at?: string | null
+          notes?: string | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      hauler_acquire_sweep: { Args: never; Returns: boolean }
+      hauler_observe_flight: {
+        Args: {
+          _aircraft: string
+          _departure: string
+          _destination: string
+          _flight_id: string
+          _origin: string
+          _pilot: string
+          _seats: number
+          _tier: number
+        }
+        Returns: undefined
+      }
+      hauler_refresh_stock: { Args: { _icao: string }; Returns: undefined }
+      hauler_settle_flight: {
+        Args: {
+          _destination: string
+          _distance: number
+          _flight_id: string
+          _landed: string
+          _origin: string
+          _pilot: string
+        }
+        Returns: undefined
+      }
+      touch_module_usage: {
+        Args: { _module: string; _username: string }
+        Returns: undefined
+      }
+      touch_pilot_presence: {
+        Args: { _action: string; _username: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never
@@ -377,12 +1303,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -406,11 +1332,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -431,11 +1357,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -456,11 +1382,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -473,11 +1399,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
