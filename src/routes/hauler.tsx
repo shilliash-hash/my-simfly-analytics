@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, ArrowRightLeft, CircleHelp, Home, Plane, RefreshCw, Search, Users } from "lucide-react";
 import { AppShell, PageHeader } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { HubCoin } from "@/components/hub-coin";
-import { getHaulerBoard, getHaulerDistance } from "@/lib/hauler.functions";
+import { getHaulerBoard, getHaulerDistance, syncHaulerFlights } from "@/lib/hauler.functions";
 import { charterSurcharge, operationalCost, predictHaul } from "@/lib/hauler-rules";
 import { useSimflyArgs } from "@/lib/viewed-user";
 import { cn } from "@/lib/utils";
@@ -30,6 +30,21 @@ function HaulerPage(){
   const pilot=args.username??"";
   const fetchBoard=useServerFn(getHaulerBoard),fetchDistance=useServerFn(getHaulerDistance);
   const q=useQuery({queryKey:["hauler",args.keyTag],queryFn:()=>fetchBoard(),refetchInterval:60000});
+  const runSync=useServerFn(syncHaulerFlights);
+  const [tab,setTab]=useState("network");
+  const lastSync=useRef(0);
+  const sync=useMutation({mutationFn:()=>runSync(),onSettled:()=>{void q.refetch();}});
+  const triggerSync=useCallback((force=false)=>{
+    if(sync.isPending) return;
+    if(!force&&Date.now()-lastSync.current<45_000) return;
+    lastSync.current=Date.now();sync.mutate();
+  },[sync]);
+  useEffect(()=>{
+    if(tab!=="flights") return;
+    const t=setTimeout(()=>triggerSync(),400);
+    const i=setInterval(()=>triggerSync(),180_000);
+    return ()=>{clearTimeout(t);clearInterval(i);};
+  },[tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const [mainHub,setMainHub]=useState("");
   const [origin,setOrigin]=useState("");const [destination,setDestination]=useState("");const [aircraft,setAircraft]=useState("");
   const [search,setSearch]=useState("");const [ownOnly,setOwnOnly]=useState(false);
@@ -49,7 +64,7 @@ function HaulerPage(){
   const shown=useMemo(()=>(board?.airports??[]).filter(a=>(!ownOnly||a.owner_username.toLowerCase()===pilot.toLowerCase())&&(`${a.icao} ${a.name} ${a.owner_username}`).toLowerCase().includes(search.toLowerCase())),[board,ownOnly,pilot,search]);
   const selectAirport=(icao:string)=>{if(!origin)setOrigin(icao);else if(icao!==origin)setDestination(icao);};
   return <AppShell>
-    <PageHeader eyebrow="Community passenger operations" title="Hub Hauler" actions={<><Rules/><Button size="icon" variant="outline" aria-label="Refresh Hauler" title="Refresh Hauler" onClick={()=>void q.refetch()} disabled={q.isFetching}><RefreshCw className={cn("h-4 w-4",q.isFetching&&"animate-spin motion-reduce:animate-none")}/></Button></>}/>
+    <PageHeader eyebrow="Community passenger operations" title="Hub Hauler" actions={<><Rules/><Button size="icon" variant="outline" aria-label="Refresh Hauler" title="Refresh Hauler" onClick={()=>{triggerSync(true);void q.refetch();}} disabled={q.isFetching||sync.isPending}><RefreshCw className={cn("h-4 w-4",(q.isFetching||sync.isPending)&&"animate-spin motion-reduce:animate-none")}/></Button></>}/>
     {q.isError&&<div role="alert" className="mb-4 border-l-2 border-destructive pl-3 text-sm text-destructive">Passenger network unavailable. <Button variant="link" onClick={()=>void q.refetch()}>Retry</Button></div>}
     <div className="mb-6 grid grid-cols-2 gap-3 xl:grid-cols-4">
       <Metric label="Hub-coin balance"><HubCoin/>{pilot?coins(earnings+handling):"—"}</Metric>
@@ -86,17 +101,27 @@ function HaulerPage(){
         <p className="mt-3 text-[11px] text-muted-foreground">Estimate at current stocks. Actual arrivals may differ; settlement requires a successful SimFly flight.</p>
       </div>
     </section>
-    <Tabs defaultValue="network"><TabsList className="mb-4"><TabsTrigger value="network">Airport network</TabsTrigger><TabsTrigger value="flights">Flight ledger</TabsTrigger><TabsTrigger value="income">Income sheet</TabsTrigger></TabsList>
+    <Tabs value={tab} onValueChange={setTab}><TabsList className="mb-4"><TabsTrigger value="network">Airport network</TabsTrigger><TabsTrigger value="flights">Flight ledger</TabsTrigger><TabsTrigger value="income">Income sheet</TabsTrigger></TabsList>
       <TabsContent value="network"><div className="mb-4 flex flex-wrap items-center gap-3"><div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground"/><Input aria-label="Search network airports" placeholder="ICAO, airport or owner" value={search} onChange={e=>setSearch(e.target.value)} className="pl-9"/></div><label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={ownOnly} onChange={e=>setOwnOnly(e.target.checked)}/>My airports</label><span className="text-xs text-muted-foreground">{shown.length} airports</span></div>
         {q.isPending&&<p className="py-8 text-sm text-muted-foreground">Loading passenger network…</p>}
         {!q.isPending&&shown.length===0&&<p className="py-8 text-sm text-muted-foreground">No airports match.</p>}
         <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">{shown.map(a=>{const pct=a.current_pax/a.capacity*100;return <div key={a.icao} className="min-w-0 rounded-lg border border-border bg-secondary/10 p-4"><div className="flex items-center justify-between"><span className="font-mono text-lg font-semibold">{a.icao}{a.icao===mainHub&&<Home className="ml-2 inline h-4 w-4 text-runway"/>}</span><span className="font-mono text-xs text-muted-foreground">T{a.tier} · L{a.level}</span></div><p className="mt-1 truncate text-sm" title={a.name}>{a.name}</p><p className="mt-1 truncate text-xs text-muted-foreground">@{a.owner_username}</p><div className="mb-2 mt-4 flex items-center justify-between text-xs"><span className="font-mono">{Math.floor(a.current_pax).toLocaleString()} / {Math.round(a.capacity).toLocaleString()} PAX</span><span className={pct>100?"text-runway":"text-muted-foreground"}>{pct.toFixed(1)}%</span></div><Progress value={Math.min(100,pct/1.5)} aria-label={`${a.icao} stock, ${pct.toFixed(1)}% of nominal capacity`}/><div className="mt-3 flex items-center justify-between gap-2"><span className={cn("text-xs",pct<20?"text-instrument":"text-muted-foreground")}>{pct>100?"Surplus":pct<20?"Low stock":"Available"}</span><Button size="sm" variant="ghost" onClick={()=>selectAirport(a.icao)}>{origin&&origin!==a.icao?"Set arrival":"Set departure"}<ArrowRight className="ml-1 h-3 w-3"/></Button></div></div>;})}</div>
       </TabsContent>
-      <TabsContent value="flights"><FlightTable flights={personal.length?personal:board?.flights??[]}/></TabsContent>
+      <TabsContent value="flights"><SyncStatus pending={sync.isPending} result={sync.data} failed={sync.isError} onSync={()=>triggerSync(true)}/><FlightTable flights={personal.length?personal:board?.flights??[]}/></TabsContent>
       <TabsContent value="income"><div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground"><HubCoin/>@{pilot||"—"} · Hub Hauler only</div><div className="grid gap-3 sm:grid-cols-3"><Metric label="Flight net"><HubCoin/>{coins(earnings)}</Metric><Metric label="Handling fees"><HubCoin/>{coins(handling)}</Metric><Metric label="Total balance"><HubCoin/>{coins(earnings+handling)}</Metric></div><h3 className="mb-3 mt-6 font-semibold">Airport handling</h3><div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="border-b border-border text-xs text-muted-foreground"><tr><th className="py-3">Flight</th><th>Airport</th><th>Handled PAX</th><th>Hub-coins</th></tr></thead><tbody>{ownerRows.flatMap(f=>[{icao:f.origin_icao,owner:f.origin_owner,pax:f.boarded,fee:f.origin_fee},{icao:f.destination_icao,owner:f.destination_owner,pax:f.accepted,fee:f.destination_fee}].filter(r=>r.owner.toLowerCase()===pilot.toLowerCase()).map(r=><tr key={`${f.flight_id}-${r.icao}`} className="border-b border-border/50"><td className="py-3">@{f.pilot_username}</td><td className="font-mono">{r.icao}</td><td>{r.pax}</td><td><HubCoin className="mr-1 h-4 w-4"/>{coins(r.fee)}</td></tr>))}</tbody></table></div>{!ownerRows.length&&<p className="py-5 text-sm text-muted-foreground">No verified handling income yet.</p>}</TabsContent>
     </Tabs>
     <p className="mt-6 text-[11px] text-muted-foreground">Last flight check: {board?.worker?.last_completed_at?new Date(board.worker.last_completed_at).toLocaleString("en-GB",{timeZone:"UTC"})+" UTC":"Awaiting first check"}{board?.worker?.error&&` · ${board.worker.error}`}</p>
   </AppShell>;
+}
+function SyncStatus({pending,result,failed,onSync}:{pending:boolean;result?:{ok:boolean;observed:number;settled:number;skipped:boolean};failed:boolean;onSync:()=>void}){
+  const [at,setAt]=useState<string|null>(null);
+  useEffect(()=>{if(result)setAt(new Date().toLocaleTimeString("en-GB",{hour:"2-digit",minute:"2-digit"}));},[result]);
+  const bad=failed||result?.ok===false;
+  const text=pending?"Checking SimFly for new flights…":bad?"Flight check unavailable right now. Try again shortly.":result?(result.observed||result.settled?`${result.observed} new · ${result.settled} settled · checked ${at}`:(result.skipped?`Checked moments ago · refreshed ${at}`:`Up to date · checked ${at}`)):"Flights are checked automatically when you open this tab.";
+  return <div role="status" aria-live="polite" className="mb-3 flex items-center justify-between gap-3 border-l-2 border-runway/60 pl-3 text-xs">
+    <span className={cn("flex items-center gap-2",bad?"text-instrument":"text-muted-foreground")}><RefreshCw className={cn("h-3.5 w-3.5",pending&&"animate-spin text-runway motion-reduce:animate-none")}/>{text}</span>
+    <Button size="sm" variant="ghost" onClick={onSync} disabled={pending}>Check now</Button>
+  </div>;
 }
 function Metric({label,children}:{label:string;children:React.ReactNode}){return <div className="min-w-0 rounded-lg border border-border bg-secondary/20 p-4"><p className="text-[11px] uppercase text-muted-foreground">{label}</p><div className="mt-3 flex flex-wrap items-center gap-2 break-all font-mono text-xl">{children}</div></div>;}
 function PredictionNumber({label,n,warning}:{label:string;n?:number;warning?:boolean}){return <div><p className="text-[11px] text-muted-foreground">{label}</p><p className={cn("mt-1 font-mono text-2xl",warning&&n?"text-instrument":"text-foreground")}>{n??"—"}</p></div>;}
