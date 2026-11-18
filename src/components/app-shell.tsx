@@ -39,6 +39,7 @@ const NAV = [
   { to: "/income", label: "Income", icon: Coins },
   { to: "/radar", label: "Community Radar", icon: Radar },
   { to: "/dispatch", label: "Dispatch Center", icon: Route },
+  { to: "/hauler", label: "Hub Hauler", icon: Plane },
   { to: "/airports",   label: "Airports",  icon: Building2 },
   // { to: "/airport-command", label: "Airport Command", icon: Radio },
   { to: "/aircraft",   label: "Aircraft",  icon: Plane },
