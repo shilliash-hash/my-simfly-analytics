@@ -20,13 +20,28 @@ export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
   return {airports:(airports.data??[]).map(a=>({...a,current_pax:projectedStock(a.current_pax,a.capacity,new Date(a.regenerated_at).getTime(),Date.now(),new Date(a.last_departure_at??a.created_at).getTime())})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data,logWorker:logWorker.error?null:logWorker.data};
 });
 export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d:{origin:string;destination:string})=>{
-  if(!/^[A-Z0-9]{4}$/.test(d.origin)||!/^[A-Z0-9]{4}$/.test(d.destination)||d.origin===d.destination) throw new Error("Choose two different airports");return d;
+  if(!/^[A-Z0-9]{2,5}$/.test(d.origin)||!/^[A-Z0-9]{2,5}$/.test(d.destination)||d.origin===d.destination) throw new Error("Choose two different airports");return d;
 }).handler(async({data})=>{
-  const {loadGeo}=await import("./simfly.functions");
   const {haversineNm}=await import("./dispatch-rules");
+  try {
+    const {systemCatalogue}=await import("./hauler-system.server");
+    const {byIcao}=await systemCatalogue();const a=byIcao.get(data.origin),b=byIcao.get(data.destination);
+    if(a&&b) return {distanceNm:Math.round(haversineNm(a.lat,a.lng,b.lat,b.lng))};
+  } catch { /* fall back to OpenFlights below */ }
+  const {loadGeo}=await import("./simfly.functions");
   const geo=await loadGeo();const a=geo.get(data.origin),b=geo.get(data.destination);
   if(!a || !b) return {distanceNm:null};
   return {distanceNm:Math.round(haversineNm(a.lat,a.lon,b.lat,b.lon))};
+});
+/** Public prefix search over SimFly's airport catalogue for the planner (display only). */
+export const searchHaulerAirports=createServerFn({method:"POST"}).inputValidator((d:{q:string})=>{
+  const q=String(d.q??"").trim().toUpperCase().slice(0,40);if(!q) throw new Error("Empty search");return {q};
+}).handler(async({data})=>{
+  const {systemCatalogue}=await import("./hauler-system.server");
+  const {list}=await systemCatalogue();const q=data.q;
+  const byCode=list.filter(a=>a.icao.startsWith(q));
+  const byName=q.length>=3?list.filter(a=>!a.icao.startsWith(q)&&a.name.toUpperCase().includes(q)):[];
+  return [...byCode.sort((a,b)=>a.icao.length-b.icao.length||a.icao.localeCompare(b.icao)),...byName].slice(0,20).map(({icao,name,tier,country,owner})=>({icao,name,tier,country,system:!owner,owner:owner??null}));
 });
 /** Public on-demand flight check. Safe to expose: both sweeps read only official SimFly data; the live check is throttled to one run per 45 s and the log recovery to one run per hour, each serialized by the database. */
 export const syncHaulerFlights=createServerFn({method:"POST"}).handler(async()=>{
