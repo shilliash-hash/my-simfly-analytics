@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
-import { regeneratedStock } from "./hauler-rules";
+import { projectedStock } from "./hauler-rules";
 export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
   const key=process.env['SUPABASE_PUBLISHABLE_KEY']||process.env['VITE_SUPABASE_PUBLISHABLE_KEY']||process.env['SUPABASE_ANON_KEY']||process.env['VITE_SUPABASE_ANON_KEY'];
   const url=process.env['SUPABASE_URL']||process.env['VITE_SUPABASE_URL'];
@@ -17,7 +17,7 @@ export const getHaulerBoard = createServerFn({method:"GET"}).handler(async()=>{
     db.from("hauler_worker_state").select("last_completed_at,error").eq("key","retro").maybeSingle(),
   ]);
   if(airports.error || aircraft.error || flights.error || worker.error){console.error("[hauler] board query failed",{airports:airports.error,aircraft:aircraft.error,flights:flights.error,worker:worker.error});throw new Error("Hauler data temporarily unavailable");}
-  return {airports:(airports.data??[]).map(a=>({...a,current_pax:regeneratedStock(a.current_pax,a.capacity,(Date.now()-new Date(a.regenerated_at).getTime())/3600000)})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data,logWorker:logWorker.error?null:logWorker.data};
+  return {airports:(airports.data??[]).map(a=>({...a,current_pax:projectedStock(a.current_pax,a.capacity,new Date(a.regenerated_at).getTime(),Date.now(),new Date(a.last_departure_at??a.created_at).getTime())})),aircraft:aircraft.data??[],flights:flights.data??[],worker:worker.data,logWorker:logWorker.error?null:logWorker.data};
 });
 export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d:{origin:string;destination:string})=>{
   if(!/^[A-Z0-9]{4}$/.test(d.origin)||!/^[A-Z0-9]{4}$/.test(d.destination)||d.origin===d.destination) throw new Error("Choose two different airports");return d;
