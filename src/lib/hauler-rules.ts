@@ -9,8 +9,33 @@ export function nominalCapacity(tier: number, level: number): number {
   return base * (1 + 0.1 * (Math.max(1, level) - 1));
 }
 export function initialStock(capacity: number) { return capacity * 0.1; }
-export function regeneratedStock(stock: number, capacity: number, hours: number) {
-  return stock >= capacity ? Math.min(stock, capacity * 1.5) : Math.min(capacity, stock + capacity * 0.01 * Math.max(0, hours));
+/** Natural regeneration rests at 95% of nominal capacity; anything above is the transit pool. */
+export const NATURAL_CAP = 0.95;
+/** Hours without a departure before the transit pool starts to burn out. */
+export const BURNOUT_IDLE_HOURS = 24;
+/** Regeneration and burnout both move 1% of nominal capacity per hour. */
+export const HOURLY_RATE = 0.01;
+/** Share of paid arriving PAX whose journey ends at the arrival airport (random per flight). */
+export const DISSOLVE_MIN = 0.4;
+export const DISSOLVE_MAX = 0.6;
+/** Below 95%: +1%/h up to 95%. At/above 95%: −1%/h during idle burnout hours, never below 95%, never above 150%. */
+export function regeneratedStock(stock: number, capacity: number, hours: number, burnoutHours = 0) {
+  const floor = capacity * NATURAL_CAP;
+  if (stock < floor) return Math.min(floor, stock + capacity * HOURLY_RATE * Math.max(0, hours));
+  return Math.min(capacity * 1.5, Math.max(floor, stock - capacity * HOURLY_RATE * Math.max(0, burnoutHours)));
+}
+/** Hours of the interval [from, to] that fall after 24 h without a departure. */
+export function burnoutHours(from: number, to: number, lastDepartureAt: number) {
+  return Math.max(0, (to - Math.max(from, lastDepartureAt + BURNOUT_IDLE_HOURS * 3600_000)) / 3600_000);
+}
+/** Stock at `to`, starting from `stock` at `from`, given the last departure time (or opening time if none). */
+export function projectedStock(stock: number, capacity: number, from: number, to: number, lastDepartureAt: number) {
+  return regeneratedStock(stock, capacity, (to - from) / 3600_000, burnoutHours(from, to, lastDepartureAt));
+}
+/** PAX that end their journey on arrival; roll in [0,1] maps to 40–60% of paid PAX. The rest stay for connections. */
+export function dissolvedPax(accepted: number, roll: number) {
+  const r = Math.min(1, Math.max(0, roll));
+  return Math.round(accepted * (DISSOLVE_MIN + (DISSOLVE_MAX - DISSOLVE_MIN) * r));
 }
 export function operationalCost(tier: number) {
   if (!Number.isInteger(tier) || tier < 1 || tier > 7) throw new Error("Unknown aircraft tier");
@@ -25,7 +50,8 @@ export function predictHaul(input: { stock: number; seats: number; destinationSt
   const costs = coinRound(boarded * rate * operationalCost(input.tier));
   const fee = coinRound(gross * HANDLING_RATE);
   return { boarded, accepted, unpaid: boarded - accepted, rate, gross, costs, net: coinRound(gross - costs - 2 * fee), originFee: fee, destinationFee: fee };
-}/** Missed-flight recovery from official SimFly logs runs at most once per this many minutes. */
+}
+/** Missed-flight recovery from official SimFly logs runs at most once per this many minutes. */
 export const LOG_SWEEP_MINUTES = 60;
 /** A flight not yet visible in the arrival log is retried until SimFly has had this long to publish it. */
 export const LOG_PUBLISH_GRACE_MS = 3 * 3600_000;
