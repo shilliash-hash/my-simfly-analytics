@@ -27,3 +27,8 @@ export const getHaulerDistance=createServerFn({method:"POST"}).inputValidator((d
   if(!a || !b) return {distanceNm:null};
   return {distanceNm:Math.round(haversineNm(a.lat,a.lon,b.lat,b.lon))};
 });
+/** Public on-demand flight check. Safe to expose: the sweep reads only official SimFly data, is throttled to one run per 45 s and serialized by a DB lock. */
+export const syncHaulerFlights=createServerFn({method:"POST"}).handler(async()=>{
+  try {const {sweepHauler}=await import("./hauler.server");const r=await sweepHauler();return {ok:true as const,observed:r.observed,settled:r.settled,skipped:!!r.skipped};}
+  catch(error){console.error("[hauler] on-demand check failed",error instanceof Error?error.message:error);return {ok:false as const,observed:0,settled:0,skipped:false};}
+});
