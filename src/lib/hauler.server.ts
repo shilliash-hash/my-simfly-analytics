@@ -1,4 +1,4 @@
-import { nominalCapacity } from "./hauler-rules";
+import { nominalCapacity, missingLogOutcome, nextLogCursor, type LogOutcome } from "./hauler-rules";
 type Product = { slug: string; icao: string; name: string; category: number; attributes?: { passengers?: number; range?: number } };
 type Airport = { icao: string; name: string; active?: boolean; category: number; level: number; owner?: { username?: string } };
 type Live = { id: string; username: string; originICAO: string; destinationICAO: string; aircraftICAO: string; slug: string; startTime: string };
@@ -110,4 +110,148 @@ export async function verifyHaulerAirports() {
     } catch { /* Leave unverified airports hidden until a successful retry. */ }
   }));
   return verified;
+}
+type LogbookEntry = { id?: string; aircraft_icao?: string; aircraft_slug?: string; departure_icao?: string; destination_icao?: string; mission_start_ts?: string };
+type Candidate = { id: string; pilot: string; origin: string; destination: string; aircraft: string; slug: string; startedAt: number; outcome: LogOutcome; arrival?: Arrival };
+const ICAO = /^[A-Z0-9]{4}$/;
+
+async function pilotNonce(db: Awaited<typeof import("@/integrations/supabase/client.server")>["supabaseAdmin"], username: string, cached?: string) {
+  if (cached && /^\d+$/.test(cached)) return cached;
+  for (const period of ["all", "month", "week", "day"]) {
+    const r = await json<{ content?: { ranks?: { username?: string; usernonce?: number }[] } }>(`game/sky-rank?period=${period}&res=16&uname=${encodeURIComponent(username)}`).catch(() => null);
+    const n = r?.content?.ranks?.find(x => x.username === username)?.usernonce;
+    if (typeof n === "number" && Number.isFinite(n) && n > 0) {
+      await db.from("pilot_nonces").upsert({ username, nonce: String(n), resolved_at: new Date().toISOString() }, { onConflict: "username" });
+      return String(n);
+    }
+  }
+  return null;
+}
+
+async function pool<T>(items: T[], size: number, fn: (item: T) => Promise<void>) {
+  for (let i = 0; i < items.length; i += size) await Promise.all(items.slice(i, i + size).map(fn));
+}
+
+/**
+ * Maintenance only, at most once per hour (DB-gated): recover Hub pilots' flights that the live sweep
+ * missed while airborne. Every credit still requires an exact official Success arrival record.
+ */
+export async function sweepHaulerLogs() {
+  const { supabaseAdmin: db } = await import("@/integrations/supabase/client.server");
+  const { data: acquired, error: lockError } = await db.rpc("hauler_acquire_retro_sweep");
+  check(lockError);
+  if (!acquired) return { pilots: 0, recovered: 0, pending: 0, skipped: true };
+  try {
+    const [presence, airports, catalogue] = await Promise.all([
+      db.from("pilot_presence").select("username").order("last_seen_at", { ascending: false }).limit(60),
+      db.from("hauler_airport_state").select("icao,created_at").eq("active", true).limit(5000),
+      db.from("hauler_catalogue").select("slug,tier,seats"),
+    ]);
+    check(presence.error); check(airports.error); check(catalogue.error);
+    const pilots = (presence.data ?? []).map(p => p.username).filter(Boolean);
+    const network = new Map((airports.data ?? []).map(a => [a.icao, new Date(a.created_at).getTime()]));
+    const specs = new Map((catalogue.data ?? []).map(p => [p.slug, p]));
+    if (!pilots.length || !network.size) {
+      check((await db.from("hauler_worker_state").update({ last_completed_at: new Date().toISOString(), error: null }).eq("key", "retro")).error);
+      return { pilots: 0, recovered: 0, pending: 0, skipped: false };
+    }
+    const networkStart = Math.min(...network.values());
+    const floor = Math.max(networkStart, Date.now() - 14 * 86400_000);
+    const [cursors, nonces] = await Promise.all([
+      db.from("hauler_retro_cursor").select("username,scanned_until").in("username", pilots),
+      db.from("pilot_nonces").select("username,nonce").in("username", pilots),
+    ]);
+    check(cursors.error); check(nonces.error);
+    const since = new Map((cursors.data ?? []).map(c => [c.username, Math.max(floor, new Date(c.scanned_until).getTime())]));
+    const nonceOf = new Map((nonces.data ?? []).map(n => [n.username, n.nonce]));
+
+    // 1) Read each Hub pilot's public logbook back to their cursor.
+    const byPilot = new Map<string, { since: number; seen: number[]; candidates: Candidate[]; scanned: boolean }>();
+    await pool(pilots, 5, async pilot => {
+      const from = since.get(pilot) ?? floor;
+      const state = { since: from, seen: [] as number[], candidates: [] as Candidate[], scanned: false };
+      byPilot.set(pilot, state);
+      try {
+        const nonce = await pilotNonce(db, pilot, nonceOf.get(pilot));
+        if (!nonce) return;
+        for (let page = 1; page <= 5; page++) {
+          const log = await json<{ flights?: LogbookEntry[] }>(`user/flights?username=${encodeURIComponent(pilot)}&nonce=${nonce}&fpage=${page}`);
+          const rows = log.flights ?? [];
+          let older = !rows.length;
+          for (const f of rows) {
+            const at = new Date(f.mission_start_ts ?? "").getTime();
+            if (!Number.isFinite(at) || at <= from) { older = true; continue; }
+            state.seen.push(at);
+            const o = f.departure_icao ?? "", d = f.destination_icao ?? "", slug = f.aircraft_slug ?? "";
+            if (!f.id || !ICAO.test(o) || !ICAO.test(d) || o === d || !network.has(o) || !network.has(d) || !/^[a-z0-9-]+$/i.test(slug)) continue;
+            if (at < Math.max(network.get(o)!, network.get(d)!) - 3600_000) continue;
+            state.candidates.push({ id: f.id, pilot, origin: o, destination: d, aircraft: f.aircraft_icao ?? "", slug, startedAt: at, outcome: "pending" });
+          }
+          if (older) break;
+        }
+        state.scanned = true;
+      } catch (error) { console.warn("[hauler] logbook unavailable", pilot, error instanceof Error ? error.message : "unknown"); }
+    });
+    const all = [...byPilot.values()].flatMap(s => s.candidates);
+
+    // 2) Skip flights the live sweep already holds (airborne or settled).
+    if (all.length) {
+      const { data: known, error } = await db.from("hauler_flight_ledger").select("flight_id").in("flight_id", all.map(c => c.id)); check(error);
+      const ids = new Set((known ?? []).map(k => k.flight_id));
+      for (const c of all) if (ids.has(c.id)) c.outcome = "exists";
+    }
+    const todo = all.filter(c => c.outcome === "pending").sort((a, b) => a.startedAt - b.startedAt).slice(0, 30);
+
+    // 3) Verify against each arrival airport's official log, sharing pages per airport.
+    const byDestination = new Map<string, Candidate[]>();
+    for (const c of todo) byDestination.set(c.destination, [...(byDestination.get(c.destination) ?? []), c]);
+    await pool([...byDestination.entries()], 4, async ([icao, list]) => {
+      const wanted = new Map(list.map(c => [c.id, c]));
+      const oldest = Math.min(...list.map(c => c.startedAt)) - 2 * 3600_000;
+      try {
+        for (let page = 1; page <= 10 && wanted.size; page++) {
+          const log = await json<{ flights?: Arrival[] }>(`user/assets/airport/${icao}/flights?page=${page}`);
+          const rows = log.flights ?? [];
+          for (const a of rows) { const c = wanted.get(a.flightID); if (c) { c.arrival = a; wanted.delete(a.flightID); } }
+          if (!rows.length || rows.every(a => new Date(a.landingTime ?? a.departureTime).getTime() < oldest)) break;
+        }
+        for (const c of wanted.values()) c.outcome = missingLogOutcome(c.startedAt, Date.now());
+      } catch (error) { console.warn("[hauler] arrival log unavailable", icao, error instanceof Error ? error.message : "unknown"); }
+    });
+
+    // 4) Record in chronological order so passenger stocks flow in the order flights happened.
+    let recovered = 0;
+    for (const c of todo.filter(c => c.arrival)) {
+      const a = c.arrival!;
+      try {
+        if (a.status !== "Success" || !a.landingTime || !a.totalDistance || a.pilot?.username?.toLowerCase() !== c.pilot.toLowerCase() || a.origin?.icao !== c.origin || a.destination?.icao !== c.destination) { c.outcome = "rejected"; continue; }
+        let p = specs.get(c.slug);
+        if (!p) {
+          const d = await json<Product>(`products/airplanes/details/${encodeURIComponent(c.slug)}`);
+          const seats = d.attributes?.passengers;
+          if (!Number.isInteger(seats) || !seats || seats < 1 || d.category < 1 || d.category > 7) { c.outcome = "rejected"; continue; }
+          check((await db.from("hauler_catalogue").upsert({ slug: d.slug, icao: d.icao, name: d.name, tier: d.category, seats, range_nm: d.attributes?.range ?? null, fetched_at: new Date().toISOString() })).error);
+          p = { slug: d.slug, tier: d.category, seats }; specs.set(c.slug, p);
+        }
+        const { data, error } = await db.rpc("hauler_record_logged_flight", { _flight_id: c.id, _pilot: a.pilot.username, _origin: c.origin, _destination: c.destination, _aircraft: c.aircraft || "UNKN", _tier: p.tier, _seats: p.seats, _departure: a.departureTime, _distance: a.totalDistance, _landed: a.landingTime });
+        check(error);
+        c.outcome = data === "recorded" ? "recorded" : data === "exists" ? "exists" : "rejected";
+        if (data === "recorded") recovered++;
+      } catch (error) { c.outcome = "pending"; console.warn("[hauler] log recovery pending", error instanceof Error ? error.message : "unknown"); }
+    }
+
+    // 5) Advance cursors only past handled flights; capped-out candidates stay pending for the next run.
+    const now = new Date().toISOString();
+    const rows = [...byPilot.entries()].filter(([, s]) => s.scanned).map(([username, s]) => {
+      const outcomes = new Map(s.candidates.map(c => [c.startedAt, c.outcome]));
+      const entries = s.seen.map(startedAt => ({ startedAt, outcome: (outcomes.get(startedAt) ?? "rejected") as LogOutcome }));
+      return { username, scanned_until: new Date(nextLogCursor(s.since, entries)).toISOString(), scanned_at: now };
+    });
+    if (rows.length) check((await db.from("hauler_retro_cursor").upsert(rows, { onConflict: "username" })).error);
+    check((await db.from("hauler_worker_state").update({ last_completed_at: now, error: null }).eq("key", "retro")).error);
+    return { pilots: rows.length, recovered, pending: all.filter(c => c.outcome === "pending").length, skipped: false };
+  } catch (error) {
+    await db.from("hauler_worker_state").update({ error: "Flight log recovery unavailable; retrying shortly.", last_started_at: new Date(Date.now() - 50 * 60_000).toISOString() }).eq("key", "retro");
+    throw error;
+  }
 }
