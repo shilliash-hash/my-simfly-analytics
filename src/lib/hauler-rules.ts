@@ -25,4 +25,17 @@ export function predictHaul(input: { stock: number; seats: number; destinationSt
   const costs = coinRound(boarded * rate * operationalCost(input.tier));
   const fee = coinRound(gross * HANDLING_RATE);
   return { boarded, accepted, unpaid: boarded - accepted, rate, gross, costs, net: coinRound(gross - costs - 2 * fee), originFee: fee, destinationFee: fee };
+}/** Missed-flight recovery from official SimFly logs runs at most once per this many minutes. */
+export const LOG_SWEEP_MINUTES = 60;
+/** A flight not yet visible in the arrival log is retried until SimFly has had this long to publish it. */
+export const LOG_PUBLISH_GRACE_MS = 3 * 3600_000;
+export type LogOutcome = "recorded" | "exists" | "rejected" | "pending";
+export function missingLogOutcome(startedAt: number, now: number): LogOutcome {
+  return now - startedAt < LOG_PUBLISH_GRACE_MS ? "pending" : "rejected";
+}
+/** Advance a pilot's logbook cursor only past flights that are fully handled; a pending flight keeps the cursor just before it. */
+export function nextLogCursor(since: number, entries: { startedAt: number; outcome: LogOutcome }[]): number {
+  const pending = entries.filter(e => e.outcome === "pending").map(e => e.startedAt);
+  if (pending.length) return Math.max(since, Math.min(...pending) - 1);
+  return Math.max(since, ...entries.map(e => e.startedAt));
 }
